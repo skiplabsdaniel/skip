@@ -1,6 +1,10 @@
 import { type EnvInit, type ModuleInit } from "../skipwasm-std/index.js";
 import { createOnThisThread } from "./skdb_create.js";
-import { onWorkerMessage, type Creator } from "../skipwasm-worker/worker.js";
+import {
+  onWorkerMessage,
+  type Creator,
+  imhere,
+} from "../skipwasm-worker/worker.js";
 import type { SKDB } from "./skdb.js";
 
 import { init as runtimeInit } from "../skipwasm-std/sk_runtime.js";
@@ -49,8 +53,8 @@ const post = (message: any) => {
 };
 
 const onMessage = (message: MessageEvent) => {
-  /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument */
   onWorkerMessage(message.data, post, creator);
 };
 
 addEventListener("message", onMessage);
+imhere(post);
