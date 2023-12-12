@@ -4,7 +4,7 @@ import type { Wrk, WrkEnvironment } from "./worker.js";
 import * as path from "path";
 import { Worker as NodeWorker } from "worker_threads";
 
-export class WrkImpl implements Wrk {
+class WrkImpl implements Wrk {
   constructor(private readonly worker: NodeWorker) {}
 
   static fromPath(url: URL, options: WorkerOptions | undefined): Wrk {
@@ -19,6 +19,10 @@ export class WrkImpl implements Wrk {
   onMessage = (listener: (value: any) => void) => {
     this.worker.on("message", listener);
   };
+
+  shutdown = () => this.worker.postMessage("#shutdown");
+
+  terminate = () => this.worker.terminate();
 }
 
 export function complete(env: Environment) {
