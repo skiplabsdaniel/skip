@@ -18,6 +18,7 @@ SKDB_INIT=$(ROOT_DIR)/privacy/init.sql
 SKGW_JAR=$(SKGW_DIR)/build/libs/dev.jar
 SERVER_JAR=$(SRV_DIR)/build/server.jar
 
+
 default: build
 
 .PHONY: build_server
