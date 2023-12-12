@@ -1,8 +1,10 @@
-import type { Environment } from "../skipwasm-std/index.js";
+import type { int, Environment } from "../skipwasm-std/index.js";
 
 export interface Wrk {
   postMessage: (message: any) => void;
   onMessage: (listener: (value: any) => void) => void;
+  shutdown: () => void;
+  terminate: () => void;
 }
 
 export interface WrkEnvironment extends Environment {
@@ -10,9 +12,20 @@ export interface WrkEnvironment extends Environment {
   createWorkerWrapper: (worker: Worker) => Wrk;
 }
 
+export type FnOptions = {
+  wrap?: int;
+  autoremove?: boolean;
+  register?: boolean;
+  remove?: string;
+};
+
+type Callable = Function | Caller;
+
 export class Wrappable {
   wrappedId?: number;
 }
+
+let sourcesLastId = 0;
 
 class UnmanagedMessage extends Error {}
 
@@ -20,16 +33,17 @@ export class Function {
   constructor(
     public fn: string,
     public parameters: any[],
-    public wrap?: { wrap: boolean; autoremove: boolean },
+    public options?: FnOptions,
   ) {}
 
   static as(obj: object) {
     if (!("fn" in obj) || !("parameters" in obj)) return null;
-    const wrap =
-      "wrap" in obj
-        ? (obj.wrap! as { wrap: boolean; autoremove: boolean })
-        : undefined;
-    const fn = new Function(obj.fn! as string, obj.parameters! as any[], wrap);
+    const options = "options" in obj ? (obj.options! as FnOptions) : undefined;
+    const fn = new Function(
+      obj.fn! as string,
+      obj.parameters! as any[],
+      options,
+    );
     return fn;
   }
 
@@ -43,22 +57,18 @@ export class Caller {
     public wrapped: number,
     public fn: string,
     public parameters: any[],
-    public remove: boolean = false,
+    public options?: FnOptions,
   ) {}
 
   static convert(obj: object) {
-    if (
-      !("wrapped" in obj) ||
-      !("fn" in obj) ||
-      !("parameters" in obj) ||
-      !("remove" in obj)
-    )
+    if (!("wrapped" in obj) || !("fn" in obj) || !("parameters" in obj))
       return null;
+    const options = "options" in obj ? (obj.options! as FnOptions) : undefined;
     const fn = new Caller(
       obj.wrapped! as number,
       obj.fn! as string,
       obj.parameters! as any[],
-      obj.remove! as boolean,
+      options,
     );
     return fn;
   }
@@ -141,27 +151,74 @@ export class Message {
   }
 }
 
-let sourcesLastId = 0;
-
 export class PromiseWorker {
   private lastId: number;
   private source: number;
   private worker: Wrk;
   private callbacks: Map<string, (...args: any[]) => any>;
   private subscriptions: Map<string, (...args: any[]) => void>;
+  private mark: Date;
+  private registered: Callable[];
+  private unregister: Map<string, Function>;
+  private reloaded: number;
+  public reloading: boolean;
 
-  post: (fn: Function) => Sender;
+  private reload: () => Promise<void>;
+
+  post: (fn: Function) => Promise<Sender>;
   onMessage: (message: MessageEvent) => void;
+  check: () => boolean;
 
-  constructor(worker: Wrk) {
+  constructor(createWorker: () => Wrk, reload?: number) {
     this.lastId = 0;
-    this.worker = worker;
+    this.worker = createWorker();
     this.source = ++sourcesLastId;
     this.callbacks = new Map();
     this.subscriptions = new Map();
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this;
-    this.post = (fn: Function | Caller) => {
+    this.mark = new Date();
+    this.registered = [];
+    this.unregister = new Map();
+    this.reloading = false;
+    this.reloaded = 0;
+
+    const unregister = (fn: Callable) => {
+      for (let i = 0; i < this.registered.length; i++) {
+        if (this.registered[i] == fn) {
+          this.registered.splice(i, 1);
+        }
+      }
+    };
+    const checkRegistration = (fn: Callable) => {
+      // Check unregistration first
+      let unregisterId: string;
+      if (fn instanceof Caller) {
+        unregisterId = fn.wrapped.toString() + ":" + fn.fn;
+      } else {
+        unregisterId = fn.fn;
+      }
+      if (this.unregister.has(unregisterId)) {
+        unregister(this.unregister.get(unregisterId)!);
+        this.unregister.delete(unregisterId);
+      }
+      if (fn.options?.register) {
+        this.registered.push(fn);
+        if (fn.options.remove) {
+          if (fn instanceof Caller) {
+            this.unregister.set(
+              fn.wrapped.toString() + ":" + fn.options.remove,
+              fn,
+            );
+          } else {
+            this.unregister.set(fn.options.remove, fn);
+          }
+        }
+      }
+    };
+    this.post = async (fn: Function | Caller) => {
+      if (!this.check()) {
+        await this.reload();
+      }
+      checkRegistration(fn);
       const messageId = new MessageId(this.source, ++this.lastId);
       const subscribed = new Set<string>();
       const parameters = fn.parameters.map((p) => {
@@ -179,13 +236,29 @@ export class PromiseWorker {
         }
       });
       fn.parameters = parameters;
+      const deleteSub = this.subscriptions.delete.bind(this.subscriptions);
+      const deleteUnr = this.unregister.delete.bind(this.unregister);
+      const setCallback = this.callbacks.set.bind(this.callbacks);
+      const postMessage = this.worker.postMessage.bind(this.worker);
       return new Sender(
         () => {
-          subscribed.forEach((key) => this.subscriptions.delete(key));
+          subscribed.forEach((key) => deleteSub(key));
+          if (fn.options?.register) {
+            unregister(fn);
+            if (fn.options.remove) {
+              let unregisterId: string;
+              if (fn instanceof Caller) {
+                unregisterId = fn.wrapped.toString() + ":" + fn.fn;
+              } else {
+                unregisterId = fn.fn;
+              }
+              deleteUnr(unregisterId);
+            }
+          }
         },
         () =>
           new Promise(function (resolve, reject) {
-            self.callbacks.set(asKey(messageId), (result: Return) => {
+            setCallback(asKey(messageId), (result: Return) => {
               if (result.success) {
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                 resolve(result.value);
@@ -196,24 +269,31 @@ export class PromiseWorker {
               }
             });
             const message = new Message(messageId, fn);
-            self.worker.postMessage(message);
+            postMessage(message);
           }),
       );
     };
+
     this.onMessage = (message: MessageEvent) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-      const data = Message.asReturn(message.data ?? message);
+      this.mark = new Date();
+      const msg = message.data ?? message;
+      if (msg == "imhere") {
+        return;
+      }
+      const data =
+        typeof msg == "object" ? Message.asReturn(msg as object) : null;
       if (!data) {
         throw new UnmanagedMessage(JSON.stringify(message));
       } else {
         const result = data.payload as Return;
-        const callback = this.callbacks.get(asKey(data.id));
+        const callId = asKey(data.id);
+        const callback = this.callbacks.get(callId);
         if (callback) {
-          this.callbacks.delete(asKey(data.id));
+          this.callbacks.delete(callId);
           callback(data.payload);
           return;
         }
-        const subscription = this.subscriptions.get(asKey(data.id));
+        const subscription = this.subscriptions.get(callId);
         if (subscription) {
           subscription(data.payload);
           return;
@@ -224,8 +304,45 @@ export class PromiseWorker {
           throw new Error("Return with no callback" + JSON.stringify(data));
       }
     };
+    this.check = () => {
+      if (reload != undefined && reload > 0) {
+        const diff = new Date().getTime() - this.mark.getTime();
+        const seconds = diff / 1000;
+        if (seconds > reload) {
+          return false;
+        }
+      }
+      return true;
+    };
+    this.reload = async () => {
+      // Just in case is not really shutdown
+      this.shutdown();
+      this.reloading = true;
+      const toRegister = this.registered;
+      this.registered = [];
+      this.callbacks = new Map();
+      this.subscriptions = new Map();
+      this.unregister = new Map();
+      this.worker = createWorker();
+      this.mark = new Date();
+      this.worker.onMessage(this.onMessage);
+      for (const fn of toRegister) {
+        const sender = await this.post(fn);
+        await sender.send();
+      }
+      this.reloading = false;
+      this.reloaded++;
+    };
     this.worker.onMessage(this.onMessage);
   }
+
+  shutdown = () => {
+    this.worker.shutdown();
+  };
+
+  terminate = () => {
+    this.worker.terminate();
+  };
 }
 
 function apply<R>(
@@ -261,20 +378,39 @@ function apply<R>(
 }
 
 let runner: object | undefined;
-let wrappedId = 0;
-const wrapped = new Map<number, { value: any; autoremove: boolean }>();
 
 export interface Creator<T> {
   getName: () => string;
   getType: () => string;
   create: (...args: any[]) => Promise<T>;
+  shutdown: (created: T) => Promise<void>;
+}
+
+export const imhere = (post: (message: any) => void) => {
+  setInterval(() => post("imhere"), 1000);
+};
+
+export class State {
+  runner?: object;
+  wrapped: Map<number, { value: any; autoremove: boolean }>;
+
+  constructor() {
+    this.wrapped = new Map();
+  }
 }
 
 export const onWorkerMessage = <T>(
+  state: State,
   message: MessageEvent,
   post: (message: any) => void,
+  close: () => void,
   creator: Creator<T>,
 ) => {
+  if (state.runner && typeof message == "string" && message == "#shutdown") {
+    void creator.shutdown(state.runner as T);
+    close();
+    return;
+  }
   let data = Message.asCaller(message);
   if (!data) {
     data = Message.asFunction(message);
@@ -295,7 +431,7 @@ export const onWorkerMessage = <T>(
         }
       });
       if (fun.fn == creator.getName()) {
-        if (runner) {
+        if (state.runner) {
           post(
             new Message(
               data.id,
@@ -315,13 +451,13 @@ export const onWorkerMessage = <T>(
             },
           );
         }
-      } else if (!runner) {
+      } else if (!state.runner) {
         post(
           new Message(data.id, new Return(false, "Database must be created")),
         );
       } else {
         // @ts-expect-error: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{}'.
-        const fn = runner[fun.fn];
+        const fn = state.runner[fun.fn];
         if (typeof fn !== "function") {
           post(
             new Message(
@@ -338,19 +474,18 @@ export const onWorkerMessage = <T>(
             fn_at_assumed_type,
             parameters,
             (result: any) => {
-              if (fun.wrap?.wrap) {
-                const wId = wrappedId++;
-                wrapped.set(wId, {
+              if (fun.options?.wrap !== undefined) {
+                const wId = fun.options.wrap;
+                state.wrapped.set(wId, {
                   value: result,
-                  autoremove: fun.wrap.autoremove,
+                  autoremove: fun.options.autoremove ? true : false,
                 });
                 if (result instanceof Wrappable) {
                   result.wrappedId = wId;
                 }
-                result = new Wrapped(wId);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+                return result;
               }
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-              return result;
             },
           );
         }
@@ -370,7 +505,7 @@ export const onWorkerMessage = <T>(
         return p;
       }
     });
-    const obj = wrapped.get(caller.wrapped);
+    const obj = state.wrapped.get(caller.wrapped);
     const fni =
       caller.fn == ""
         ? { fn: obj?.value, obj: null }
@@ -386,8 +521,8 @@ export const onWorkerMessage = <T>(
       const fn_at_assumed_type = fni.fn as (...args: any) => Promise<unknown>;
       apply(post, data.id, fni.obj, fn_at_assumed_type, parameters);
     }
-    if (obj?.autoremove || caller.remove) {
-      wrapped.delete(caller.wrapped);
+    if (obj?.autoremove || caller.options?.autoremove) {
+      state.wrapped.delete(caller.wrapped);
     }
   }
 };
