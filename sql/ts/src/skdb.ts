@@ -42,6 +42,7 @@ export async function createSkdbFor(
     dbName?: string;
     asWorker?: boolean;
     disableWarnings?: boolean;
+    workerReload?: number;
   } = {},
 ): Promise<SKDB> {
   const disableWarnings = options.disableWarnings ?? false;
