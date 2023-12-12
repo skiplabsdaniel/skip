@@ -22,7 +22,13 @@ class WrappedRemote implements RemoteSKDB {
   constructor(
     private readonly worker: PromiseWorker,
     private readonly wrapped: number,
+    private readonly unregister: () => void,
   ) {}
+
+  private prv_exec = async (fn: Caller | Function) => {
+    let sender = await this.worker.post(fn);
+    return sender.send();
+  };
 
   createDatabase(dbName: string) {
     return this.worker
@@ -49,14 +55,9 @@ class WrappedRemote implements RemoteSKDB {
   }
 
   notifyConnectedAs(userName: string, replicationId: string) {
-    return this.worker
-      .post(
-        new Caller(this.wrapped, "notifyConnectedAs", [
-          userName,
-          replicationId,
-        ]),
-      )
-      .send();
+    return this.prv_exec(
+      new Caller(this.wrapped, "notifyConnectedAs", [userName, replicationId]),
+    );
   }
 
   viewSchema(viewName: string) {
@@ -97,28 +98,36 @@ class WrappedRemote implements RemoteSKDB {
   }
 
   onReboot(fn: () => void): Promise<void> {
-    return this.worker.post(new Caller(this.wrapped, "onReboot", [fn])).send();
+    return this.prv_exec(new Caller(this.wrapped, "onReboot", [fn]));
   }
 
   connectedAs(): Promise<string> {
-    return this.worker.post(new Caller(this.wrapped, "connectedAs", [])).send();
+    return this.prv_exec(new Caller(this.wrapped, "connectedAs", []));
   }
 }
 
 export class SKDBWorker implements SKDB {
+  private wrappedId: number;
   private readonly worker: PromiseWorker;
+  private remote?: WrappedRemote;
 
-  constructor(worker: Wrk) {
-    this.worker = new PromiseWorker(worker);
+  constructor(createWorker: () => Wrk, reload?: number) {
+    this.wrappedId = 0;
+    this.worker = new PromiseWorker(createWorker, reload);
   }
+
+  private prv_exec = async (fn: Caller | Function) => {
+    let sender = await this.worker.post(fn);
+    return sender.send();
+  };
 
   create = async (
     dbName?: string,
     disableWarnings: boolean = false,
   ): Promise<void> => {
-    return this.worker
-      .post(new Function("create", [dbName, disableWarnings]))
-      .send();
+    return this.prv_exec(
+      new Function("create", [dbName, disableWarnings], { register: true }),
+    );
   };
 
   exec = async (query: string, params: Params = new Map()) => {
@@ -135,8 +144,9 @@ export class SKDBWorker implements SKDB {
   ) => {
     const provider = this.worker.post(
       new Function("watch", [query, params, onChange], {
-        wrap: true,
+        wrap: ++this.wrappedId,
         autoremove: true,
+        register: true,
       }),
     );
     return provider.send<Wrapped>().then((wrapped) => {
@@ -157,8 +167,9 @@ export class SKDBWorker implements SKDB {
   ) => {
     const provider = this.worker.post(
       new Function("watchChanges", [query, params, init, update], {
-        wrap: true,
+        wrap: ++this.wrappedId,
         autoremove: true,
+        register: true,
       }),
     );
     return provider.send<Wrapped>().then((wrapped) => {
@@ -274,6 +285,9 @@ export class SKDBWorker implements SKDB {
   ) => {
     return SKDBGroupImpl.lookup(this, groupID);
   };
+
+  shutdown = () => this.worker.shutdown();
+  terminate = () => this.worker.terminate();
 }
 
 /* eslint-enable @typescript-eslint/no-invalid-void-type */
