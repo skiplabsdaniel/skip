@@ -560,6 +560,21 @@ class ResilientStream {
     this.setFailureDetectionTimeout(undefined);
   }
 
+  replaceOnError(
+    onError: (errorCode: number, msg: string) => void,
+    set: boolean,
+  ) {
+    if (!this.stream) return undefined;
+    const old = this.stream.onError;
+    if (set || !old) this.stream.onError = onError;
+    else
+      this.stream.onError = (errorCode: number, msg: string) => {
+        old(errorCode, msg);
+        onError(errorCode, msg);
+      };
+    return old;
+  }
+
   send(data: ArrayBuffer): void {
     if (!this.stream) {
       // black hole the data. we're reconnecting and will call
@@ -1611,7 +1626,6 @@ class SKDBServer implements RemoteSKDB {
         stream.send(buildTailRequest());
         stream.expectingData();
       };
-
       stream.send(buildTailRequest());
       stream.expectingData();
     });

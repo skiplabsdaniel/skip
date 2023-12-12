@@ -1049,6 +1049,20 @@ async function testSchemaChanges(root: SKDB, skdb1: SKDB, skdb2: SKDB) {
   ).toHaveLength(6);
 }
 
+async function testWorker(skdb: SKDB) {
+  let terminate = (skdb as any).terminate;
+  if (terminate) {
+    terminate();
+    await new Promise((resolve) => setTimeout(resolve, 11000));
+    const rows = await skdb.exec("SELECT x,y FROM test_pk WHERE x=@x;", {
+      x: 42,
+    });
+    expect(rows).toEqual([{ x: 42, y: 21 }]);
+  } else {
+    throw new Error("Not a skdb worker");
+  }
+}
+
 export const apitests = (asWorker: boolean) => {
   return [
     {
@@ -1071,6 +1085,9 @@ export const apitests = (asWorker: boolean) => {
         await testLargeMirror(dbs.root, dbs.user);
 
         await testMirrorWithAuthor(dbs.root, dbs.user, dbs.user2);
+        if (asWorker) {
+          await testWorker(dbs.user);
+        }
 
         await testConstraints(dbs.root, dbs.user);
 

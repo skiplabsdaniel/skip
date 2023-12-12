@@ -1,4 +1,8 @@
-import { onWorkerMessage, type Creator } from "../skipwasm-worker/worker.js";
+import {
+  onWorkerMessage,
+  type Creator,
+  imhere,
+} from "../skipwasm-worker/worker.js";
 import { parentPort } from "worker_threads";
 import type { SKDB } from "./skdb_types.js";
 import { createSkdb } from "./node.js";
@@ -25,8 +29,12 @@ const post = (message: any) => {
   parentPort?.postMessage(message);
 };
 
-const onMessage = (message: MessageEvent) => {
-  onWorkerMessage(message, post, new DbCreator());
+const close = () => {
+  parentPort?.close();
 };
 
+const onMessage = (message: MessageEvent) =>
+  onWorkerMessage(message, post, close, new DbCreator());
+
 parentPort?.on("message", onMessage);
+imhere(post);
