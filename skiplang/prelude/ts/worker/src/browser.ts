@@ -1,7 +1,7 @@
 import type { Environment } from "../skipwasm-std/index.js";
 import type { Wrk, WrkEnvironment } from "./worker.js";
 
-export class WrkImpl implements Wrk {
+class WrkImpl implements Wrk {
   constructor(private readonly worker: Worker) {}
 
   static fromPath(url: URL, options?: WorkerOptions) {
@@ -15,6 +15,9 @@ export class WrkImpl implements Wrk {
   onMessage = (listener: (value: any) => void) => {
     this.worker.onmessage = listener;
   };
+
+  shutdown = () => this.worker.postMessage("#shutdown");
+  terminate = () => this.worker.terminate();
 }
 
 export function complete(env: Environment) {
