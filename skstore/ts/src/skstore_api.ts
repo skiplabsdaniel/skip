@@ -1,3 +1,9 @@
+/**
+ * This file contains the SKStore public API: types, interfaces, and operations that can be
+ * used to specify and interact with reactive computations. See [todo: pointer to public
+ * overview page] for a detailed description and introduction to the SKStore system.
+ */
+
 // prettier-ignore
 import type {App, Opt, Shared, float, int, ptr} from "#std/sk_types.js";
 import type { JSONObject, TJSON } from "./skstore_skjson.js";
@@ -8,6 +14,8 @@ export type TTableHandle = any;
 export type TTable = any;
 
 export type DBType = "TEXT" | "JSON" | "INTEGER" | "FLOAT" | "SCHEMA";
+
+// `filter` is interpreted as a SQL "where" clause
 export type DBFilter = { filter: string; params?: JSONObject };
 export type ColumnSchema = {
   name: string;
@@ -29,10 +37,15 @@ export type Metadata = {
 };
 
 /**
- * Type return by an async function call
- * payload - The valuable data a the type
- * metadata - An optional data that can be added to specify further information about data
- *            such as freshness.
+ * SKStore async function calls return a `Result` value which is one of `Success`,
+ * `Failure`, or `Unchanged`
+ */
+
+/**
+ * A `Success` return value indicates successful function evaluation and contains:
+ * `payload`: the function return value
+ * `metadata`: optional data that can be added to specify further information
+               about data such as source location.
  */
 export type Success<V extends TJSON, M extends TJSON> = {
   status: "success";
@@ -41,8 +54,8 @@ export type Success<V extends TJSON, M extends TJSON> = {
 };
 
 /**
- * Type return by an async function call in case of error
- * error - The error message
+ * A `Failure` return value indicates a runtime error and contains:
+ * `error` - the error message associated with the error
  */
 export type Failure = {
   status: "failure";
@@ -50,9 +63,9 @@ export type Failure = {
 };
 
 /**
- * Type return by an async function call if a data is the same (for exemple '304 Not Modified' code for http)
- * payload - The valuable data a the type
- * metadata - An optional data that can be added to update metadata of current unmodified value.
+ * An `Unchanged` return value indicates that the data is the same as the last invocation,
+ * and is analogous to HTTP response code 304 'Not Modified'.  It contains:
+ * `metadata` - optional data that can be added to supersede metadata on the unchanged return value
  */
 export type Unchanged<M extends TJSON> = {
   status: "unchanged";
@@ -65,8 +78,16 @@ export type Result<V extends TJSON, M extends TJSON> =
   | Unchanged<M>;
 
 /**
- * Type return by an async lazy reactive handle when the a new call has been performed.
- * previous - The value of the previous call if exist.
+ * Lazy function calls carry additional structure in their `Loadable` return types, to
+ * indicate that computation is in progress or record information about previous values;
+ * the `Success` case is the same as for non-lazy calls, or the result can be `Loading`
+ * or `Error`.
+ */
+
+/**
+ * A `Loading` return value indicates that a new call has been performed, but its result
+ * is not yet available.  It contains:
+ * `previous` - the return value of the previous successful call, if available
  */
 export type Loading<V extends TJSON, M extends TJSON> = {
   status: "loading";
@@ -74,9 +95,10 @@ export type Loading<V extends TJSON, M extends TJSON> = {
 };
 
 /**
- * Type return by an async lazy reactive handle an error occurs.
- * error - The error message
- * previous - The value of the previous call if exist.
+ * An `Error` return value indicates that a runtime error occurred during a lazy function
+ * call.  It contains:
+ * `error` - the error message associated with the error
+ * `previous` - the return value of the previous successful call, if available
  */
 export type Error<V extends TJSON, M extends TJSON> = {
   status: "failure";
@@ -103,7 +125,7 @@ export interface Handles {
 }
 
 /**
- * An error thrown when an index is not found during table lookup
+ * Error thrown when an index is not found during table lookup
  */
 export class TableIndexError extends Error {}
 
@@ -165,12 +187,12 @@ export interface Accumulator<T extends TJSON, V extends TJSON> {
 }
 
 /**
- * A Iterator that have at least one object
+ * A Iterator with at least one element
  */
 export interface NonEmptyIterator<T> {
   /**
-   * Returns the next element in the iteration.
-   *   first() cannot be call after this call
+   * Return the next element in the iteration.
+   *   `first` cannot be called after `next`
    */
   next: () => Opt<T>;
   /**
@@ -418,7 +440,6 @@ export interface Handles {
 }
 
 export interface FromWasm {
-  // Handle
   SKIP_SKStore_map(ctx: ptr, eagerHdl: ptr, name: ptr, fnPtr: int): ptr;
 
   SKIP_SKStore_mapReduce(
