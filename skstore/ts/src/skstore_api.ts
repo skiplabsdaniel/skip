@@ -303,24 +303,30 @@ export interface TableHandle<R extends TJSON[]> {
   ): EHandle<K, V>;
 }
 
+/**
+ * This interface supports SQL-like operations accessing and/or mutating the data in a
+ * collection.  These operations are available only on collections which satisfy certain
+ * structural constraints, such as those produced by `mapTo`.
+*/
 export interface Table<R extends TJSON[]> {
   getName(): string;
   /**
-   * Insert an entry in the table
-   * @param entries - the entries to insert in the table
-   * @param update - indicate if the value need to be updated in case of index conflict
-   * @throws {Error} when not update and an index contraints is broken
+   * Insert an entry (or entries) into the table
+   * @param entries - The new data to insert
+   * @param update - If true, update the existing row in case of index conflict
+   * @throws {Error} in case of index conflict (when `update` is false) or constraint
+   *         violation
    */
   insert(entry: R[], update?: boolean): void;
   /**
    * Update an entry in the table
    * @param row - the table entry to update
    * @param updates - the column values updates
-   * @throws {Error} when an index contraints is broken
+   * @throws {Error} when the updates violate an index or other contraint
    */
   update(row: R, updates: JSONObject): void;
   /**
-   * Update an entry in the table
+   * Update entries in the table matching some `where` clause
    * @param where - the column values to filter entries
    * @param updates - the column values updates
    * @throws {Error} when an index contraints is broken
@@ -329,28 +335,31 @@ export interface Table<R extends TJSON[]> {
   /**
    * Select entries in the table
    * @param where - the column values to filter entries
+   * @param columns - the columns to include in the output; include all by default
    * @throws {Error} when an index contraints is broken
    */
   select(where: JSONObject, columns?: string[]): JSONObject[];
   /**
-   * Delete an entry in the table
-   * @param entry - the entry to delete from the table
+   * Delete an entry from the table
+   * @param entry - the entry to delete
    */
   delete(entry: R): void;
   /**
-   * Delete entries in the table
+   * Delete entries from the table matching some `where` clause.
    * @param where - the column values to filter entries
    */
   deleteWhere(where: JSONObject): void;
   /**
-   * Add a watch to the table
-   * @param update - the function to call on table update
+   * Register a callback to be invoked on the `rows` of this table whenever data changes
+   * @param update - the callback to invoke when data changes
+   * @returns a callback `close` to terminate and clean up the watch
    */
   watch: (update: (rows: JSONObject[]) => void) => { close: () => void };
   /**
-   * Add a watch changes to the table
-   * @param init - the function to call on table init/reset
-   * @param update - the function to call on table update
+   * Register a callback to be invoked on the `added` and `removed` rows of this table
+   * whenever data changes
+   * @param init - a callback to invoke on table initialization and reset
+   * @param update - the callback to invoke on changes
    */
   watchChanges: (
     init: (rows: JSONObject[]) => void,
