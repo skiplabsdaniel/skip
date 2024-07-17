@@ -187,17 +187,17 @@ export interface Accumulator<T extends TJSON, V extends TJSON> {
 }
 
 /**
- * A Iterator with at least one element
+ * A mutable iterator with at least one element
  */
 export interface NonEmptyIterator<T> {
   /**
-   * Return the next element in the iteration.
+   * Return the next element of the iteration.
    *   `first` cannot be called after `next`
    */
   next: () => Opt<T>;
   /**
    * Returns the first element of the iteration.
-   * @throws {Error} when next called before
+   * @throws {Error} when called after `next`
    */
   first: () => T;
 
