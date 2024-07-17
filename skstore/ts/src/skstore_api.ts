@@ -367,6 +367,9 @@ export interface Table<R extends TJSON[]> {
   ) => { close: () => void };
 }
 
+/**
+ * A `Mapping` is an edge in the reactive computation graph, specified by an eager source handle together with a `Mapper` function
+ */
 export type Mapping<
   K1 extends TJSON,
   V1 extends TJSON,
@@ -391,13 +394,14 @@ export interface SKStoreFactory extends Shared {
 export interface SKStore {
   /**
    * Creates a lazy reactive map
-   * @param {Lazy} compute - the lazy function to compute lazy map entry
+   * @param {Lazy} compute - the lazy function to compute entries of the lazy map
    * @returns {LHandle} The the resulting lazy reactive map handle
    */
   lazy<K extends TJSON, V extends TJSON>(compute: Lazy<K, V>): LHandle<K, V>;
+
   /**
    * Map over each entry of each eager reative map and apply the corresponding mapper function
-   * @param {Mapping} mappings - the handles to combine
+   * @param {Mapping[]} mappings - the handles to combine
    * @returns {EHandle} The the resulting eager reactive map handle
    */
   multimap<
