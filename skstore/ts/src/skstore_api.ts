@@ -1,3 +1,4 @@
+
 /**
  * This file contains the SKStore public API: types, interfaces, and operations that can be
  * used to specify and interact with reactive computations. See [todo: pointer to public
@@ -14,6 +15,7 @@ export type TTableHandle = any;
 export type TTable = any;
 
 export type DBType = "TEXT" | "JSON" | "INTEGER" | "FLOAT" | "SCHEMA";
+
 
 // `filter` is interpreted as a SQL "where" clause
 export type DBFilter = { filter: string; params?: JSONObject };
@@ -156,10 +158,10 @@ export type Mapper<
 > = (key: K1, it: NonEmptyIterator<V1>) => Iterable<[K2, V2]>;
 
 /**
- * The type of a reactive function mapping from an arbitrary collection into a table.
- * @param key - a key found in the input collection
- * @param {NonEmptyIterator} it - the values mapped to by `key` in the input collection
- * @returns {R} a table row to output for the given input(s)
+ * The handle entry mapper function to write data into table
+ * @param key - the mapped handle entry key
+ * @param {NonEmptyIterator} it - an iterator on values avalable for a key
+ * @returns {R} the table entry corresponding to eager map key value pair
  */
 export type OutputMapper<R extends TJSON, K extends TJSON, V extends TJSON> = (
   key: K,
@@ -199,7 +201,7 @@ export interface NonEmptyIterator<T> {
   next: () => Opt<T>;
   /**
    * Returns the first element of the iteration.
-   * @throws {Error} when called after `next`
+   * @throws {Error} when next called before
    */
   first: () => T;
 
@@ -251,7 +253,7 @@ export interface EHandle<K extends TJSON, V extends TJSON> {
     mapper: Mapper<K, V, K2, V2>,
   ): EHandle<K2, V2>;
   /**
- * Create a new eager reactive collection by mapping some computation `mapper` over this
+   * Create a new eager reactive collection by mapping some computation `mapper` over this
    * one and then reducing the results with `accumulator`
    * @param {Mapper} mapper - function to apply to each element of this collection
    * @param {Accumulator} accumulator - function to combine results of the `mapper`
@@ -279,7 +281,6 @@ export interface EHandle<K extends TJSON, V extends TJSON> {
 
   getId(): string;
 }
-
 
 /** An eager handle on a Table */
 export interface TableHandle<R extends TJSON[]> {
@@ -453,6 +454,7 @@ export interface Handles {
 }
 
 export interface FromWasm {
+  // Handle
   SKIP_SKStore_map(ctx: ptr, eagerHdl: ptr, name: ptr, fnPtr: int): ptr;
 
   SKIP_SKStore_mapReduce(
