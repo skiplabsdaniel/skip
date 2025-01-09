@@ -342,6 +342,7 @@ fun copyBinary(
   _ = dstFile.write(`unsigned char ${name}[] = {`.bytes());
   count = 0;
   write = buf -> {
+    pos = SKStore.newObstack();
     strs = buf.map(byte -> {
       prefix = if (count == 0) {
         "\n  "
@@ -353,22 +354,26 @@ fun copyBinary(
       !count = count + 1;
       `${prefix}0x${Chars.intToHexDigits(byte.toInt(), 2)}`
     });
-    return dstFile.write(strs.join("").bytes());
+    res = dstFile.write(strs.join("").bytes());
+    SKStore.destroyObstackWithValue(pos, List[res]).getHead()
   };
   buf = Array::mfill(kBUFFER_LEN, UInt8::truncate(0)).mbytes();
   loop {
     srcFile.read(buf) match {
     | Failure(err) -> return Failure(err)
-    | Success(nbytes) if (nbytes == 0) -> break void
-    | Success(nbytes) if (nbytes < kBUFFER_LEN) ->
-      write(buf.slice(0, nbytes)) match {
-      | Failure(err) -> return Failure(err)
-      | Success _ -> void
-      }
-    | Success _ ->
-      write(buf.slice(0)) match {
-      | Failure(err) -> return Failure(err)
-      | Success _ -> void
+    | Success(nbytes) ->
+      if (nbytes == 0) {
+        break void
+      } else if (nbytes < kBUFFER_LEN) {
+        write(buf.slice(0, nbytes)) match {
+        | Failure(err) -> return Failure(err)
+        | Success _ -> void
+        }
+      } else {
+        write(buf) match {
+        | Failure(err) -> return Failure(err)
+        | Success _ -> void
+        }
       }
     }
   };
