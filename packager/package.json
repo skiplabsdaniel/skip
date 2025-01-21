@@ -1,0 +1,17 @@
+{
+  "name": "@skiplang/packager",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "lint": "eslint",
+    "pck": "./dist/index.js"
+  },
+  "bin": {
+    "packager": "./dist/index.js"
+  }
+}
