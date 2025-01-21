@@ -19,7 +19,8 @@
     "skipruntime-ts/metapackage",
     "sql/ts",
     "sql/ts/tests",
-    "examples/hackernews/reactive_service"
+    "examples/hackernews/reactive_service",
+    "packager"
   ],
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -33,6 +34,26 @@
     "build": "npm run build --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "pck": "npm run pck --workspaces --if-present"
+  },
+  "config": {
+    "packager-targets": {
+      "@skipruntime/core": {
+        "version": "0.0.5"
+      },
+      "@skipruntime/native": {
+        "version": "0.0.4"
+      },
+      "@skipruntime/wasm": {
+        "version": "0.0.6"
+      },
+      "@skipruntime/helpers": {
+        "version": "0.0.8"
+      },
+      "@skipruntime/server": {
+        "version": "0.0.8"
+      }
+    }
   }
 }
