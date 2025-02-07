@@ -19,8 +19,9 @@ CJSON SKIP_SKJSON_createCJInt(int64_t v);
 CJSON SKIP_SKJSON_createCJFloat(double v);
 CJSON SKIP_SKJSON_createCJString(char* str);
 CJSON SKIP_SKJSON_createCJBool(bool v);
+CJSON SKIP_SKJSON_createCJTyped(void*, char*);
 
-double SKIP_SKJSON_typeOf(CJSON json);
+char* SKIP_SKJSON_typeOf(CJSON json);
 double SKIP_SKJSON_asNumber(CJSON json);
 int32_t SKIP_SKJSON_asBoolean(CJSON json);
 char* SKIP_SKJSON_asString(CJSON json);
@@ -289,6 +290,40 @@ void CreateCJBool(const FunctionCallbackInfo<Value>& args) {
   });
 }
 
+void CreateCJTyped(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  HandleScope scope(isolate);
+  if (args.Length() != 2) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(
+        Exception::TypeError(FromUtf8(isolate, "Must have two parameters.")));
+    return;
+  };
+  if (!args[0]->IsExternal()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The first parameter must be a pointer.")));
+    return;
+  }
+  if (!args[1]->IsString()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The second parameter must be a string.")));
+    return;
+  }
+
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    CJSON sktyped =
+        SKIP_SKJSON_createCJTyped(args[0].As<External>()->Value(),
+                                  ToSKString(isolate, args[1].As<String>()));
+    args.GetReturnValue().Set(External::New(isolate, sktyped));
+  });
+}
+
+bool IsNumber(const std::string& s) {
+  return !s.empty() && std::all_of(s.begin(), s.end(), ::isdigit);
+}
+
 void TypeOf(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   HandleScope scope(isolate);
@@ -305,8 +340,12 @@ void TypeOf(const FunctionCallbackInfo<Value>& args) {
     return;
   };
   NatTryCatch(isolate, [&args](Isolate* isolate) {
-    double sktype = SKIP_SKJSON_typeOf(args[0].As<External>()->Value());
-    args.GetReturnValue().Set(Number::New(isolate, sktype));
+    char* sktype = SKIP_SKJSON_typeOf(args[0].As<External>()->Value());
+    if (IsNumber(sktype)) {
+      args.GetReturnValue().Set(Number::New(isolate, atoi(sktype)));
+    } else {
+      args.GetReturnValue().Set(FromUtf8(isolate, sktype));
+    }
   });
 }
 
@@ -558,6 +597,7 @@ void GetBinding(const FunctionCallbackInfo<Value>& args) {
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJFloat", CreateCJFloat);
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJString", CreateCJString);
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJBool", CreateCJBool);
+  AddFunction(isolate, binding, "SKIP_SKJSON_createCJTyped", CreateCJTyped);
 
   AddFunction(isolate, binding, "SKIP_SKJSON_typeOf", TypeOf);
   AddFunction(isolate, binding, "SKIP_SKJSON_asNumber", AsNumber);

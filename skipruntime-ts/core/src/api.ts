@@ -7,15 +7,27 @@
 import type { int, Nullable, Opaque } from "../skiplang-std/index.js";
 import type {
   Managed,
-  Json,
-  JsonObject,
+  Json as CJSON,
+  JsonObject as CJObject,
+  JsonConverter as CJConverter,
   DepSafe,
 } from "../skiplang-json/index.js";
 
 export * from "./errors.js";
-export type { Managed, Json, JsonObject, Opaque, DepSafe };
+
+export type { Managed, Opaque, DepSafe };
 export { deepFreeze } from "../skiplang-json/index.js";
 export type { Nullable };
+
+export type Json = CJSON<
+  EagerCollection<Json, Json> | LazyCollection<Json, Json>
+>;
+export type JsonObject = CJObject<
+  EagerCollection<Json, Json> | LazyCollection<Json, Json>
+>;
+export type JsonConverter = CJConverter<
+  EagerCollection<Json, Json> | LazyCollection<Json, Json>
+>;
 
 /**
  * Reactive function that can be mapped over a collection.

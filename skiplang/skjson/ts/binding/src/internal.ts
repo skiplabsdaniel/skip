@@ -28,5 +28,10 @@ export type CJSON<Sub = any, Sub2 = any> = T<typeof _CJSON> & {
   sub2: Sub2;
 };
 
+declare const _CJTyped: unique symbol;
+export type CJTyped = CJSON<typeof _CJTyped>;
+
+export type CJObjectBase = CJObject | CJTyped;
+
 export type PartialCJObj = Vector<Pair<String, CJSON>>;
 export type PartialCJArray<T extends CJSON> = Vector<T>;
