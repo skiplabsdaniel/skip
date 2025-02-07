@@ -1,8 +1,8 @@
 import * as Internal from "./internal.js";
-import { Type, type Binding } from "./binding.js";
+import { Type, type Binding, type CJType } from "./binding.js";
 import type { Pointer, Nullable } from "../skiplang-std/index.js";
-export type { Pointer, Nullable, Binding };
-export type { Type };
+export type { Pointer, Nullable, Binding, CJType };
+export { Type };
 
 export const sk_isObjectProxy: unique symbol = Symbol();
 export const sk_managed: unique symbol = Symbol.for("Skip.managed");
@@ -150,59 +150,73 @@ export function deepFreeze<T>(value: T): T & DepSafe {
  * - arrays are compared lexicographically
  * - objects are compared lexicographically based on their key-value pairs ordered by keys
  */
-export type Json = boolean | number | string | (Json | null)[] | JsonObject;
+export type Json<T> =
+  | boolean
+  | number
+  | string
+  | (Json<T> | null)[]
+  | JsonObject<T>
+  | T;
 
 /**
  * Objects containing `Json` values.
  */
-export type JsonObject = { [key: string]: Json | null };
+export type JsonObject<T> = { [key: string]: Json<T> | null };
 
-export type Exportable =
+export type Exportable<T> =
   | null
   | undefined
-  | Json
-  | ObjectProxy<{ [k: string]: Exportable }>
-  | (readonly Exportable[] & Managed);
+  | Json<T>
+  | ObjectProxy<T, { [k: string]: Exportable<T> }>
+  | (readonly Exportable<T>[] & Managed);
 
-export type ObjectProxy<Base extends { [k: string]: Exportable }> = {
+export type ObjectProxy<T, Base extends { [k: string]: Exportable<T> }> = {
   [sk_isObjectProxy]: true;
   [sk_managed]: true;
   __pointer: Pointer<Internal.CJSON>;
-  clone: () => ObjectProxy<Base>;
+  clone: () => ObjectProxy<T, Base>;
   toJSON: () => Base;
   keys: IterableIterator<keyof Base>;
 } & Base;
 
-export function isObjectProxy(
+export interface TypedConverter<T> {
+  import(c: CJType, value: Pointer<Internal.CJSON>): T | undefined;
+  export(value: Exportable<T>): [Nullable<CJType>, JsonObject<never>];
+}
+
+export function isObjectProxy<T>(
   x: any,
-): x is ObjectProxy<{ [k: string]: Exportable }> {
+): x is ObjectProxy<T, { [k: string]: Exportable<T> }> {
   return sk_isObjectProxy in x && (x[sk_isObjectProxy] as boolean);
 }
 
 export const reactiveObject = {
-  get<Base extends { [k: string]: Exportable }>(
-    hdl: ObjectHandle<Internal.CJObject>,
+  get<T, Base extends { [k: string]: Exportable<T> }>(
+    hdl: ObjectHandle<T, Internal.CJObjectBase>,
     prop: string | symbol,
-    self: ObjectProxy<Base>,
+    self: ObjectProxy<T, Base>,
   ): any {
     if (prop === sk_isObjectProxy) return true;
     if (prop === sk_managed) return true;
     if (prop === "__pointer") return hdl.pointer;
-    if (prop === "clone") return (): ObjectProxy<Base> => clone(self);
+    if (prop === "clone") return (): ObjectProxy<T, Base> => clone(self);
     if (prop === "toJSON") return hdl.toJSON.bind(hdl);
     if (prop === "toString") return hdl.toString.bind(hdl);
     if (prop === "keys") return hdl.keys();
     if (typeof prop === "symbol") return undefined;
     return hdl.get(prop);
   },
-  set(
-    _hdl: ObjectHandle<Internal.CJObject>,
+  set<T>(
+    _hdl: ObjectHandle<T, Internal.CJObjectBase>,
     _prop: string | symbol,
     _value: any,
   ) {
     throw new Error("Reactive object cannot be modified.");
   },
-  has(hdl: ObjectHandle<Internal.CJObject>, prop: string | symbol): boolean {
+  has<T>(
+    hdl: ObjectHandle<T, Internal.CJObjectBase>,
+    prop: string | symbol,
+  ): boolean {
     if (prop === sk_isObjectProxy) return true;
     if (prop === sk_managed) return true;
     if (prop === "__pointer") return true;
@@ -213,11 +227,11 @@ export const reactiveObject = {
     if (typeof prop === "symbol") return false;
     return hdl.has(prop);
   },
-  ownKeys(hdl: ObjectHandle<Internal.CJObject>) {
+  ownKeys<T>(hdl: ObjectHandle<T, Internal.CJObjectBase>) {
     return Array.from(hdl.keys());
   },
-  getOwnPropertyDescriptor(
-    hdl: ObjectHandle<Internal.CJObject>,
+  getOwnPropertyDescriptor<T>(
+    hdl: ObjectHandle<T, Internal.CJObjectBase>,
     prop: string | symbol,
   ) {
     if (typeof prop === "symbol") return undefined;
@@ -243,13 +257,29 @@ export function clone<T>(value: T): T {
   }
 }
 
-function interpretPointer<T extends Internal.CJSON>(
+function interpretPointer<T1, T extends Internal.CJSON>(
   binding: Binding,
   pointer: Nullable<Pointer<T>>,
-): Exportable {
+  conv?: TypedConverter<T1>,
+): Exportable<T1> {
   if (pointer === null) return null;
-  const type = binding.SKIP_SKJSON_typeOf(pointer);
-  switch (type) {
+  let cjtype = binding.SKIP_SKJSON_typeOf(pointer);
+  if (typeof cjtype == "string") {
+    if (conv) {
+      const res = conv.import(cjtype, pointer);
+      if (res) return res;
+      console.log(
+        "interpretPointer",
+        cjtype,
+        res,
+        new Error("Missing convertion"),
+      );
+      cjtype = Type.Object;
+    } else {
+      cjtype = Type.Object;
+    }
+  }
+  switch (cjtype) {
     case Type.Null:
       return null;
     case Type.Boolean:
@@ -263,16 +293,20 @@ function interpretPointer<T extends Internal.CJSON>(
       const aPtr = binding.SKIP_SKJSON_asArray(pointer);
       const length = binding.SKIP_SKJSON_arraySize(aPtr);
       const array = Array.from({ length }, (_, idx) =>
-        interpretPointer(binding, binding.SKIP_SKJSON_at(aPtr, idx)),
+        interpretPointer<T1, Internal.CJSON>(
+          binding,
+          binding.SKIP_SKJSON_at(aPtr, idx),
+          conv,
+        ),
       );
       return sk_freeze(array);
     }
     case Type.Object: {
       const oPtr = binding.SKIP_SKJSON_asObject(pointer);
       return new Proxy(
-        new ObjectHandle(binding, oPtr),
+        new ObjectHandle<T1, Internal.CJObjectBase>(binding, oPtr, conv),
         reactiveObject,
-      ) as unknown as ObjectProxy<{ [k: string]: Exportable }>;
+      ) as unknown as ObjectProxy<T1, { [k: string]: Exportable<T1> }>;
     }
     case Type.Undefined:
     default:
@@ -280,18 +314,20 @@ function interpretPointer<T extends Internal.CJSON>(
   }
 }
 
-class ObjectHandle<T extends Internal.CJSON> {
+class ObjectHandle<T1, T extends Internal.CJObjectBase> {
   private fields?: Map<string, number>;
 
   constructor(
     private readonly binding: Binding,
     public readonly pointer: Pointer<T>,
+    private readonly conv?: TypedConverter<T1>,
   ) {}
 
-  private getFieldAt(idx: number): Exportable {
+  private getFieldAt(idx: number): Exportable<T1> {
     return interpretPointer(
       this.binding,
       this.binding.SKIP_SKJSON_get(this.pointer, idx),
+      this.conv,
     );
   }
 
@@ -353,9 +389,10 @@ class ObjectHandle<T extends Internal.CJSON> {
   }
 }
 
-export function exportJSON(
+export function exportJSON<T>(
   binding: Binding,
-  value: Exportable,
+  value: Exportable<T>,
+  conv?: TypedConverter<T>,
 ): Pointer<Internal.CJSON> {
   if (value === null || value === undefined) {
     return binding.SKIP_SKJSON_createCJNull();
@@ -372,85 +409,111 @@ export function exportJSON(
   } else if (Array.isArray(value)) {
     const arr = binding.SKIP_SKJSON_startCJArray();
     value.forEach((v) => {
-      binding.SKIP_SKJSON_addToCJArray(arr, exportJSON(binding, v));
+      binding.SKIP_SKJSON_addToCJArray(arr, exportJSON(binding, v, conv));
     });
     return binding.SKIP_SKJSON_endCJArray(arr);
   } else if (typeof value == "object") {
     if (isObjectProxy(value)) {
       return value.__pointer;
     } else {
+      const [type, object] = conv ? conv.export(value) : [null, value];
       const obj = binding.SKIP_SKJSON_startCJObject();
-      Object.entries(value).forEach(([key, val]) => {
-        binding.SKIP_SKJSON_addToCJObject(obj, key, exportJSON(binding, val));
+      Object.entries(object).forEach(([key, val]) => {
+        binding.SKIP_SKJSON_addToCJObject(
+          obj,
+          key,
+          exportJSON(binding, val, conv),
+        );
       });
-      return binding.SKIP_SKJSON_endCJObject(obj);
+      if (type) {
+        return binding.SKIP_SKJSON_createCJTyped(obj, type);
+      } else {
+        return binding.SKIP_SKJSON_endCJObject(obj);
+      }
     }
   } else {
     throw new Error(`'${typeof value}' cannot be exported to wasm.`);
   }
 }
 
-export function importJSON<T extends Internal.CJSON>(
+export function importJSON<T1, T extends Internal.CJSON>(
   binding: Binding,
   pointer: Pointer<T>,
+  conv?: TypedConverter<T1>,
   copy?: boolean,
-): Exportable {
-  const value = interpretPointer(binding, pointer);
+): Exportable<T1> {
+  const value = interpretPointer<T1, T>(binding, pointer, conv);
   return copy && value !== null ? clone(value) : value;
 }
 
-export interface JsonConverter {
-  importJSON(value: Pointer<Internal.CJSON>, copy?: boolean): Exportable;
+export interface JsonConverter<T> {
+  importJSON(value: Pointer<Internal.CJSON>, copy?: boolean): Exportable<T>;
   exportJSON(v: null | undefined): Pointer<Internal.CJNull>;
   exportJSON(v: boolean): Pointer<Internal.CJBool>;
   exportJSON(v: number): Pointer<Internal.CJFloat | Internal.CJInt>;
   exportJSON(v: string): Pointer<Internal.CJString>;
   exportJSON(v: any[]): Pointer<Internal.CJArray>;
-  exportJSON(v: JsonObject): Pointer<Internal.CJObject>;
+  exportJSON(v: JsonObject<T>): Pointer<Internal.CJObject>;
+  exportJSON(v: Nullable<Json<T>>): Pointer<Internal.CJSON>;
   exportJSON<T extends Internal.CJSON>(
-    v: ObjectProxy<{ [k: string]: Exportable }> & {
+    v: ObjectProxy<T, { [k: string]: Exportable<T> }> & {
       __pointer: Pointer<T>;
     },
   ): Pointer<T>;
-  exportJSON(v: Nullable<Json>): Pointer<Internal.CJSON>;
   importOptJSON(
     value: Nullable<Pointer<Internal.CJSON>>,
     copy?: boolean,
-  ): Exportable;
+  ): Exportable<T>;
   is(v: Pointer<Internal.CJSON>, type: Type): boolean;
   clone<T>(v: T): T;
+  derive<T1>(conv: TypedConverter<T1>): JsonConverter<T1>;
+  strict(): JsonConverter<never>;
 }
 
-export class JsonConverterImpl implements JsonConverter {
-  constructor(private binding: Binding) {}
+export class JsonConverterImpl<T> implements JsonConverter<T> {
+  constructor(
+    private binding: Binding,
+    private conv?: TypedConverter<T>,
+  ) {}
 
-  importJSON(value: Pointer<Internal.CJSON>, copy?: boolean): Exportable {
-    return importJSON(this.binding, value, copy);
+  importJSON(value: Pointer<Internal.CJSON>, copy?: boolean): Exportable<T> {
+    return importJSON(this.binding, value, this.conv, copy);
   }
 
-  exportJSON(v: Exportable): Pointer<Internal.CJSON> {
-    return exportJSON(this.binding, v);
+  exportJSON(v: Exportable<T> | Exportable<never>): Pointer<Internal.CJSON> {
+    return exportJSON(this.binding, v, this.conv);
   }
 
   public clone<T>(v: T): T {
     return clone(v);
   }
 
-  public is(v: Pointer<Internal.CJSON>, type: Type): boolean {
+  public is(v: Pointer<Internal.CJSON>, type: Type | CJType): boolean {
     return this.binding.SKIP_SKJSON_typeOf(v) == type;
   }
 
   importOptJSON(
     value: Nullable<Pointer<Internal.CJSON>>,
     copy?: boolean,
-  ): Exportable {
+  ): Exportable<T> {
     if (value === null) {
       return null;
     }
     return this.importJSON(value, copy);
   }
+
+  derive<T1>(conv: TypedConverter<T1>): JsonConverter<T1> {
+    return new JsonConverterImpl(this.binding, conv);
+  }
+
+  strict(): JsonConverter<never> {
+    return new JsonConverterImpl<never>(this.binding);
+  }
 }
 
-export function buildJsonConverter(binding: Binding): JsonConverter {
-  return new JsonConverterImpl(binding);
+export function buildJsonConverter<T>(
+  binding: Binding,
+  conv?: TypedConverter<T>,
+): JsonConverter<T> {
+  return new JsonConverterImpl<T>(binding, conv);
 }

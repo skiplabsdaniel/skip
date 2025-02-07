@@ -5,13 +5,7 @@
  */
 
 import type { Opaque } from "../skiplang-std/index.js";
-import type {
-  Pointer,
-  Nullable,
-  Json,
-  JsonConverter,
-  JsonObject,
-} from "../skiplang-json/index.js";
+import type { Pointer, Nullable, Exportable } from "../skiplang-json/index.js";
 import {
   sk_freeze,
   isSkManaged,
@@ -21,23 +15,28 @@ import {
 
 import { sknative } from "../skiplang-std/index.js";
 
+import type { JsonObject as CJObject } from "../skiplang-json/index.js";
+
 import type * as Internal from "./internal.js";
-import {
-  type CollectionUpdate,
-  type Context,
-  type EagerCollection,
-  type Entry,
-  type ExternalService,
-  type LazyCollection,
-  type LazyCompute,
-  type Mapper,
-  type NamedCollections,
-  type Values,
-  type DepSafe,
-  type Reducer,
-  type Resource,
-  type SkipService,
-  type Watermark,
+import type {
+  CollectionUpdate,
+  Context,
+  EagerCollection,
+  Entry,
+  ExternalService,
+  LazyCollection,
+  LazyCompute,
+  Mapper,
+  NamedCollections,
+  Values,
+  DepSafe,
+  Reducer,
+  Resource,
+  SkipService,
+  Watermark,
+  Json,
+  JsonObject,
+  JsonConverter,
 } from "./api.js";
 
 import {
@@ -780,7 +779,14 @@ export class ToBinding {
   constructor(
     private binding: FromBinding,
     private runWithGC: <T>(fn: () => T) => T,
-    private getConverter: () => JsonConverter,
+    private getConverter: (
+      eagerCollectionBuilder: (
+        object: Exportable<undefined>,
+      ) => EagerCollection<Json, Json>,
+      lazyCollectionBuilder: (
+        object: Exportable<undefined>,
+      ) => LazyCollection<Json, Json>,
+    ) => JsonConverter,
     private getError: (skExc: Pointer<Internal.Exception>) => Error,
   ) {
     this.stack = new Stack();
@@ -1092,9 +1098,28 @@ export class ToBinding {
   }
 
   //
+  private buildEagerCollection(object: Exportable<undefined>) {
+    const refs = this.refs();
+    return new EagerCollectionImpl<Json, Json>(
+      (object as CJObject<undefined>)["collection"] as string,
+      refs,
+    );
+  }
+
+  private buildLazyCollection(object: Exportable<undefined>) {
+    const refs = this.refs();
+    return new LazyCollectionImpl<Json, Json>(
+      (object as CJObject<undefined>)["collection"] as string,
+      refs,
+    );
+  }
+
   private getJsonConverter() {
     if (this.skjson == undefined) {
-      this.skjson = this.getConverter();
+      this.skjson = this.getConverter(
+        this.buildEagerCollection.bind(this),
+        this.buildLazyCollection.bind(this),
+      );
     }
     return this.skjson;
   }
@@ -1106,7 +1131,10 @@ export class ToBinding {
   private refs(): Refs {
     return new Refs(
       this.binding,
-      this.getConverter(),
+      this.getConverter(
+        this.buildEagerCollection.bind(this),
+        this.buildLazyCollection.bind(this),
+      ),
       this.handles,
       this.needGC.bind(this),
       this.runWithGC,
