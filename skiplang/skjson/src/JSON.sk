@@ -6,14 +6,17 @@ module SKJSON;
 /*****************************************************************************/
 
 base class CJSON uses Orderable {
-  children =
-  | CJNull()
-  | CJBool(Bool)
-  | CJInt(Int)
-  | CJFloat(Float)
-  | CJString(String)
-  | CJArray(Array<CJSON>)
-  | CJObject(CJFields)
+  fun toJSON(): JSON.Value;
+
+  fun toSType(): SKJSON.SType;
+
+  fun prettyPrint(): String {
+    this.toJSON().toString()
+  }
+
+  fun toType(): SKJSON.Type {
+    SKJSON.Type::create(this.toSType())
+  }
 
   /* The order is such that null < bool < number < string < array < object */
   fun compare(other: CJSON): Order {
@@ -39,8 +42,26 @@ base class CJSON uses Orderable {
     | (CJArray(_), _) -> LT()
     | (_, CJArray(_)) -> GT()
     | (CJObject(a), CJObject(b)) -> a.compare(b)
+    | (CJObject(_), _) -> LT()
+    | (_, CJObject(_)) -> GT()
+    | (CJTyped(a), CJTyped(b)) -> a.compare(b)
     }
   }
+}
+
+base class CJObjectBase extends CJSON {
+  fun fields(): Array<String>;
+  fun value(idx: Int): ?CJSON;
+}
+
+base class CJSONStrict extends CJSON {
+  children =
+  | CJNull()
+  | CJBool(Bool)
+  | CJInt(Int)
+  | CJFloat(Float)
+  | CJString(String)
+  | CJArray(Array<CJSON>)
 
   fun toJSON(): JSON.Value
   | CJNull() -> JSON.Null()
@@ -50,20 +71,6 @@ base class CJSON uses Orderable {
   | CJString(x) -> JSON.String(x)
   | CJArray(arr) ->
     JSON.Array(Vector::createFromItems(arr.map(x -> x.toJSON())))
-  | CJObject(fields) ->
-    map = mutable Map[];
-    for (fieldName => field in fields) {
-      map![fieldName] = field.toJSON();
-    };
-    JSON.Object(map.chill())
-
-  fun prettyPrint(): String {
-    this.toJSON().toString()
-  }
-
-  fun toType(): SKJSON.Type {
-    SKJSON.Type::create(this.toSType())
-  }
 
   fun toSType(): SKJSON.SType
   | CJNull() -> SKJSON.TNull()
@@ -77,15 +84,76 @@ base class CJSON uses Orderable {
       !ty = ty.union(elt.toType())
     };
     SKJSON.TArray(ty)
-  | CJObject(fields) ->
-    fieldCount = SKJSON.FieldCount::create();
-    dumbField = SKJSON.Field("", fieldCount, SKJSON.Type::any);
-    result = Array::mfill(fields.values.size(), dumbField);
-    for (i => field in fields.values) {
-      fieldName = fields.cols[i];
-      result![i] = SKJSON.Field(fieldName, fieldCount, field.toType());
+}
+
+base class CJSONable uses Orderable {
+  fun typeName(): String;
+  fun fields(): Array<String>;
+  fun value(idx: Int): ?CJSON;
+}
+
+class CJObject(fields_: CJFields) extends CJObjectBase, CJSONStrict {
+  fun toJSON(): JSON.Value {
+    map = mutable Map[];
+    for (fieldName => field in this.fields_) {
+      map![fieldName] = field.toJSON();
     };
-    SKJSON.TObject(SKJSON.Fields::create(result.chill()))
+    JSON.Object(map.chill())
+  }
+
+  fun toSType(): SType {
+    fieldCount = FieldCount::create();
+    dumbField = Field("", fieldCount, Type::any);
+    result = Array::mfill(this.fields_.values.size(), dumbField);
+    for (i => field in this.fields_.values) {
+      fieldName = this.fields_.cols[i];
+      result![i] = Field(fieldName, fieldCount, field.toType());
+    };
+    TObject(Fields::create(result.chill()))
+  }
+
+  fun fields(): Array<String> {
+    this.fields_.cols
+  }
+
+  fun value(idx: Int): ?CJSON {
+    this.fields_.values.maybeGet(idx)
+  }
+}
+
+class CJTyped(value_: CJSONable) extends CJObjectBase {
+  fun toJSON(): JSON.Value {
+    map = mutable Map[];
+    this.value_.fields().eachWithIndex((idx, fieldName) -> {
+      this.value_.value(idx).each(v -> map![fieldName] = v.toJSON());
+    });
+    JSON.Object(map.chill())
+  }
+
+  fun toSType(): SType {
+    fieldCount = FieldCount::create();
+    fields = this.value_.fields().mapWithIndex((index, v) ->
+      (v, this.value_.value(index).fromSome())
+    );
+    sorted = fields.sortedBy(x ~> x.i0);
+    tFields = sorted.map(v -> Field(v.i0, fieldCount, v.i1.toType()));
+    TObject(Fields::create(tFields))
+  }
+
+  fun toCJObject(): CJObject {
+    fields = this.value_.fields().mapWithIndex((index, v) ->
+      (v, this.value_.value(index).fromSome())
+    );
+    CJObject(CJFields::create(fields.sortedBy(x ~> x.i0), x -> x))
+  }
+
+  fun fields(): Array<String> {
+    this.value_.fields()
+  }
+
+  fun value(idx: Int): ?CJSON {
+    this.value_.value(idx)
+  }
 }
 
 value class CJFields private (
