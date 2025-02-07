@@ -10,16 +10,17 @@ const kArray: Int = 6;
 const kObject: Int = 7;
 
 @export("SKIP_SKJSON_typeOf")
-fun typeOf(json: CJSON): Float {
-  (json match {
-  | CJNull() -> kNull
-  | CJBool _ -> kBoolean
-  | CJInt _ -> kInt
-  | CJFloat _ -> kFloat
-  | CJString _ -> kString
-  | CJArray _ -> kArray
-  | CJObject _ -> kObject
-  }).toFloat()
+fun typeOf(json: CJSON): String {
+  json match {
+  | CJNull() -> kNull.toString()
+  | CJBool _ -> kBoolean.toString()
+  | CJInt _ -> kInt.toString()
+  | CJFloat _ -> kFloat.toString()
+  | CJString _ -> kString.toString()
+  | CJArray _ -> kArray.toString()
+  | CJObject _ -> kObject.toString()
+  | CJTyped(value) -> value.typeName()
+  }
 }
 
 @export("SKIP_SKJSON_asNumber")

@@ -12,8 +12,10 @@ export enum Type {
   Object,
 }
 
+export type CJTyped = string & Internal.CJTyped;
+
 export interface Binding {
-  SKIP_SKJSON_typeOf(json: Pointer<Internal.CJSON>): Type;
+  SKIP_SKJSON_typeOf(json: Pointer<Internal.CJSON>): Type | CJTyped;
   SKIP_SKJSON_asNumber(json: Pointer<Internal.CJSON>): number;
   SKIP_SKJSON_asBoolean(json: Pointer<Internal.CJSON>): boolean;
   SKIP_SKJSON_asString(json: Pointer<Internal.CJSON>): string;
@@ -62,4 +64,8 @@ export interface Binding {
   SKIP_SKJSON_createCJFloat(v: number): Pointer<Internal.CJFloat>;
   SKIP_SKJSON_createCJString(str: string): Pointer<Internal.CJString>;
   SKIP_SKJSON_createCJBool(v: boolean): Pointer<Internal.CJBool>;
+  SKIP_SKJSON_createCJTyped(
+    obj: Pointer<Internal.PartialCJObj>,
+    type: CJTyped,
+  ): Pointer<Internal.CJTyped>;
 }

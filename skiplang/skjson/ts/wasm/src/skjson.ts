@@ -13,13 +13,13 @@ import {
 import type * as Internal from "../skiplang-json/internal.js";
 import type {
   Binding,
-  Type,
   Pointer,
   Nullable,
   JsonConverter,
+  CJTyped,
 } from "../skiplang-json/index.js";
 
-import { buildJsonConverter } from "../skiplang-json/index.js";
+import { Type, buildJsonConverter } from "../skiplang-json/index.js";
 export {
   toPtr,
   toNullablePtr,
@@ -27,7 +27,7 @@ export {
 } from "../skipwasm-std/index.js";
 
 interface WasmAccess {
-  SKIP_SKJSON_typeOf: (json: ptr<Internal.CJSON>) => Type;
+  SKIP_SKJSON_typeOf: (json: ptr<Internal.CJSON>) => ptr<Internal.String>;
   SKIP_SKJSON_asNumber: (json: ptr<Internal.CJSON>) => number;
   SKIP_SKJSON_asBoolean: (json: ptr<Internal.CJSON>) => boolean;
   SKIP_SKJSON_asString: (json: ptr<Internal.CJSON>) => ptr<Internal.String>;
@@ -83,6 +83,10 @@ interface FromWasm extends WasmAccess {
     str: ptr<Internal.String>,
   ) => ptr<Internal.CJString>;
   SKIP_SKJSON_createCJBool: (v: boolean) => ptr<Internal.CJBool>;
+  SKIP_SKJSON_createCJTyped(
+    v: ptr<Internal.PartialCJObj>,
+    type: ptr<Internal.String>,
+  ): ptr<Internal.CJTyped>;
 }
 
 class WasmBinding implements Binding {
@@ -91,8 +95,15 @@ class WasmBinding implements Binding {
     private fromWasm: FromWasm,
   ) {}
 
-  SKIP_SKJSON_typeOf(json: Pointer<Internal.CJSON>): Type {
-    return this.fromWasm.SKIP_SKJSON_typeOf(toPtr(json));
+  SKIP_SKJSON_typeOf(json: Pointer<Internal.CJSON>): Type | CJTyped {
+    const strType = this.utils.importString(
+      this.fromWasm.SKIP_SKJSON_typeOf(toPtr(json)),
+    );
+    const value = Number(strType);
+    if (isNaN(value)) {
+      return strType as CJTyped;
+    }
+    return value;
   }
 
   SKIP_SKJSON_asNumber(json: Pointer<Internal.CJSON>): number {
@@ -214,12 +225,22 @@ class WasmBinding implements Binding {
   SKIP_SKJSON_createCJBool(v: boolean): Pointer<Internal.CJBool> {
     return this.fromWasm.SKIP_SKJSON_createCJBool(v);
   }
+
+  SKIP_SKJSON_createCJTyped(
+    v: Pointer<Internal.PartialCJObj>,
+    type: CJTyped,
+  ): Pointer<Internal.CJTyped> {
+    return this.fromWasm.SKIP_SKJSON_createCJTyped(
+      toPtr(v),
+      this.utils.exportString(type),
+    );
+  }
 }
 
 export class SKJSONShared implements Shared {
   getName = () => "SKJSON";
 
-  constructor(public converter: JsonConverter) {}
+  constructor(public converter: JsonConverter<never>) {}
 }
 
 class LinksImpl implements Links {
@@ -230,7 +251,7 @@ class LinksImpl implements Links {
 
   complete = (utils: Utils, exports: object) => {
     const binding = new WasmBinding(utils, exports as FromWasm);
-    const converter = buildJsonConverter(binding);
+    const converter = buildJsonConverter<never>(binding);
     this.SKJSON_console = (json: ptr<Internal.CJSON>) => {
       console.log(converter.importJSON(json), true);
     };

@@ -6,6 +6,16 @@ module SKJSON;
 /*****************************************************************************/
 
 base class CJSON uses Orderable {
+  fun toJSON(): JSON.Value;
+
+  fun toType(): SKJSON.Type;
+
+  fun prettyPrint(): String {
+    this.toJSON().toString()
+  }
+}
+
+base class CJSONStrict extends CJSON {
   children =
   | CJNull()
   | CJBool(Bool)
@@ -29,10 +39,6 @@ base class CJSON uses Orderable {
       map![fieldName] = field.toJSON();
     };
     JSON.Object(map.chill())
-
-  fun prettyPrint(): String {
-    this.toJSON().toString()
-  }
 
   fun toType(): SKJSON.Type {
     SKJSON.Type::create(this.toSType())
@@ -59,6 +65,32 @@ base class CJSON uses Orderable {
       result![i] = SKJSON.Field(fieldName, fieldCount, field.toType());
     };
     SKJSON.TObject(SKJSON.Fields::create(result.chill()))
+}
+
+base class CJSONable uses Orderable {
+  fun typeName(): String;
+  fun fields(): Array<String>;
+  fun value(idx: Int): CJSON;
+}
+
+class CJTyped(value: CJSONable) extends CJSON {
+  fun toJSON(): JSON.Value {
+    map = mutable Map[];
+    this.value.fields().eachWithIndex((idx, fieldName) -> {
+      map![fieldName] = this.value.value(idx).toJSON();
+    });
+    JSON.Object(map.chill())
+  }
+
+  fun toType(): Type {
+    fieldCount = FieldCount::create();
+    fields = this.value.fields().mapWithIndex((index, v) ->
+      (v, this.value.value(index))
+    );
+    sorted = fields.sortedBy(x ~> x.i0);
+    tFields = sorted.map(v -> Field(v.i0, fieldCount, v.i1.toType()));
+    SKJSON.Type::create(TObject(Fields::create(tFields)))
+  }
 }
 
 value class CJFields(cols: Array<String>, values: Array<CJSON>) uses Orderable {

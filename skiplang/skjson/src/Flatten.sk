@@ -73,6 +73,14 @@ fun flattenHelper(
         yield elt
       }
     }
+  | CJTyped(value) ->
+    sortedFields = value.fields().sorted();
+    for (idx => fieldName in sortedFields) {
+      newPath = List.Cons(PEField(fieldName), path);
+      for (elt in flattenHelper(id, newPath, mkPath(newPath), value.value(idx))) {
+        yield elt
+      }
+    }
   }
 }
 

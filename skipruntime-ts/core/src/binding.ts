@@ -1,4 +1,5 @@
-import type { Pointer, Nullable, Json } from "../skiplang-json/index.js";
+import type { Pointer } from "../skiplang-json/index.js";
+import type { Nullable, Json } from "./api.js";
 import type * as Internal from "./internal.js";
 
 import {

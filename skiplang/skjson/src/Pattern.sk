@@ -213,6 +213,15 @@ base class Pattern {
           yield elt
         }
       }
+    | CJTyped(value) ->
+      yield (path.reversed(), json);
+      sortedFields = value.fields().sorted();
+      for (idx => fieldName in sortedFields) {
+        newPath = List.Cons(PEField(fieldName), path);
+        for (elt in static::specialField(newPath, value.value(idx))) {
+          yield elt
+        }
+      }
     }
   }
 

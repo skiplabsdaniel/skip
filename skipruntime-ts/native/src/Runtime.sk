@@ -1537,4 +1537,21 @@ fun updateContext(context: mutable SKStore.Context): void {
   checkGarbage(context);
 }
 
+class CJCollection(type: String, collection: String) extends SKJSON.CJSONable {
+  fun typeName(): String {
+    this.type
+  }
+
+  fun fields(): Array<String> {
+    Array["collection"]
+  }
+
+  fun value(idx: Int): SKJSON.CJSON {
+    idx match {
+      | 0 -> SKJSON.CJString(this.collection)
+      | _ -> invariant_violation(`Invalid flied index ${idx}.`)
+    }
+  }
+}
+
 module end;
