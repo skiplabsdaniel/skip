@@ -10,16 +10,17 @@ const kArray: Int = 6;
 const kObject: Int = 7;
 
 @export("SKIP_SKJSON_typeOf")
-fun typeOf(json: CJSON): Float {
-  (json match {
-  | CJNull() -> kNull
-  | CJBool _ -> kBoolean
-  | CJInt _ -> kInt
-  | CJFloat _ -> kFloat
-  | CJString _ -> kString
-  | CJArray _ -> kArray
-  | CJObject _ -> kObject
-  }).toFloat()
+fun typeOf(json: CJSON): String {
+  json match {
+  | CJNull() -> kNull.toString()
+  | CJBool _ -> kBoolean.toString()
+  | CJInt _ -> kInt.toString()
+  | CJFloat _ -> kFloat.toString()
+  | CJString _ -> kString.toString()
+  | CJArray _ -> kArray.toString()
+  | CJObject _ -> kObject.toString()
+  | CJTyped(value) -> value.typeName()
+  }
 }
 
 @export("SKIP_SKJSON_asNumber")
@@ -72,32 +73,27 @@ fun castBool(json: CJSON): Bool {
 }
 
 @export("SKIP_SKJSON_asObject")
-fun asObject(json: CJSON): CJObject {
+fun asObject(json: CJSON): CJObjectBase {
   json match {
   | v @ CJObject _ -> v
+  | v @ CJTyped _ -> v
   | _ -> invariant_violation("Must be a Object value.")
   }
 }
 
 @export("SKIP_SKJSON_fieldAt")
-fun fieldAt(object: CJObject, idx: Float): ?String {
-  object match {
-  | CJObject(fields) -> fields.cols.maybeGet(idx.toInt())
-  }
+fun fieldAt(object: CJObjectBase, idx: Float): ?String {
+  object.fields().maybeGet(idx.toInt())
 }
 
 @export("SKIP_SKJSON_get")
-fun get(object: CJObject, idx: Float): ?CJSON {
-  object match {
-  | CJObject(fields) -> fields.values.maybeGet(idx.toInt())
-  }
+fun get(object: CJObjectBase, idx: Float): ?CJSON {
+  object.value(idx.toInt())
 }
 
 @export("SKIP_SKJSON_objectSize")
-fun objectSize(object: CJObject): Float {
-  object match {
-  | CJObject(fields) -> fields.cols.size().toFloat()
-  }
+fun objectSize(object: CJObjectBase): Float {
+  object.fields().size().toFloat()
 }
 
 @export("SKIP_SKJSON_at")

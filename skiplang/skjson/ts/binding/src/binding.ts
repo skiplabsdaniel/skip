@@ -12,30 +12,32 @@ export enum Type {
   Object,
 }
 
+export type CJType = string & Internal.CJTyped;
+
 export interface Binding {
-  SKIP_SKJSON_typeOf(json: Pointer<Internal.CJSON>): Type;
+  SKIP_SKJSON_typeOf(json: Pointer<Internal.CJSON>): Type | CJType;
   SKIP_SKJSON_asNumber(json: Pointer<Internal.CJSON>): number;
   SKIP_SKJSON_asBoolean(json: Pointer<Internal.CJSON>): boolean;
   SKIP_SKJSON_asString(json: Pointer<Internal.CJSON>): string;
   SKIP_SKJSON_asArray(json: Pointer<Internal.CJSON>): Pointer<Internal.CJArray>;
   SKIP_SKJSON_asObject(
     json: Pointer<Internal.CJSON>,
-  ): Pointer<Internal.CJObject>;
+  ): Pointer<Internal.CJObjectBase>;
 
   SKIP_SKJSON_fieldAt(
-    json: Pointer<Internal.CJObject>,
+    json: Pointer<Internal.CJObjectBase>,
     idx: number,
   ): Nullable<string>; // Should be Nullable<...>
-  SKIP_SKJSON_get(
-    json: Pointer<Internal.CJObject>,
+  SKIP_SKJSON_get<T extends Internal.CJSON>(
+    json: Pointer<Internal.CJObjectBase>,
     idx: number,
-  ): Nullable<Pointer<Internal.CJSON>>;
+  ): Nullable<Pointer<T>>;
   SKIP_SKJSON_at<T extends Internal.CJSON>(
     json: Pointer<Internal.CJArray<T>>,
     idx: number,
   ): Nullable<Pointer<T>>;
 
-  SKIP_SKJSON_objectSize(json: Pointer<Internal.CJObject>): number;
+  SKIP_SKJSON_objectSize(json: Pointer<Internal.CJObjectBase>): number;
   SKIP_SKJSON_arraySize(json: Pointer<Internal.CJArray>): number;
 
   SKIP_SKJSON_startCJObject(): Pointer<Internal.PartialCJObj>;
@@ -62,4 +64,8 @@ export interface Binding {
   SKIP_SKJSON_createCJFloat(v: number): Pointer<Internal.CJFloat>;
   SKIP_SKJSON_createCJString(str: string): Pointer<Internal.CJString>;
   SKIP_SKJSON_createCJBool(v: boolean): Pointer<Internal.CJBool>;
+  SKIP_SKJSON_createCJTyped(
+    obj: Pointer<Internal.PartialCJObj>,
+    type: CJType,
+  ): Pointer<Internal.CJTyped>;
 }
