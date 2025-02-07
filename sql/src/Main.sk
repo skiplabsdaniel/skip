@@ -780,4 +780,14 @@ fun execToggleView(args: Cli.ParseResults, _options: SKDB.Options): void {
   })
 }
 
+/*** TODO: Not clean, should be in skjson, need to found a way to make it cleanly ***/
+
+@export("SKIP_SKJSON_createCJTyped")
+fun createCJTyped(
+  _object: mutable Vector<(String, SKJSON.CJSON)>,
+  _type: String,
+): SKJSON.CJTyped {
+  invariant_violation("No custom types defined.")
+}
+
 module end;
