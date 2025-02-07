@@ -237,7 +237,9 @@ base class SType uses Orderable extends STypeWithNum {
     | CJFloat _ -> static::TKFloat
     | CJString _ -> static::TKString
     | CJArray(_) -> static::TKArray
-    | CJObject(_) -> static::TKObject
+    | CJObject(_)
+    | CJTyped(_) ->
+      static::TKObject
     }
   }
 

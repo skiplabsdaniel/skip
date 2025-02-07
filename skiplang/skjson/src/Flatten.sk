@@ -62,14 +62,18 @@ fun flattenHelper(
         yield elt
       }
     }
-  | CJObject(fields) if (fields.isEmpty()) ->
+  | object @ CJObjectBase _ if (object.fields().isEmpty()) ->
     yield (id, pathStr, Some(PTEmptyObject()), None(), None(), None())
-  | CJObject(fields) ->
-    sortedFields = fields.items().collect(Array).sortedBy(x ~> x.i0);
-    for (kv in sortedFields) {
-      (fieldName, fieldValue) = kv;
+  | object @ CJObjectBase _ ->
+    sortedFields = object.fields().sorted();
+    for (idx => fieldName in sortedFields) {
       newPath = List.Cons(PEField(fieldName), path);
-      for (elt in flattenHelper(id, newPath, mkPath(newPath), fieldValue)) {
+      for (elt in flattenHelper(
+        id,
+        newPath,
+        mkPath(newPath),
+        object.value(idx).fromSome(),
+      )) {
         yield elt
       }
     }
