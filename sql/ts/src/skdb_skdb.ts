@@ -20,8 +20,10 @@ import { ExternalFuns, SKDBTable } from "./skdb_util.js";
 import { IDBStorage } from "./skdb_storage.js";
 import { SKDBImpl, SKDBSyncImpl } from "./skdb_database.js";
 import type { SKJSONShared } from "../skipwasm-json/skjson.js";
-import type { JsonConverter } from "../skiplang-json/index.js";
+import type { JsonConverter as CJConverter } from "../skiplang-json/index.js";
 import type * as InternalJ from "../skiplang-json/internal.js";
+
+type JsonConverter = CJConverter<never>;
 
 interface Exported {
   sk_pop_dirty_page: () => number;

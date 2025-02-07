@@ -33,7 +33,7 @@ import type {
   Notifier,
 } from "@skipruntime/core/binding.js";
 
-import type { Json } from "@skipruntime/core/json.js";
+import type { Json } from "@skipruntime/core";
 import {
   toPtr,
   toNullablePtr,
@@ -831,10 +831,12 @@ class LinksImpl implements Links {
   complete(utils: Utils, exports: object) {
     this.utils = utils;
     const fromBinding = new WasmFromBinding(utils, exports as FromWasm);
+    const skjson = this.env.shared.get("SKJSON")! as SKJSONShared;
+    const defaultConverter = skjson.converter;
     this.tobinding = new ToBinding(
       fromBinding,
       utils.runWithGc.bind(utils),
-      () => (this.env.shared.get("SKJSON")! as SKJSONShared).converter,
+      () => defaultConverter,
       (skExc: Pointer<Internal.Exception>) =>
         this.utils.getErrorObject(toPtr(skExc)),
     );

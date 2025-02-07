@@ -1538,4 +1538,25 @@ fun updateContext(context: mutable SKStore.Context): void {
   checkGarbage(context);
 }
 
+class CJCollection(
+  type: String,
+  collection: String,
+  private fields_: Array<String> = Array["collection"],
+) extends SKJSON.CJSONable {
+  fun typeName(): String {
+    this.type
+  }
+
+  fun fields(): Array<String> {
+    this.fields_
+  }
+
+  fun value(idx: Int): ?SKJSON.CJSON {
+    idx match {
+    | 0 -> Some(SKJSON.CJString(this.collection))
+    | _ -> None()
+    }
+  }
+}
+
 module end;
