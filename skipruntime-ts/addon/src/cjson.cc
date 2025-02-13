@@ -33,6 +33,8 @@ CJSON SKIP_SKJSON_at(CJArray json, double idx);
 //
 double SKIP_SKJSON_objectSize(CJSON json);
 double SKIP_SKJSON_arraySize(CJArray json);
+
+CJTyped SKIP_SKJSON_createCJTyped(PartialCJObj obj, char* type);
 }
 
 namespace skjson {
@@ -274,6 +276,33 @@ void CreateCJBool(const FunctionCallbackInfo<Value>& args) {
     bool skvalue = args[0].As<Boolean>()->Value();
     CJSON skbool = SKIP_SKJSON_createCJFloat(skvalue);
     args.GetReturnValue().Set(External::New(isolate, skbool));
+  });
+}
+
+void CreateCJTyped(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  if (args.Length() != 2) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(
+        Exception::TypeError(FromUtf8(isolate, "Must have two parameters.")));
+    return;
+  };
+  if (!args[0]->IsExternal()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The first parameter must be a pointer.")));
+    return;
+  }
+  if (!args[1]->IsString()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The second parameter must be a string.")));
+    return;
+  }
+
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    SKIP_SKJSON_createCJTyped(args[0].As<External>()->Value(),
+                              ToSKString(isolate, args[1].As<String>()));
   });
 }
 
@@ -542,6 +571,7 @@ void GetBinding(const FunctionCallbackInfo<Value>& args) {
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJFloat", CreateCJFloat);
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJString", CreateCJString);
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJBool", CreateCJBool);
+  AddFunction(isolate, binding, "SKIP_SKJSON_createCJTyped", CreateCJTyped);
 
   AddFunction(isolate, binding, "SKIP_SKJSON_typeOf", TypeOf);
   AddFunction(isolate, binding, "SKIP_SKJSON_asNumber", AsNumber);

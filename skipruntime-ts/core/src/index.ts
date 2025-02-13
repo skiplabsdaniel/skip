@@ -5,7 +5,14 @@
  */
 
 import type { Opaque } from "../skiplang-std/index.js";
-import type { Pointer, Nullable, Exportable } from "../skiplang-json/index.js";
+import type {
+  Pointer,
+  Nullable,
+  Exportable,
+  TypedConverter,
+  JsonConverter as CJConverter,
+  CJTyped,
+} from "../skiplang-json/index.js";
 import {
   sk_freeze,
   isSkManaged,
@@ -37,6 +44,9 @@ import type {
   Json,
   JsonObject,
   JsonConverter,
+  Data,
+  DataConverter,
+  NamedInputs,
 } from "./api.js";
 
 import {
@@ -58,7 +68,8 @@ export { Sum, Min, Max, Count } from "./utils.js";
 export * from "./api.js";
 export * from "./errors.js";
 
-export type JSONMapper = Mapper<Json, Json, Json, Json>;
+export type JsonMapper = Mapper<Json, Json, Json, Json>;
+export type DataMapper = Mapper<Json, Json | Data, Json, Json | Data>;
 export type JSONLazyCompute = LazyCompute<Json, Json>;
 
 class Handles {
@@ -110,7 +121,8 @@ export class Stack {
 export class Refs {
   constructor(
     public readonly binding: FromBinding,
-    public readonly skjson: JsonConverter,
+    public readonly json: JsonConverter,
+    public readonly data: DataConverter,
     public readonly handles: Handles,
     public readonly needGC: () => boolean,
     public readonly runWithGC: <T>(fn: () => T) => T,
@@ -130,27 +142,31 @@ class LazyCollectionImpl<K extends Json, V extends Json>
   }
 
   getArray(key: K): (V & DepSafe)[] {
-    return this.refs.skjson.importJSON(
+    return this.refs.json.importJSON(
       this.refs.binding.SkipRuntime_LazyCollection__getArray(
         this.lazyCollection,
-        this.refs.skjson.exportJSON(key),
+        this.refs.json.exportJSON(key),
       ),
     ) as (V & DepSafe)[];
   }
 
   getUnique(key: K): V & DepSafe {
-    const v = this.refs.skjson.importOptJSON(
+    const v = this.refs.json.importOptJSON(
       this.refs.binding.SkipRuntime_LazyCollection__getUnique(
         this.lazyCollection,
-        this.refs.skjson.exportJSON(key),
+        this.refs.json.exportJSON(key),
       ),
     ) as Nullable<V & DepSafe>;
     if (v == null) throw new SkipNonUniqueValueError();
     return v;
   }
+
+  toJSON() {
+    return { collection: this.lazyCollection };
+  }
 }
 
-class EagerCollectionImpl<K extends Json, V extends Json>
+class EagerCollectionImpl<K extends Json, V extends Json | Data>
   extends SkManaged
   implements EagerCollection<K, V>
 {
@@ -163,19 +179,19 @@ class EagerCollectionImpl<K extends Json, V extends Json>
   }
 
   getArray(key: K): (V & DepSafe)[] {
-    return this.refs.skjson.importJSON(
+    return this.refs.data.importJSON(
       this.refs.binding.SkipRuntime_Collection__getArray(
         this.collection,
-        this.refs.skjson.exportJSON(key),
+        this.refs.json.exportJSON(key),
       ),
     ) as (V & DepSafe)[];
   }
 
   getUnique(key: K): V & DepSafe {
-    const v = this.refs.skjson.importOptJSON(
+    const v = this.refs.data.importOptJSON(
       this.refs.binding.SkipRuntime_Collection__getUnique(
         this.collection,
-        this.refs.skjson.exportJSON(key),
+        this.refs.json.exportJSON(key),
       ),
     ) as Nullable<V & DepSafe>;
     if (v == null) throw new SkipNonUniqueValueError();
@@ -195,7 +211,7 @@ class EagerCollectionImpl<K extends Json, V extends Json>
   slices(...ranges: [K, K][]): EagerCollection<K, V> {
     const skcollection = this.refs.binding.SkipRuntime_Collection__slice(
       this.collection,
-      this.refs.skjson.exportJSON(ranges),
+      this.refs.json.exportJSON(ranges),
     );
     return this.derive<K, V>(skcollection);
   }
@@ -208,7 +224,7 @@ class EagerCollectionImpl<K extends Json, V extends Json>
     return this.derive<K, V>(skcollection);
   }
 
-  map<K2 extends Json, V2 extends Json, Params extends DepSafe[]>(
+  map<K2 extends Json, V2 extends Json | Data, Params extends DepSafe[]>(
     mapper: new (...params: Params) => Mapper<K, V, K2, V2>,
     ...params: Params
   ): EagerCollection<K2, V2> {
@@ -230,7 +246,11 @@ class EagerCollectionImpl<K extends Json, V extends Json>
     return this.derive<K2, V2>(mapped);
   }
 
-  mapReduce<K2 extends Json, V2 extends Json, MapperParams extends DepSafe[]>(
+  mapReduce<
+    K2 extends Json,
+    V2 extends Json | Data,
+    MapperParams extends DepSafe[],
+  >(
     mapper: new (...params: MapperParams) => Mapper<K, V, K2, V2>,
     ...mapperParams: MapperParams
   ) {
@@ -273,7 +293,7 @@ class EagerCollectionImpl<K extends Json, V extends Json>
       } else {
         const skreducer = this.refs.binding.SkipRuntime_createReducer(
           this.refs.handles.register(reducerObj),
-          this.refs.skjson.exportJSON(reducerObj.initial),
+          this.refs.json.exportJSON(reducerObj.initial),
         );
         return this.derive<K2, Accum>(
           this.refs.binding.SkipRuntime_Collection__mapReduce(
@@ -308,7 +328,7 @@ class EagerCollectionImpl<K extends Json, V extends Json>
     } else {
       const skreducer = this.refs.binding.SkipRuntime_createReducer(
         this.refs.handles.register(reducerObj),
-        this.refs.skjson.exportJSON(reducerObj.initial),
+        this.refs.json.exportJSON(reducerObj.initial),
       );
       return this.derive<K, Accum>(
         this.refs.binding.SkipRuntime_Collection__reduce(
@@ -325,15 +345,19 @@ class EagerCollectionImpl<K extends Json, V extends Json>
     );
     const mapped = this.refs.binding.SkipRuntime_Collection__merge(
       this.collection,
-      this.refs.skjson.exportJSON(otherNames),
+      this.refs.json.exportJSON(otherNames),
     );
     return this.derive<K, V>(mapped);
   }
 
-  private derive<K2 extends Json, V2 extends Json>(
+  private derive<K2 extends Json, V2 extends Json | Data>(
     collection: string,
   ): EagerCollection<K2, V2> {
     return new EagerCollectionImpl<K2, V2>(collection, this.refs);
+  }
+
+  toJSON() {
+    return { collection: this.collection };
   }
 }
 
@@ -347,7 +371,7 @@ class CollectionWriter<K extends Json, V extends Json> {
     const update_ = () => {
       return this.refs.binding.SkipRuntime_CollectionWriter__update(
         this.collection,
-        this.refs.skjson.exportJSON(values),
+        this.refs.json.exportJSON(values),
         isInit,
       );
     };
@@ -374,7 +398,7 @@ class CollectionWriter<K extends Json, V extends Json> {
     const error_ = () => {
       return this.refs.binding.SkipRuntime_CollectionWriter__error(
         this.collection,
-        this.refs.skjson.exportJSON(error),
+        this.refs.json.exportJSON(error),
       );
     };
     const errorHdl = this.refs.needGC()
@@ -423,15 +447,15 @@ class ContextImpl extends SkManaged implements Context {
       this.refs.binding.SkipRuntime_Context__useExternalResource(
         resource.service,
         resource.identifier,
-        this.refs.skjson.exportJSON(resource.params ?? {}),
+        this.refs.json.exportJSON(resource.params ?? {}),
       );
     return new EagerCollectionImpl<K, V>(collection, this.refs);
   }
 
   jsonExtract(value: JsonObject, pattern: string): Json[] {
-    return this.refs.skjson.importJSON(
+    return this.refs.data.importJSON(
       this.refs.binding.SkipRuntime_Context__jsonExtract(
-        this.refs.skjson.exportJSON(value),
+        this.refs.data.exportJSON(value),
         pattern,
       ),
     ) as Json[];
@@ -535,7 +559,7 @@ export class ServiceInstance {
       return this.refs.binding.SkipRuntime_Runtime__createResource(
         identifier,
         resource,
-        this.refs.skjson.exportJSON(params),
+        this.refs.json.exportJSON(params),
       );
     });
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
@@ -553,10 +577,10 @@ export class ServiceInstance {
     request?: string | Executor<Entry<K, V>[]>,
   ): GetResult<Entry<K, V>[]> {
     const get_ = () => {
-      return this.refs.skjson.importJSON(
+      return this.refs.json.importJSON(
         this.refs.binding.SkipRuntime_Runtime__getAll(
           resource,
-          this.refs.skjson.exportJSON(params),
+          this.refs.json.exportJSON(params),
           request !== undefined
             ? typeof request == "string"
               ? this.refs.binding.SkipRuntime_createIdentifier(request)
@@ -590,11 +614,11 @@ export class ServiceInstance {
     request?: string | Executor<V[]>,
   ): GetResult<V[]> {
     const get_ = () => {
-      return this.refs.skjson.importJSON(
+      return this.refs.json.importJSON(
         this.refs.binding.SkipRuntime_Runtime__getForKey(
           resource,
-          this.refs.skjson.exportJSON(params),
-          this.refs.skjson.exportJSON(key),
+          this.refs.json.exportJSON(params),
+          this.refs.json.exportJSON(key),
           request !== undefined
             ? typeof request == "string"
               ? this.refs.binding.SkipRuntime_createIdentifier(request)
@@ -692,7 +716,7 @@ export class ServiceInstance {
     const errorHdl = this.refs.runWithGC(() => {
       return this.refs.binding.SkipRuntime_Runtime__update(
         collection,
-        this.refs.skjson.exportJSON(entries),
+        this.refs.json.exportJSON(entries),
       );
     });
     if (errorHdl) {
@@ -716,23 +740,19 @@ export class ServiceInstance {
 
 class ValuesImpl<T> implements Values<T> {
   constructor(
-    private readonly skjson: JsonConverter,
+    private readonly data: DataConverter,
     private readonly binding: FromBinding,
     private readonly pointer: Pointer<Internal.NonEmptyIterator>,
-  ) {
-    this.skjson = skjson;
-    this.binding = binding;
-    this.pointer = pointer;
-  }
+  ) {}
 
   next(): Nullable<T & DepSafe> {
-    return this.skjson.importOptJSON(
+    return this.data.importOptJSON(
       this.binding.SkipRuntime_NonEmptyIterator__next(this.pointer),
     ) as Nullable<T & DepSafe>;
   }
 
   getUnique(): T & DepSafe {
-    const value = this.skjson.importOptJSON(
+    const value = this.data.importOptJSON(
       this.binding.SkipRuntime_NonEmptyIterator__uniqueValue(this.pointer),
     ) as Nullable<T & DepSafe>;
     if (value == null) throw new SkipNonUniqueValueError();
@@ -745,7 +765,7 @@ class ValuesImpl<T> implements Values<T> {
 
   [Symbol.iterator](): Iterator<T & DepSafe> {
     const cloned_iter = new ValuesImpl<T & DepSafe>(
-      this.skjson,
+      this.data,
       this.binding,
       this.binding.SkipRuntime_NonEmptyIterator__clone(this.pointer),
     );
@@ -762,19 +782,20 @@ class ValuesImpl<T> implements Values<T> {
 export class ToBinding {
   private readonly stack: Stack;
   private readonly handles: Handles;
-  private skjson?: JsonConverter;
+  private data?: DataConverter;
+  private json?: JsonConverter;
 
   constructor(
     private binding: FromBinding,
     private runWithGC: <T>(fn: () => T) => T,
     private getConverter: (
       eagerCollectionBuilder: (
-        object: Exportable<undefined>,
-      ) => EagerCollection<Json, Json>,
+        object: Exportable<never>,
+      ) => EagerCollection<Json, Data>,
       lazyCollectionBuilder: (
-        object: Exportable<undefined>,
+        object: Exportable<never>,
       ) => LazyCollection<Json, Json>,
-    ) => JsonConverter,
+    ) => [JsonConverter, DataConverter],
     private getError: (skExc: Pointer<Internal.Exception>) => Error,
   ) {
     this.stack = new Stack();
@@ -808,20 +829,22 @@ export class ToBinding {
   // Mapper
 
   SkipRuntime_Mapper__mapEntry(
-    skmapper: Handle<JSONMapper>,
+    skmapper: Handle<DataMapper>,
     key: Pointer<Internal.CJSON>,
     values: Pointer<Internal.NonEmptyIterator>,
   ): Pointer<Internal.CJArray> {
-    const skjson = this.getJsonConverter();
+    const data = this.getDataConverter();
+    const json = this.getJsonConverter();
+
     const mapper = this.handles.get(skmapper);
     const result = mapper.mapEntry(
-      skjson.importJSON(key) as Json,
-      new ValuesImpl<Json>(skjson, this.binding, values),
+      json.importJSON(key) as Json,
+      new ValuesImpl<Json>(data, this.binding, values),
     );
-    return skjson.exportJSON(Array.from(result) as [[Json, Json]]);
+    return data.exportJSON(Array.from(result) as [[Json, Data]]);
   }
 
-  SkipRuntime_deleteMapper(mapper: Handle<JSONMapper>): void {
+  SkipRuntime_deleteMapper(mapper: Handle<DataMapper>): void {
     this.handles.deleteHandle(mapper);
   }
 
@@ -859,10 +882,10 @@ export class ToBinding {
     };
     const refs = this.refs();
     for (const [key, name] of Object.entries(keysIds)) {
-      collections[key] = new EagerCollectionImpl<Json, Json>(name, refs);
+      collections[key] = new EagerCollectionImpl<Json, Data>(name, refs);
     }
     const collection = resource.instantiate(collections, new ContextImpl(refs));
-    return (collection as EagerCollectionImpl<Json, Json>).collection;
+    return (collection as EagerCollectionImpl<Json, Data>).collection;
   }
 
   SkipRuntime_deleteResource(resource: Handle<Resource>): void {
@@ -895,7 +918,7 @@ export class ToBinding {
   ): Pointer<Internal.CJObject> {
     const skjson = this.getJsonConverter();
     const service = this.handles.get(skservice);
-    const collections: NamedCollections = {};
+    const collections: NamedInputs = {};
     const keysIds = skjson.importJSON(skcollections) as {
       [key: string]: string;
     };
@@ -907,7 +930,7 @@ export class ToBinding {
     const collectionsNames: { [name: string]: string } = {};
     for (const [name, collection] of Object.entries(result)) {
       collectionsNames[name] = (
-        collection as EagerCollectionImpl<Json, Json>
+        collection as EagerCollectionImpl<Json, Data>
       ).collection;
     }
     return skjson.exportJSON(collectionsNames);
@@ -959,7 +982,7 @@ export class ToBinding {
   // Reducer
 
   SkipRuntime_Reducer__add(
-    skreducer: Handle<Reducer<Json, Json>>,
+    skreducer: Handle<Reducer<Data, Json>>,
     skacc: Nullable<Pointer<Internal.CJSON>>,
     skvalue: Pointer<Internal.CJSON>,
   ): Pointer<Internal.CJSON> {
@@ -968,13 +991,13 @@ export class ToBinding {
     return skjson.exportJSON(
       reducer.add(
         skacc ? (skjson.importJSON(skacc) as Json) : null,
-        skjson.importJSON(skvalue) as Json & DepSafe,
+        skjson.importJSON(skvalue) as Data & DepSafe,
       ),
     );
   }
 
   SkipRuntime_Reducer__remove(
-    skreducer: Handle<Reducer<Json, Json>>,
+    skreducer: Handle<Reducer<Data, Json>>,
     skacc: Pointer<Internal.CJSON>,
     skvalue: Pointer<Internal.CJSON>,
   ): Nullable<Pointer<Internal.CJSON>> {
@@ -983,12 +1006,12 @@ export class ToBinding {
     return skjson.exportJSON(
       reducer.remove(
         skjson.importJSON(skacc) as Json,
-        skjson.importJSON(skvalue) as Json & DepSafe,
+        skjson.importJSON(skvalue) as Data & DepSafe,
       ),
     );
   }
 
-  SkipRuntime_deleteReducer(reducer: Handle<Reducer<Json, Json>>): void {
+  SkipRuntime_deleteReducer(reducer: Handle<Reducer<Data, Json>>): void {
     this.handles.deleteHandle(reducer);
   }
 
@@ -1075,7 +1098,7 @@ export class ToBinding {
       }
       const skservice = refs.binding.SkipRuntime_createService(
         refs.handles.register(service),
-        refs.skjson.exportJSON(service.initialData ?? {}),
+        refs.json.exportJSON(service.initialData ?? {}),
         skresources,
         skExternalServices,
       );
@@ -1086,30 +1109,39 @@ export class ToBinding {
   }
 
   //
-  private buildEagerCollection(object: Exportable<undefined>) {
+  private buildEagerCollection(object: Exportable<never>) {
     const refs = this.refs();
-    return new EagerCollectionImpl<Json, Json>(
-      (object as CJObject<undefined>)["collection"] as string,
+    return new EagerCollectionImpl<Json, Data>(
+      (object as CJObject<never>)["collection"] as string,
       refs,
     );
   }
 
-  private buildLazyCollection(object: Exportable<undefined>) {
+  private buildLazyCollection(object: Exportable<never>) {
     const refs = this.refs();
     return new LazyCollectionImpl<Json, Json>(
-      (object as CJObject<undefined>)["collection"] as string,
+      (object as CJObject<never>)["collection"] as string,
       refs,
     );
   }
 
-  private getJsonConverter() {
-    if (this.skjson == undefined) {
-      this.skjson = this.getConverter(
+  private checkConverters() {
+    if (this.data == undefined || this.json == undefined) {
+      [this.json, this.data] = this.getConverter(
         this.buildEagerCollection.bind(this),
         this.buildLazyCollection.bind(this),
       );
     }
-    return this.skjson;
+  }
+
+  private getJsonConverter() {
+    this.checkConverters();
+    return this.json!;
+  }
+
+  private getDataConverter() {
+    this.checkConverters();
+    return this.data!;
   }
 
   private needGC() {
@@ -1117,15 +1149,61 @@ export class ToBinding {
   }
 
   private refs(): Refs {
+    const [json, data] = this.getConverter(
+      this.buildEagerCollection.bind(this),
+      this.buildLazyCollection.bind(this),
+    );
     return new Refs(
       this.binding,
-      this.getConverter(
-        this.buildEagerCollection.bind(this),
-        this.buildLazyCollection.bind(this),
-      ),
+      json,
+      data,
       this.handles,
       this.needGC.bind(this),
       this.runWithGC,
     );
+  }
+}
+
+const EagerCollectionType = "SkipRuntime.EagerCollection" as CJTyped;
+const LazyCollectionType = "SkipRuntime.LazyCollection" as CJTyped;
+
+export class JconConverterWithCollections
+  implements
+    TypedConverter<EagerCollection<Json, Data> | LazyCollection<Json, Json>>
+{
+  constructor(
+    private predefined: CJConverter<never>,
+    private eagerCollectionBuilder: (
+      object: Exportable<never>,
+    ) => EagerCollection<Json, Data>,
+    private lazyCollectionBuilder: (
+      object: Exportable<never>,
+    ) => LazyCollection<Json, Json>,
+  ) {}
+
+  import(
+    c: CJTyped,
+    value: Pointer<Internal.CJSON>,
+  ): EagerCollection<Json, Data> | LazyCollection<Json, Json> {
+    if (c !== EagerCollectionType && c !== LazyCollectionType) {
+      throw new SkipError(`Unknown Json custom type ${c}`);
+    }
+    const object = this.predefined.importJSON(value);
+    if (c === EagerCollectionType) {
+      return this.eagerCollectionBuilder(object);
+    }
+    return this.lazyCollectionBuilder(object);
+  }
+
+  export(
+    value: EagerCollection<Json, Data> | LazyCollection<Json, Json>,
+  ): Pointer<Internal.CJSON> {
+    if (value instanceof EagerCollectionImpl) {
+      return this.predefined.exportJSON(value.toJSON(), EagerCollectionType);
+    } else if (value instanceof LazyCollectionImpl) {
+      return this.predefined.exportJSON(value.toJSON(), LazyCollectionType);
+    } else {
+      throw new TypeError("Invalid collection type.");
+    }
   }
 }
