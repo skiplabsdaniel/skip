@@ -82,7 +82,7 @@ export -f run_diff pass fail
 MAXIMUM_RESIDENT_SET_SIZE_MB=700
 LIMITING=(--memsuspend "${MAXIMUM_RESIDENT_SET_SIZE_MB}M" --memfree "${MAXIMUM_RESIDENT_SET_SIZE_MB}M")
 if ${CIRCLECI:-false}; then
-    LIMITING+=(--jobs 3)
+    LIMITING+=(--jobs 1)
 fi
 
 parallel "${LIMITING[@]}" --colsep ' ' run_diff <<END
