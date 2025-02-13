@@ -56,6 +56,7 @@ struct SkipException : std::exception {
 #define CJSON void*
 #define CJArray void*
 #define CJObject void*
+#define CJTyped void*
 #define PartialCJObj void*
 #define PartialCJArr void*
 #define SKException void*
