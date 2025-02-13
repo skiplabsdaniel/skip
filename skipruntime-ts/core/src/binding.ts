@@ -1,5 +1,5 @@
 import type { Pointer } from "../skiplang-json/index.js";
-import type { Nullable, Json } from "./api.js";
+import type { Nullable, Json, Data } from "./api.js";
 import type * as Internal from "./internal.js";
 
 import {
@@ -51,9 +51,9 @@ export interface FromBinding {
   // Mapper
   SkipRuntime_createMapper<
     K1 extends Json,
-    V1 extends Json,
+    V1 extends Data,
     K2 extends Json,
-    V2 extends Json,
+    V2 extends Data,
   >(
     ref: Handle<Mapper<K1, V1, K2, V2>>,
   ): Pointer<Internal.Mapper>;
@@ -228,8 +228,8 @@ export interface FromBinding {
 
   // Reducer
 
-  SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(
-    ref: Handle<Reducer<K1, V1>>,
+  SkipRuntime_createReducer<V1 extends Data, V2 extends Json>(
+    ref: Handle<Reducer<V1, V2>>,
     defaultValue: Pointer<Internal.CJSON>,
   ): Pointer<Internal.Reducer>;
 
