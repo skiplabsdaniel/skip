@@ -4,6 +4,7 @@ import EventSource from "eventsource";
 
 import type {
   Context,
+  Data,
   EagerCollection,
   Entry,
   ExternalService,
@@ -122,7 +123,7 @@ class LeaderResource implements Resource {
       );
   }
 
-  instantiate(collections: NamedCollections): EagerCollection<Json, Json> {
+  instantiate(collections: NamedCollections): EagerCollection<Json, Data> {
     if (this.collection in collections) return collections[this.collection]!;
     throw new SkipError(
       `Unknown shared collection in leader: ${this.collection}`,

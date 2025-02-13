@@ -17,6 +17,7 @@ import type {
   NamedCollections,
   SubscriptionID,
   Nullable,
+  NamedInputs,
 } from "@skipruntime/core";
 
 import { Count, Sum } from "@skipruntime/helpers";
@@ -998,7 +999,7 @@ class NNResource implements Resource<Input_NN> {
 }
 
 function initServiceWithExternalServiceFailure(): SkipService<
-  NamedCollections,
+  NamedInputs,
   Input_NN
 > {
   return {

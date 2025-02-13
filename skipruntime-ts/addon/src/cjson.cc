@@ -34,6 +34,8 @@ CJSON SKIP_SKJSON_at(CJArray json, double idx);
 //
 double SKIP_SKJSON_objectSize(CJSON json);
 double SKIP_SKJSON_arraySize(CJArray json);
+
+CJTyped SKIP_SKJSON_createCJTyped(PartialCJObj obj, char* type);
 }
 
 namespace skjson {
