@@ -33,6 +33,8 @@ CJSON SKIP_SKJSON_at(CJArray json, double idx);
 //
 double SKIP_SKJSON_objectSize(CJSON json);
 double SKIP_SKJSON_arraySize(CJArray json);
+
+CJTyped SKIP_SKJSON_createCJTyped(PartialCJObj obj, char* type);
 }
 
 namespace skjson {
@@ -571,6 +573,7 @@ void GetBinding(const FunctionCallbackInfo<Value>& args) {
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJFloat", CreateCJFloat);
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJString", CreateCJString);
   AddFunction(isolate, binding, "SKIP_SKJSON_createCJBool", CreateCJBool);
+  AddFunction(isolate, binding, "SKIP_SKJSON_createCJTyped", CreateCJTyped);
 
   AddFunction(isolate, binding, "SKIP_SKJSON_typeOf", TypeOf);
   AddFunction(isolate, binding, "SKIP_SKJSON_asNumber", AsNumber);

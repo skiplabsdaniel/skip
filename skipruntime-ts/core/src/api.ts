@@ -19,14 +19,18 @@ export type { Managed, Opaque, DepSafe };
 export { deepFreeze } from "../skiplang-json/index.js";
 export type { Nullable };
 
-export type Json = CJSON<
-  EagerCollection<Json, Json> | LazyCollection<Json, Json>
+export type Json = CJSON<never>;
+export type JsonConverter = CJConverter<never>;
+export type JsonObject = CJObject<never>;
+
+export type Data = CJSON<
+  EagerCollection<Json, Data> | LazyCollection<Json, Json>
 >;
-export type JsonObject = CJObject<
-  EagerCollection<Json, Json> | LazyCollection<Json, Json>
+export type DataObject = CJObject<
+  EagerCollection<Json, Data> | LazyCollection<Json, Json>
 >;
-export type JsonConverter = CJConverter<
-  EagerCollection<Json, Json> | LazyCollection<Json, Json>
+export type DataConverter = CJConverter<
+  EagerCollection<Json, Data> | LazyCollection<Json, Json>
 >;
 
 /**
@@ -42,9 +46,9 @@ export type JsonConverter = CJConverter<
  */
 export interface Mapper<
   K1 extends Json,
-  V1 extends Json,
+  V1 extends Data,
   K2 extends Json,
-  V2 extends Json,
+  V2 extends Data,
 > {
   /**
    * From an input `key`-`values` entry, produce some key-value pairs to associate in the output.
@@ -65,7 +69,7 @@ export interface Mapper<
  * @typeParam V - Type of input values.
  * @typeParam A - Type of accumulated and output values.
  */
-export interface Reducer<V extends Json, A extends Json> {
+export interface Reducer<V extends Data, A extends Json> {
   /**
    * Initial accumulated value, providing the accumulated value for keys that are not associated to any values.
    */
@@ -149,7 +153,7 @@ export interface LazyCollection<K extends Json, V extends Json>
  * @typeParam K - Type of keys.
  * @typeParam V - Type of values.
  */
-export interface EagerCollection<K extends Json, V extends Json>
+export interface EagerCollection<K extends Json, V extends Data>
   extends Managed {
   /**
    * Get all values associated to a key.
@@ -193,7 +197,7 @@ export interface EagerCollection<K extends Json, V extends Json>
    * @param params - Additional parameters to `mapper`.
    * @returns The resulting eager collection.
    */
-  map<K2 extends Json, V2 extends Json, Params extends DepSafe[]>(
+  map<K2 extends Json, V2 extends Data, Params extends DepSafe[]>(
     mapper: new (...params: Params) => Mapper<K, V, K2, V2>,
     ...params: Params
   ): EagerCollection<K2, V2>;
@@ -240,7 +244,7 @@ export interface EagerCollection<K extends Json, V extends Json>
    * @param mapper - Constructor of `Mapper` class to transform each entry of this collection.
    * @param mapperParams - Additional parameters to `mapper`.
    */
-  mapReduce<K2 extends Json, V2 extends Json, MapperParams extends DepSafe[]>(
+  mapReduce<K2 extends Json, V2 extends Data, MapperParams extends DepSafe[]>(
     mapper: new (...params: MapperParams) => Mapper<K, V, K2, V2>,
     ...mapperParams: MapperParams
   ): //
@@ -301,6 +305,36 @@ export interface EagerCollection<K extends Json, V extends Json>
    * @returns The number of entries.
    */
   size(): number;
+}
+
+/**
+ * A reactive collection eagerly kept up-to-date.
+ *
+ * An `OutputCollection` is a reactive collection of entries that associate keys to values where the entries are computed eagerly and kept up to date whenever inputs change.
+ *
+ * @typeParam K - Type of keys.
+ * @typeParam V - Type of values.
+ */
+export interface OutputCollection<K extends Json, V extends Json>
+  extends Managed {
+  /**
+   * Get all values associated to a key.
+   *
+   * @param key - The key to query.
+   * @returns The values associated to `key`.
+   */
+  getArray(key: K): (V & DepSafe)[];
+
+  /**
+   * Get the single value associated to a key.
+   *
+   * For collections that do not use the generality of associating multiple values to a key, `getUnique` saves some boilerplate over `getArray`.
+   *
+   * @param key - The key to query.
+   * @returns The value associated to `key`.
+   * @throws {@link SkipNonUniqueValueError} if `key` is associated to either zero or multiple values.
+   */
+  getUnique(key: K): V & DepSafe;
 }
 
 /**
@@ -367,6 +401,7 @@ export interface Context extends Managed {
   }): EagerCollection<K, V>;
 
   jsonExtract(value: JsonObject, pattern: string): Json[];
+  jsonExtract(value: DataObject, pattern: string): Data[];
 }
 
 /**
@@ -463,7 +498,14 @@ export interface ExternalService {
 /**
  * Association of names to collections.
  */
-export type NamedCollections = { [name: string]: EagerCollection<Json, Json> };
+export type NamedCollections = {
+  [name: string]: EagerCollection<Json, Data>;
+};
+
+/**
+ * Association of names to inputs.
+ */
+export type NamedInputs = { [name: string]: EagerCollection<Json, Json> };
 
 /**
  * Resource provided by a `SkipService`.
@@ -495,8 +537,11 @@ export interface Resource<
  *
  * @typeParam Inputs - Collections provided to the service's `createGraph`.
  */
-export type InitialData<Inputs extends NamedCollections> = {
-  [Name in keyof Inputs]: Inputs[Name] extends EagerCollection<infer K, infer V>
+export type InitialData<Inputs extends NamedInputs> = {
+  [Name in keyof Inputs]: Inputs[Name] extends EagerCollection<
+    infer K,
+    infer V extends Json
+  >
     ? Entry<K, V>[]
     : Entry<Json, Json>[];
 };
@@ -549,13 +594,13 @@ export type InitialData<Inputs extends NamedCollections> = {
  * @typeParam ResourceInputs - Collections provided to the resource computation by the service's `createGraph`.
  */
 export interface SkipService<
-  Inputs extends NamedCollections = NamedCollections,
+  Inputs extends NamedInputs = NamedInputs,
   ResourceInputs extends NamedCollections = NamedCollections,
 > {
   /**
    * Initial data for this service's input collections.
    *
-   * @remarks While the initial data is not required to have a `DepSafe` type (only a subtype of `Json` is required); note that any modifications made to any objects passed as `initialData` will *not* be seen by a service once started.
+   * @remarks While the initial data is not required to have a `DepSafe` type (only a subtype of `Data` is required); note that any modifications made to any objects passed as `initialData` will *not* be seen by a service once started.
    */
   initialData?: InitialData<Inputs>;
 
