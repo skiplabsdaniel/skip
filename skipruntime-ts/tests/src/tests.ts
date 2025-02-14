@@ -747,6 +747,74 @@ const mapWithExceptionOnExternalService: SkipService<Input_SN, Input_SN> = {
   },
 };
 
+//// testMapReturningSubCollection
+
+class MultBy implements Mapper<number, number, number, number> {
+  constructor(private value: number) {}
+
+  mapEntry(key: number, values: Values<number>): Iterable<[number, number]> {
+    return Array([key, values.getUnique() * this.value]);
+  }
+}
+
+class ProjectOn implements Mapper<number, number, number, [number, number]> {
+  constructor(private key: number) {}
+
+  mapEntry(
+    key: number,
+    values: Values<number>,
+  ): Iterable<[number, [number, number]]> {
+    return Array([this.key, [key, values.getUnique()]]);
+  }
+}
+
+class MapWithSubCollection
+  implements
+    Mapper<number, number, number, EagerCollection<number, [number, number]>>
+{
+  constructor(private collection: EagerCollection<number, number>) {}
+
+  mapEntry(
+    key: number,
+    values: Values<number>,
+  ): Iterable<[number, EagerCollection<number, [number, number]>]> {
+    const multBy = this.collection.map(MultBy, values.getUnique());
+    return [[key, multBy.map(ProjectOn, key)]];
+  }
+}
+
+class CollectValues
+  implements
+    Mapper<
+      number,
+      EagerCollection<number, [number, number]>,
+      number,
+      [number, number][]
+    >
+{
+  mapEntry(
+    key: number,
+    values: Values<EagerCollection<number, [number, number]>>,
+  ): Iterable<[number, [number, number][]]> {
+    return [[key, values.getUnique().getArray(key)]];
+  }
+}
+
+class MapWithSubCollectionResource implements Resource<Input_NN> {
+  instantiate(cs: Input_NN): EagerCollection<number, [number, number][]> {
+    return cs.input.map(MapWithSubCollection, cs.input).map(CollectValues);
+  }
+}
+
+const mapWithSubCollectionService: SkipService<Input_NN, Input_NN> = {
+  initialData: { input: [] },
+  resources: { mapWithSubCollection: MapWithSubCollectionResource },
+
+  createGraph(inputCollections: Input_NN) {
+    return inputCollections;
+  },
+};
+
 export function initTests(
   category: string,
   initService: (service: SkipService) => Promise<ServiceInstance>,
@@ -1259,5 +1327,72 @@ export function initTests(
     expect(message).toMatchRegex(
       new RegExp(/^(?:Error: )?Something goes wrong.$/),
     );
+  });
+
+  it("testMapWithSubCollectionService", async () => {
+    const resource = "mapWithSubCollection";
+    const service = await initService(mapWithSubCollectionService);
+    service.instantiateResource("unsafe.fixed.resource.ident", resource, {});
+    try {
+      expect(service.getAll(resource).payload).toEqual([]);
+      service.update("input", [[0, [1]]]);
+      expect(service.getAll(resource).payload).toEqual([[0, [[[0, 1]]]]]);
+      service.update("input", [[1, [2]]]);
+      expect(service.getAll(resource).payload).toEqual([
+        [
+          0,
+          [
+            [
+              [0, 1],
+              [1, 2],
+            ],
+          ],
+        ],
+        [
+          1,
+          [
+            [
+              [0, 2],
+              [1, 4],
+            ],
+          ],
+        ],
+      ]);
+      service.update("input", [[2, [3]]]);
+      expect(service.getAll(resource).payload).toEqual([
+        [
+          0,
+          [
+            [
+              [0, 1],
+              [1, 2],
+              [2, 3],
+            ],
+          ],
+        ],
+        [
+          1,
+          [
+            [
+              [0, 2],
+              [1, 4],
+              [2, 6],
+            ],
+          ],
+        ],
+        [
+          2,
+          [
+            [
+              [0, 3],
+              [1, 6],
+              [2, 9],
+            ],
+          ],
+        ],
+      ]);
+    } finally {
+      service.close();
+    }
   });
 }
