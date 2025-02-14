@@ -99,6 +99,9 @@ test/diff/select5.1-create.sql test/diff/select5.1-views.sql test/diff/select5.1
 test/diff/groupby_create.sql test/diff/groupby_views.sql test/diff/groupby_inserts.sql
 test/diff/groupby_create.sql test/diff/groupby_views.sql test/diff/groupby_inserts.sql test/diff/groupby_delete.sql
 test/diff/slt_good_0_create.sql test/diff/slt_good_0_views.sql test/diff/slt_good_0_inserts.sql
+END
+
+parallel "${LIMITING[@]}" --colsep ' ' run_diff <<END
 --no-sqlite test/diff/select2_create.sql test/diff/select2_min_views_limit1.sql test/diff/select2_inserts.sql
 --no-sqlite test/diff/select2_create.sql test/diff/select2_min_views_limit1.sql test/diff/select2_inserts.sql test/diff/select2_deletes.sql
 --no-sqlite test/diff/select2_create.sql test/diff/select2_min_views_limit1.sql test/diff/select2_inserts.sql test/diff/select2_deletes.sql test/diff/select2_inserts.sql
