@@ -17,6 +17,10 @@ export SKIPRUNTIME
 # skdb wasm + js client
 ################################################################################
 
+.PHONY: npm-install
+npm-install:
+	npm install
+
 .PHONY: npm
 npm: $(SKDB_WASM) build/package/skdb build/package/package.json
 	cd build/package && npm install

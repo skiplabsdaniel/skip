@@ -1,9 +1,14 @@
 module SkipRuntime;
 
-base class Reducer<V1: frozen, V2: frozen>(initial: V2) {
-  fun getType(): SKStore.File ~> V2;
+class ConverterPair<K: SKStore.Key, V: SKStore.File>(
+  key: SKStore.Key ~> K,
+  value: SKStore.File ~> V,
+)
+
+base class Reducer<V1: SKStore.File, V2: SKStore.File>(initial: V2) {
   fun add(acc: V2, value: V1): V2;
   fun remove(acc: V2, value: V1): ?V2;
+  fun converter(): SKStore.File ~> V2;
 }
 
 /**
@@ -14,15 +19,22 @@ base class Reducer<V1: frozen, V2: frozen>(initial: V2) {
  * @param values - the values mapped to by `key` in the input collection
  * @returns an iterable of key/value pairs to output for the given input(s)
  */
-base class Mapper {
+base class Mapper<
+  K1: SKStore.Key,
+  V1: SKStore.File,
+  K2: SKStore.Key,
+  V2: SKStore.File,
+> {
   fun mapEntry(
-    key: SKJSON.CJSON,
-    values: mutable SKStore.NonEmptyIterator<SKJSON.CJSON>,
-  ): mutable Iterator<(SKJSON.CJSON, SKJSON.CJSON)>;
+    key: K1,
+    values: mutable SKStore.NonEmptyIterator<V1>,
+  ): mutable Iterator<(K2, V2)>;
+
+  fun converters(): ConverterPair<K2, V2>;
 }
 
-base class LazyCompute {
-  fun compute(self: LazyCollection, key: SKJSON.CJSON): Array<SKJSON.CJSON>;
+base class LazyCompute<K: SKStore.Key, V: SKStore.File> {
+  fun compute(self: LazyCollection<K, V>, key: K): Array<V>;
 }
 
 base class ExternalService {
@@ -30,7 +42,7 @@ base class ExternalService {
     instance: String,
     collection: CollectionWriter,
     resource: String,
-    params: SKJSON.CJSON,
+    params: Parameters,
   ): void;
 
   fun unsubscribe(instance: String): void;
@@ -38,22 +50,24 @@ base class ExternalService {
   fun shutdown(): Float;
 }
 
+base class Parameters uses Orderable, Show
+
 base class Resource {
-  fun instantiate(collections: Map<String, Collection>): Collection;
+  fun instantiate(
+    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Collection<SKStore.Key, SKStore.File>;
 }
 
-base class ResourceBuilder {
-  fun build(parameters: SKJSON.CJSON): Resource;
+base class Inputs {
+  fun each(Input<SKStore.Key, SKStore.File> -> void): void;
 }
 
-base class Service(
-  initialData: Array<Input>,
-  resources: Map<String, ResourceBuilder>,
-  remoteCollections: Map<String, ExternalService> = Map[],
-) {
+base class Service(initialData: Inputs, externalServices: Map<String, ExternalService>) {
+  fun buildResource(name: String, parameters: Parameters): Resource;
+
   fun createGraph(
-    inputCollections: Map<String, Collection>,
-  ): Map<String, Collection>;
+    inputCollections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Map<String, Collection<SKStore.Key, SKStore.File>>;
 }
 
 value class Values(
