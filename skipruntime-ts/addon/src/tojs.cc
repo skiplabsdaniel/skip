@@ -52,7 +52,7 @@ char* SkipRuntime_Collection__nativeMapReduce(char* collection, SKMapper mapper,
                                               char* reducer);
 char* SkipRuntime_Collection__reduce(char* collection, SKReducer reducer);
 char* SkipRuntime_Collection__nativeReduce(char* collection, char* reducer);
-char* SkipRuntime_Collection__slice(char* collection, CJArray ranges);
+char* SkipRuntime_Collection__slices(char* collection, CJArray ranges);
 char* SkipRuntime_Collection__take(char* collection, int64_t limit);
 char* SkipRuntime_Collection__merge(char* collection, CJArray others);
 int64_t SkipRuntime_Collection__size(char* collection);
@@ -833,7 +833,7 @@ void SliceOfEagerCollection(const v8::FunctionCallbackInfo<v8::Value>& args) {
   NatTryCatch(isolate, [&args](Isolate* isolate) {
     char* skCollection = ToSKString(isolate, args[0].As<String>());
     CJArray skranges = args[1].As<External>()->Value();
-    char* skResult = SkipRuntime_Collection__slice(skCollection, skranges);
+    char* skResult = SkipRuntime_Collection__slices(skCollection, skranges);
     args.GetReturnValue().Set(FromUtf8(isolate, skResult));
   });
 }
@@ -1211,7 +1211,7 @@ void GetToJSBinding(const FunctionCallbackInfo<Value>& args) {
               ReduceOfEagerCollection);
   AddFunction(isolate, binding, "SkipRuntime_Collection__nativeReduce",
               NativeReduceOfEagerCollection);
-  AddFunction(isolate, binding, "SkipRuntime_Collection__slice",
+  AddFunction(isolate, binding, "SkipRuntime_Collection__slices",
               SliceOfEagerCollection);
   AddFunction(isolate, binding, "SkipRuntime_Collection__take",
               TakeOfEagerCollection);

@@ -159,7 +159,7 @@ export interface FromWasm {
     reducer: ptr<Internal.String>,
   ): ptr<Internal.String>;
 
-  SkipRuntime_Collection__slice(
+  SkipRuntime_Collection__slices(
     collection: ptr<Internal.String>,
     range: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
   ): ptr<Internal.String>;
@@ -600,12 +600,12 @@ export class WasmFromBinding implements FromBinding {
     );
   }
 
-  SkipRuntime_Collection__slice(
+  SkipRuntime_Collection__slices(
     collection: string,
     range: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
   ): string {
     return this.utils.importString(
-      this.fromWasm.SkipRuntime_Collection__slice(
+      this.fromWasm.SkipRuntime_Collection__slices(
         this.utils.exportString(collection),
         toPtr(range),
       ),

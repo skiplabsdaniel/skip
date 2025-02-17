@@ -148,7 +148,7 @@ export interface FromBinding {
     reducer: string,
   ): string;
 
-  SkipRuntime_Collection__slice(
+  SkipRuntime_Collection__slices(
     collection: string,
     range: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
   ): string;
