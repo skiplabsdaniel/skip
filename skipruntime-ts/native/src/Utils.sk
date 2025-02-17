@@ -29,13 +29,42 @@ class JSONID(json: SKJSON.CJSON) extends SKStore.Key {
   }
 }
 
-class JSONFile(json: SKJSON.CJSON) extends SKStore.File
+class JSONFile(json: SKJSON.CJSON) extends SKStore.Intable {
+  fun +<T: Integral>(x: T): JSONFile {
+    JSONFile(SKJSON.CJInt(this.toInt() + x))
+  }
+
+  fun -<T: Integral>(x: T): JSONFile {
+    JSONFile(SKJSON.CJInt(this.toInt() - x))
+  }
+
+  fun toString(): String {
+    this.json.prettyPrint()
+  }
+
+  fun toInt(): Int {
+    this.json match {
+    | SKJSON.CJInt(x) -> x
+    | _ -> throw SKStore.Error("Non-number JSON")
+    };
+  }
+}
+
+const kJSON_CONVERTERS: ConverterPair<JSONID, JSONFile> = ConverterPair(
+  JSONID::keyType,
+  JSONFile::type,
+);
+
+const kNOTYPE_CONVERTERS: ConverterPair<SKStore.Key, SKStore.File> = ConverterPair(
+  k ~> k,
+  v ~> v,
+);
 
 fun accReducer<V1: SKStore.File, V2: SKStore.File>(
   reducer: Reducer<V1, V2>,
 ): SKStore.EReducer<V1, V2> {
   SKStore.EReducer{
-    type => reducer.getType(),
+    type => reducer.converter(),
     canReset => true,
     init => iter ~> {
       acc = reducer.initial;
@@ -110,29 +139,39 @@ fun base64<T: Show>(toEncode: T): String {
   | None() -> ""
   }
 }
-fun toResourceId(resource: String, params: SKJSON.CJSON): String {
-  `${resource}_${base64(params.prettyPrint())}`
+fun toResourceId(resource: String, params: Parameters): String {
+  `${resource}_${base64(params.toString())}`
 }
 
 fun toSuppliedResourceId(
   supplier: String,
   resource: String,
-  params: SKJSON.CJSON,
+  params: Parameters,
 ): String {
   `${supplier}_${toResourceId(resource, params)}`;
 }
 
-fun collectionForName(name: String): Collection {
-  Collection::forName(name)
+fun collectionForNameJSON(name: String): Collection<JSONID, JSONFile> {
+  Collection::forName(name, kJSON_CONVERTERS)
 }
 
-fun lazyForName(name: String): LazyCollection {
-  LazyCollection::forName(name)
+fun collectionForName(name: String): Collection<SKStore.Key, SKStore.File> {
+  Collection::forName(name, kNOTYPE_CONVERTERS)
 }
 
-fun collectionsByName(collections: Map<String, Collection>): SKJSON.CJObject {
+fun lazyForNameJSON(name: String): LazyCollection<JSONID, JSONFile> {
+  LazyCollection::forName(name, kJSON_CONVERTERS)
+}
+
+fun lazyForName(name: String): LazyCollection<SKStore.Key, SKStore.File> {
+  LazyCollection::forName(name, kNOTYPE_CONVERTERS)
+}
+
+fun collectionsByName(
+  collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+): SKJSON.CJObject {
   fields = mutable Vector[];
-  collections.each((k, c) -> fields.push((k, SKJSON.CJString(c.getId()))));
+  collections.each((k, v) -> fields.push((k, SKJSON.CJString(v.getId()))));
   SKJSON.CJObject(SKJSON.CJFields::create(fields.toArray(), x -> x));
 }
 
