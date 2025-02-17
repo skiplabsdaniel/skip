@@ -82,4 +82,12 @@ base class Notifier {
   fun close(): void;
 }
 
+/** Prevent unused pattern */
+
+class DummyChecker() extends Checker {
+  fun check(_request: String): void {
+    invariant_violation("dummy");
+  }
+}
+
 module end;
