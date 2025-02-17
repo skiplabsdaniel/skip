@@ -209,7 +209,7 @@ class EagerCollectionImpl<K extends Json, V extends Json>
   }
 
   slices(...ranges: [K, K][]): EagerCollection<K, V> {
-    const skcollection = this.refs.binding.SkipRuntime_Collection__slice(
+    const skcollection = this.refs.binding.SkipRuntime_Collection__slices(
       this.collection,
       this.refs.skjson.exportJSON(ranges),
     );
