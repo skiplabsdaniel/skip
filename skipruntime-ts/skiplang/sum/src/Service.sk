@@ -1,0 +1,135 @@
+module SumService;
+
+const kSTRING_INT_TYPES: SkipRuntime.ConverterPair<
+  SKStore.SID,
+  SKStore.IntFile,
+> = SkipRuntime.ConverterPair(SKStore.SID::keyType, SKStore.IntFile::type);
+
+class Indexed(index: Int, value: Int) extends SKStore.File uses Orderable
+
+class AddIndex(
+  private index: Int,
+) extends
+  SkipRuntime.Mapper<SKStore.SID, SKStore.IntFile, SKStore.SID, Indexed>,
+{
+  fun mapEntry(
+    key: SKStore.SID,
+    values: mutable SKStore.NonEmptyIterator<SKStore.IntFile>,
+  ): mutable Iterator<(SKStore.SID, Indexed)> {
+    Array[(key, Indexed(this.index, values.first.value))].iterator();
+  }
+
+  fun converters(): SkipRuntime.ConverterPair<SKStore.SID, Indexed> {
+    SkipRuntime.ConverterPair(SKStore.SID::keyType, Indexed::type)
+  }
+}
+
+class Plus() extends
+  SkipRuntime.Mapper<
+    SKStore.SID,
+    SKStore.IntFile,
+    SKStore.SID,
+    SKStore.IntFile,
+  >,
+{
+  fun mapEntry(
+    key: SKStore.SID,
+    values: mutable SKStore.NonEmptyIterator<SKStore.IntFile>,
+  ): mutable Iterator<(SKStore.SID, SKStore.IntFile)> {
+    val = values.collect(Array).map(v -> v.value).reduce((p, c) ~> p + c, 0);
+    Array[(key, SKStore.IntFile(val))].iterator();
+  }
+
+  fun converters(): SkipRuntime.ConverterPair<SKStore.SID, SKStore.IntFile> {
+    kSTRING_INT_TYPES
+  }
+}
+
+class Minus() extends
+  SkipRuntime.Mapper<SKStore.SID, Indexed, SKStore.SID, SKStore.IntFile>,
+{
+  fun mapEntry(
+    key: SKStore.SID,
+    values: mutable SKStore.NonEmptyIterator<Indexed>,
+  ): mutable Iterator<(SKStore.SID, SKStore.IntFile)> {
+    acc = (p: ?Int, c: Indexed) ~> {
+      p match {
+      | Some(v) -> Some(v - c.value)
+      | _ -> Some(c.value)
+      }
+    };
+    res = values.collect(Array).sorted().reduce(acc, None()) match {
+    | Some(val) -> Array[(key, SKStore.IntFile(val))]
+    | _ -> Array[]
+    };
+    res.iterator();
+  }
+
+  fun converters(): SkipRuntime.ConverterPair<SKStore.SID, SKStore.IntFile> {
+    SkipRuntime.ConverterPair(SKStore.SID::keyType, SKStore.IntFile::type)
+  }
+}
+
+class Add() extends SkipRuntime.Resource {
+  fun instantiate(
+    cs: Map<String, SkipRuntime.Collection<SKStore.Key, SKStore.File>>,
+  ): SkipRuntime.Collection<SKStore.Key, SKStore.File> {
+    cs
+      .get("input1")
+      .merge(Array[cs.get("input2")])
+      .unsafeCast(kSTRING_INT_TYPES)
+      .map(Plus())
+      .unTyped();
+  }
+}
+
+class Sub() extends SkipRuntime.Resource {
+  fun instantiate(
+    cs: Map<String, SkipRuntime.Collection<SKStore.Key, SKStore.File>>,
+  ): SkipRuntime.Collection<SKStore.Key, SKStore.File> {
+    cs["input1"]
+      .unsafeCast(kSTRING_INT_TYPES)
+      .map(AddIndex(0))
+      .merge(Array[cs["input2"].unsafeCast(kSTRING_INT_TYPES).map(AddIndex(1))])
+      .map(Minus())
+      .unTyped();
+  }
+}
+
+class Service extends SkipRuntime.Service {
+  fun buildResource(
+    name: String,
+    _parameters: SkipRuntime.Parameters,
+  ): SkipRuntime.Resource {
+    name match {
+    | "add" -> Add()
+    | "sub" -> Sub()
+    | _ -> invariant_violation("Unknown resource")
+    }
+  }
+
+  fun getExternalService(_name: String): SkipRuntime.ExternalService {
+    invariant_violation("No external services supplied.")
+  }
+
+  fun eachExternalService(
+    _fn: (String, SkipRuntime.ExternalService) ~> void,
+  ): void {
+    void
+  }
+
+  fun createGraph(
+    ics: Map<String, SkipRuntime.Collection<SKStore.Key, SKStore.File>>,
+  ): Map<String, SkipRuntime.Collection<SKStore.Key, SKStore.File>> {
+    ics
+  }
+}
+
+/*
+@export("Skip_SumService_init")
+fun init() {
+
+}
+*/
+
+module end;
