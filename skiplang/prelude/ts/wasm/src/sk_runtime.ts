@@ -37,6 +37,8 @@ class LinksImpl implements Links {
   ) => void;
   SKIP_throw_cruntime!: (code: int) => void;
   SKIP_JS_timeStamp!: () => float;
+  str!: () => float;
+  strlen!: (str: ptr<Internal.Bytes>) => int;
 
   SKIP_delete_external_exception!: (exc: int) => void;
   SKIP_external_exception_message!: (exc: int) => ptr<Internal.String>;
@@ -76,6 +78,7 @@ class LinksImpl implements Links {
   }
 
   complete = (utils: Utils, _exports: object) => {
+    this.strlen = utils.strlen.bind(utils);
     this.SKIP_etry = utils.etry;
     this.SKIP_print_error = (msg: ptr<Internal.String>) => {
       utils.sklog(msg, Stream.ERR, true);
@@ -286,6 +289,7 @@ class Manager implements ToWasmManager {
       links.SKIP_getenv(skName);
     toWasm.SKIP_unsetenv = (skName: ptr<Internal.String>) =>
       links.SKIP_unsetenv(skName);
+    toWasm.strlen = (str: ptr<Internal.Bytes>) => links.strlen(str);
     return links;
   };
 }
@@ -356,6 +360,7 @@ interface ToWasm {
   ) => void;
   SKIP_getenv: (skName: ptr<Internal.String>) => Nullable<ptr<Internal.String>>;
   SKIP_unsetenv: (skName: ptr<Internal.String>) => void;
+  strlen: (str: ptr<Internal.Bytes>) => int;
 }
 
 /* @sk runtime */

@@ -1,7 +1,10 @@
 #include "runtime.h"
 
 #ifdef SKIP64
+#include <string.h>
 #include <unistd.h>
+#else
+unsigned long strlen(const char*);
 #endif
 
 /*****************************************************************************/
@@ -24,6 +27,9 @@ SKIP_gc_type_t* get_gc_type(char* skip_object) {
 /* Primitives that are not used in embedded mode. */
 /*****************************************************************************/
 
+__attribute__((noreturn)) void SKIP_throw_UnreachableMethodCall(char*);
+__attribute__((noreturn)) void SKIP_throw_UnreachableWithExplanation(char*);
+
 void SKIP_Regex_initialize() {}
 
 void SKIP_print_stack_trace() {
@@ -32,11 +38,12 @@ void SKIP_print_stack_trace() {
 void SKIP_print_last_exception_stack_trace_and_exit(void*) {
   todo("Not implemented", "SKIP_print_last_exception_stack_trace_and_exit");
 }
-void SKIP_unreachableMethodCall(void* msg, void*) {
-  todo("Unreachable method call", msg);
+
+void SKIP_unreachableMethodCall(const char* method, void*) {
+  SKIP_throw_UnreachableMethodCall(sk_string_create(method, strlen(method)));
 }
-void SKIP_unreachableWithExplanation(void* explanation) {
-  todo("Unreachable", explanation);
+void SKIP_unreachableWithExplanation(const char* why) {
+  SKIP_throw_UnreachableWithExplanation(sk_string_create(why, strlen(why)));
 }
 
 void SKIP_Obstack_vectorUnsafeSet(char** arr, char* x) {
