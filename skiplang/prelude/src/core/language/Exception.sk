@@ -143,7 +143,21 @@ class CRuntimeError(code: Int32) extends Exception {
   }
 }
 
+class UnreachableMethodCall(method: String) extends Exception
+class UnreachableWithExplanation(why: String) extends Exception
+
 @cpp_export("SKIP_throw_cruntime")
 fun throwCRuntime(code: Int32): void {
   throw CRuntimeError(code);
 }
+
+@export("SKIP_throw_UnreachableMethodCall")
+fun throwUnreachableMethodCall(method: String): void {
+  throw UnreachableMethodCall(method)
+}
+
+@export("SKIP_throw_UnreachableWithExplanation")
+fun throwUnreachableWithExplanation(method: String): void {
+  throw UnreachableWithExplanation(method)
+}
+

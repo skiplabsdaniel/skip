@@ -25,6 +25,9 @@ export type Void = T<typeof _Void>;
 declare const _Byte: unique symbol;
 export type Byte = T<typeof _Byte>;
 
+declare const _Bytes: unique symbol;
+export type Bytes = T<typeof _Bytes>;
+
 declare const _Uint32: unique symbol;
 export type UInt32 = T<typeof _Uint32>;
 
