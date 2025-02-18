@@ -270,6 +270,15 @@ export class Utils {
     this.log(str, kind, newLine);
   };
 
+  strlen(str: ptr<Internal.Bytes>) {
+    const view = new Uint8Array(this.exports.memory.buffer);
+    let len = 0;
+    while (view.at(str + len)) {
+      len++;
+    }
+    return len;
+  }
+
   clearMainEnvironment = (new_args: string[] = [], new_stdin: string = "") => {
     this.args = [this.mainFn ?? "main"].concat(new_args);
     this.exception = undefined;
