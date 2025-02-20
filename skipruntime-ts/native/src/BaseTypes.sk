@@ -1,6 +1,18 @@
 module SkipRuntime;
 
-class ConverterPair<K: SKStore.Key, V: SKStore.File>(
+base class IError uses Show
+
+base class KeyConverter<K: frozen> {
+  fun fromKey(SKStore.Key): K;
+  fun toKey(K): SKStore.Key;
+}
+
+base class ValueConverter<V: frozen> {
+  fun fromFile(SKStore.File): V;
+  fun toFile(V): SKStore.File;
+}
+
+class ConverterPair<K: frozen, V: frozen>(
   key: SKStore.Key ~> K,
   value: SKStore.File ~> V,
 )
@@ -62,18 +74,16 @@ base class Inputs {
   fun each(Input<SKStore.Key, SKStore.File> -> void): void;
 }
 
-base class Service(initialData: Inputs, externalServices: Map<String, ExternalService>) {
+base class Service(
+  initialData: Inputs,
+  externalServices: Map<String, ExternalService>,
+) {
   fun buildResource(name: String, parameters: Parameters): Resource;
 
   fun createGraph(
     inputCollections: Map<String, Collection<SKStore.Key, SKStore.File>>,
   ): Map<String, Collection<SKStore.Key, SKStore.File>>;
 }
-
-value class Values(
-  values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
-  watermark: String,
-)
 
 base class Request {
   children =
@@ -84,11 +94,11 @@ base class Checker extends Request {
   fun check(request: String): void;
 }
 
-base class Notifier {
+base class Notifier<K: frozen, V: frozen> {
   fun subscribed(): void;
 
   fun notify(
-    values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+    values: Array<(K, Array<V>)>,
     watermark: String,
     updates: Bool,
   ): void;
