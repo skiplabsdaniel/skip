@@ -55,10 +55,10 @@ const kJSON_CONVERTERS: ConverterPair<JSONID, JSONFile> = ConverterPair(
   JSONFile::type,
 );
 
-const kNOTYPE_CONVERTERS: ConverterPair<SKStore.Key, SKStore.File> = ConverterPair(
-  k ~> k,
-  v ~> v,
-);
+const kNOTYPE_CONVERTERS: ConverterPair<
+  SKStore.Key,
+  SKStore.File,
+> = ConverterPair(k ~> k, v ~> v);
 
 fun accReducer<V1: SKStore.File, V2: SKStore.File>(
   reducer: Reducer<V1, V2>,

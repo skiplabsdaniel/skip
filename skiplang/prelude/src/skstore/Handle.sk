@@ -330,7 +330,6 @@ fun maxReducer(): EReducer<IntFile, IntFile> {
   maxReducer_(IntFile::type, v ~> IntFile(v))
 }
 
-
 /*****************************************************************************/
 /* The preferred way of accessing the file-system. */
 /*****************************************************************************/

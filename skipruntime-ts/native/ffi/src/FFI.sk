@@ -4,6 +4,23 @@ type JSONMapper = Mapper<JSONID, JSONFile, JSONID, JSONFile>;
 
 const kCREATE_INTJSON: Int ~> JSONFile = v ~> JSONFile(SKJSON.CJInt(v));
 
+value class Values(
+  values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+  watermark: String,
+)
+
+fun jsonFromFile(value: SKStore.File): SKJSON.CJSON {
+  JSONFile::type(value).json
+}
+
+fun jsonFromKey(key: SKStore.Key): SKJSON.CJSON {
+  JSONID::keyType(key).json
+}
+
+fun jsonFromError(error: IError): SKJSON.CJSON {
+  (error as JSONError _).error
+}
+
 @cpp_extern("SkipRuntime_getErrorHdl")
 @debug
 native fun getErrorHdl(exn: .Exception): Float;
@@ -177,7 +194,7 @@ fun updateOfCollectionWriter(
     | SKJSON.CJArray(vs) ->
       vs.map(v -> {
         e = SKJSON.expectArray(v);
-        (e[0], SKJSON.expectArray(e[1]))
+        (JSONID(e[0]), SKJSON.expectArray(e[1]).map(v -> JSONFile(v)))
       })
     },
     isInit != 0,
@@ -199,7 +216,7 @@ fun loadingOfCollectionWriter(collection: String): Float {
 @export("SkipRuntime_CollectionWriter__error")
 fun errorOfCollectionWriter(collection: String, error: SKJSON.CJSON): Float {
   writer = CollectionWriter(SKStore.DirName::create(collection));
-  writer.error(error) match {
+  writer.error(JSONError(error)) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -258,6 +275,12 @@ fun createResourceBuilder(resourceBuilder: UInt32): ResourceBuilder {
 class JSONParams(json: SKJSON.CJSON) extends Parameters {
   fun toString(): String {
     this.json.prettyPrint()
+  }
+}
+
+class JSONError(error: SKJSON.CJSON) extends IError {
+  fun toString(): String {
+    this.error.prettyPrint()
   }
 }
 
@@ -450,7 +473,9 @@ fun reduceOfCollection(collection: String, reducer: JSONReducer): String {
 
 @export("SkipRuntime_Collection__nativeReduce")
 fun nativeReduceOfCollection(collection: String, reducer: String): String {
-  collectionForNameJSON(collection).nativeReduce(reducer, kCREATE_INTJSON).getId()
+  collectionForNameJSON(collection)
+    .nativeReduce(reducer, kCREATE_INTJSON)
+    .getId()
 }
 
 @export("SkipRuntime_Collection__slices")
@@ -525,24 +550,30 @@ native fun closeOfNotifier(notifier: UInt32): void;
 native fun deleteNotifier(notifier: UInt32): void;
 
 @export("SkipRuntime_createNotifier")
-fun createNotifier(notifier: UInt32): Notifier {
+fun createNotifier(notifier: UInt32): ExternNotifier {
   ExternNotifier(SKStore.ExternalPointer::create(notifier, deleteNotifier))
 }
 
-class ExternNotifier(eptr: SKStore.ExternalPointer) extends Notifier {
+class ExternNotifier(
+  eptr: SKStore.ExternalPointer,
+) extends Notifier<SKStore.Key, SKStore.File> {
   fun subscribed(): void {
     subscribedOfNotifier(this.eptr.value)
   }
 
   fun notify(
-    values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+    values: Array<(SKStore.Key, Array<SKStore.File>)>,
     watermark: String,
     updates: Bool,
   ): void {
     notifyOfNotifier(
       this.eptr.value,
       SKJSON.CJArray(
-        values.map(v -> SKJSON.CJArray(Array[v.i0, SKJSON.CJArray(v.i1)])),
+        values.map(v ->
+          SKJSON.CJArray(
+            Array[jsonFromKey(v.i0), SKJSON.CJArray(v.i1.map(jsonFromFile))],
+          )
+        ),
       ),
       watermark,
       Int32::truncate(if (updates) 1 else 0),
@@ -600,7 +631,7 @@ class JSONReducer(
   }
 }
 
-/************  Runtime ****************/
+/************  Service Instance ****************/
 
 @export("SkipRuntime_Runtime__createResource")
 fun createResourceOfRuntime(
@@ -608,9 +639,11 @@ fun createResourceOfRuntime(
   resource: String,
   params: SKJSON.CJSON,
 ): Float {
-  SKStore.runWithResult(context ~> {
-    createReactiveResource(context, identifier, resource, JSONParams(params))
-  }) match {
+  ServiceInstance.instantiateResource(
+    identifier,
+    resource,
+    JSONParams(params),
+  ) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -618,36 +651,24 @@ fun createResourceOfRuntime(
 
 @export("SkipRuntime_Runtime__getAll")
 fun getAllOfRuntime(
-  resource: String,
+  resourceName: String,
   params: SKJSON.CJSON,
   optRequest: ?Request,
 ): SKJSON.CJSON {
-  (getContext() match {
-  | Some(context) ->
-    try {
-      Success(getAll(context, resource, params, optRequest))
-    } catch {
-    | ex -> Failure(ex)
-    }
-  | _ ->
-    SKStore.runWithResult(context ~> {
-      res = getAll(context, resource, params, optRequest);
-      /* Ensure all resources closed at right time */
-      updateContext(context);
-      res
-    })
-  }) match {
+  ServiceInstance.getAll(resourceName, JSONParams(params), optRequest) match {
   | Success(result) ->
     fields = mutable Vector<(String, SKJSON.CJSON)>[
       (
         "payload",
         SKJSON.CJArray(
           result.values.values.map(v ->
-            SKJSON.CJArray(Array[v.i0, SKJSON.CJArray(v.i1)])
+            SKJSON.CJArray(
+              Array[jsonFromKey(v.i0), SKJSON.CJArray(v.i1.map(jsonFromFile))],
+            )
           ),
         ),
       ),
-      ("errors", SKJSON.CJArray(result.errors)),
+      ("errors", SKJSON.CJArray(result.errors.map(jsonFromError))),
     ];
     result.request.each(request ->
       fields.push(("request", SKJSON.CJString(request)))
@@ -661,30 +682,21 @@ fun getAllOfRuntime(
 
 @export("SkipRuntime_Runtime__getForKey")
 fun getForKeyOfRuntime(
-  resource: String,
+  resourceName: String,
   params: SKJSON.CJSON,
   key: SKJSON.CJSON,
   optRequest: ?Request,
 ): SKJSON.CJSON {
-  (getContext() match {
-  | Some(context) ->
-    try {
-      Success(getForKey(context, resource, params, key, optRequest))
-    } catch {
-    | ex -> Failure(ex)
-    }
-  | _ ->
-    SKStore.runWithResult(context ~> {
-      res = getForKey(context, resource, params, key, optRequest);
-      /* Ensure all resources closed at right time */
-      updateContext(context);
-      res
-    })
-  }) match {
+  ServiceInstance.getArray(
+    resourceName,
+    JSONParams(params),
+    JSONID(key),
+    optRequest,
+  ) match {
   | Success(result) ->
     fields = mutable Vector<(String, SKJSON.CJSON)>[
-      ("payload", SKJSON.CJArray(result.values)),
-      ("errors", SKJSON.CJArray(result.errors)),
+      ("payload", SKJSON.CJArray(result.values.map(jsonFromFile))),
+      ("errors", SKJSON.CJArray(result.errors.map(jsonFromError))),
     ];
     result.request.each(request ->
       fields.push(("request", SKJSON.CJString(request)))
@@ -698,9 +710,7 @@ fun getForKeyOfRuntime(
 
 @export("SkipRuntime_Runtime__closeResource")
 fun closeResourceOfRuntime(identifier: String): Float {
-  SKStore.runWithResult(context ~> {
-    closeReactiveResource(context, identifier)
-  }) match {
+  ServiceInstance.closeResource(identifier) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -709,12 +719,10 @@ fun closeResourceOfRuntime(identifier: String): Float {
 @export("SkipRuntime_Runtime__subscribe")
 fun subscribeOfRuntime(
   reactiveId: String,
-  notifier: Notifier,
+  notifier: ExternNotifier,
   watermark: ?String,
 ): Int {
-  SKStore.runWithResult(context ~> {
-    subscribe(context, reactiveId, notifier, watermark)
-  }) match {
+  ServiceInstance.subscribe(reactiveId, notifier, watermark) match {
   | Success(id) -> id
   | Failure(err) -> -getErrorHdl(err).toInt()
   };
@@ -722,9 +730,7 @@ fun subscribeOfRuntime(
 
 @export("SkipRuntime_Runtime__unsubscribe")
 fun unsubscribeOfRuntime(session: Int): Float {
-  SKStore.runWithResult(context ~> {
-    unsubscribe(context, session)
-  }) match {
+  ServiceInstance.unsubscribe(session) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -732,19 +738,16 @@ fun unsubscribeOfRuntime(session: Int): Float {
 
 @export("SkipRuntime_Runtime__update")
 fun updateOfRuntime(input: String, values: SKJSON.CJArray): Float {
-  SKStore.runWithResult(context ~> {
-    update(
-      context,
-      input,
-      values match {
-      | SKJSON.CJArray(vs) ->
-        vs.map(v -> {
-          e = SKJSON.expectArray(v);
-          (e[0], SKJSON.expectArray(e[1]))
-        })
-      },
-    )
-  }) match {
+  ServiceInstance.update(
+    input,
+    values match {
+    | SKJSON.CJArray(vs) ->
+      vs.map(v -> {
+        e = SKJSON.expectArray(v);
+        (JSONID(e[0]), SKJSON.expectArray(e[1]).map(v ~> JSONFile(v)))
+      })
+    },
+  ) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -793,7 +796,7 @@ fun initSkipRuntimeService(service: Service): Float {
 
 @export("SkipRuntime_closeService")
 fun closeSkipRuntimeService(): SKJSON.CJSON {
-  closeService() match {
+  ServiceInstance.close() match {
   | Success(handles) -> SKJSON.CJArray(handles.map(h -> SKJSON.CJFloat(h)))
   | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
   };
@@ -828,117 +831,6 @@ fun getExceptionType(exn: .Exception): String {
   | ExternalException(type, _, _) -> type
   | _ -> exn.getClassName()
   }
-}
-
-value class GetResult<T>(
-  request: ?String,
-  values: T,
-  errors: Array<SKJSON.CJSON>,
-) {
-  fun loading(): Bool {
-    this.request.isSome()
-  }
-}
-
-fun getStatusesResult<T>(
-  statuses: RequestStatuses,
-  request: String,
-  values: T,
-): GetResult<T> {
-  errors = mutable Vector[];
-  loading: Bool = false;
-  for (resourceStatus in statuses.statuses) {
-    resourceStatus.status match {
-    | Error(error, _, _) -> errors.push(error)
-    | Loading _ -> !loading = true
-    | Ok _ -> void
-    }
-  };
-  GetResult(if (loading) Some(request) else None(), values, errors.toArray())
-}
-
-fun getResourceInfoResult<T>(
-  context: mutable SKStore.Context,
-  resource: ResourceInfo,
-  request: String,
-  values: T,
-): GetResult<T> {
-  SKStore.EHandle(
-    SKStore.SID::keyType,
-    RequestStatuses::type,
-    resource.statusRef.sub("all"),
-  ).maybeGet(context, SKStore.SID(request)) match {
-  | Some(statuses) -> getStatusesResult(statuses, request, values)
-  | _ -> GetResult(None(), values, Array[])
-  }
-}
-
-fun request<T>(
-  context: mutable SKStore.Context,
-  resourceName: String,
-  params: SKJSON.CJSON,
-  optRequest: ?Request,
-  getValues: (mutable SKStore.Context, ResourceInfo) ~> T,
-): GetResult<T> {
-  (request, resource) = optRequest match {
-  | Some(Identifier(req)) -> (req, getReactiveResource(context, req))
-  | _ ->
-    resourceInstanceId = Ksuid::create().toString();
-    resource = createReactiveResource(
-      context,
-      resourceInstanceId,
-      resourceName,
-      JSONParams(params),
-    );
-    optChecker = optRequest match {
-    | Some(checker @ Checker _) -> Some(checker)
-    | _ -> None()
-    };
-    resource.createRequest(context, resourceInstanceId, optChecker);
-    (resourceInstanceId, resource)
-  };
-  values = getValues(context, resource);
-  // return result type
-  res = getResourceInfoResult(context, resource, request, values);
-  if (!res.loading()) {
-    optRequest match {
-    | Some(Identifier _)
-    | None() ->
-      resource.clearRequest(context, request);
-      closeReactiveResource(context, request, false)
-    | Some(Checker _) -> void
-    };
-  };
-  res;
-}
-
-fun getAll(
-  context: mutable SKStore.Context,
-  resourceName: String,
-  params: SKJSON.CJSON,
-  optRequest: ?Request,
-): GetResult<Values> {
-  request(context, resourceName, params, optRequest, (context, resource) ~>
-    Values(
-      resource.collection.getAll(context),
-      `${resource.session}/${context.tick}`,
-    )
-  )
-}
-
-fun getForKey(
-  context: mutable SKStore.Context,
-  resourceName: String,
-  params: SKJSON.CJSON,
-  key: SKJSON.CJSON,
-  optRequest: ?Request,
-): GetResult<Array<SKJSON.CJSON>> {
-  request(context, resourceName, params, optRequest, (context, resource) ~> {
-    pushContext(context);
-    values = resource.collection.getArray(JSONID(key));
-    popContext();
-    values.map(JSONFile::type).map(v -> v.json)
-  })
 }
 
 module end;
