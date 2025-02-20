@@ -102,7 +102,7 @@ class ResourceDef(
 
 class ResourceStatus(
   loadable: SKStore.DirName,
-  status: Status,
+  status: Status<IError>,
 ) extends SKStore.File {}
 
 class ServiceFile(
@@ -110,34 +110,39 @@ class ServiceFile(
   inputs: Map<String, Collection<SKStore.Key, SKStore.File>>,
 ) extends SKStore.File
 
-base class Status(created: Int, modified: Int) uses Show {
+base class Status<E: IError>(created: Int, modified: Int) uses Show {
   children =
   | Loading()
-  | Error(error: SKJSON.CJSON)
+  | Error(error: E)
   | Ok()
 
-  static fun create(): Status {
+  static fun create<E: IError>(): Status<E> {
     time = Time.time_ms();
-    Loading(time, time)
+    Loading<E>(time, time)
   }
 
-  fun ok(): Status {
+  fun ok(): Status<E> {
     Ok(this.created, Time.time_ms())
   }
 
-  fun err(error: SKJSON.CJSON): Status {
+  fun err(error: E): Status<E> {
     Error(error, this.created, Time.time_ms())
   }
+
+  fun unTyped(): Status<IError>
+  | Loading(created, modified) -> Loading<IError>(created, modified)
+  | Error(e, created, modified) -> Error<IError>(e, created, modified)
+  | Ok(created, modifie) -> Ok<IError>(created, modifie)
 
   fun toString(): String
   | Loading(created, modified) ->
     `Loading{created: ${created}, modified: ${modified}}`
   | Error(error, created, modified) ->
-    `Error{error: ${error.toJSON()}, created: ${created}, modified: ${modified}}`
+    `Error{error: ${error}, created: ${created}, modified: ${modified}}`
   | Ok(created, modified) -> `Ok{created: ${created}, modified: ${modified}}`
 }
 
-class StatusFile(status: Status) extends SKStore.File
+class StatusFile(status: Status<IError>) extends SKStore.File
 
 class RequestFile(
   timestamp: Int,
@@ -160,7 +165,7 @@ class RequestStatuses(statuses: Array<ResourceStatus>) extends SKStore.File {
     }
   }
 
-  fun getErrors(): Array<SKJSON.CJSON> {
+  fun getErrors(): Array<IError> {
     errors = mutable Vector[];
     for (resourceStatus in this.statuses) {
       resourceStatus.status match {
@@ -481,10 +486,6 @@ fun closeService_(context: mutable SKStore.Context): Array<Float> {
   };
   context.update();
   handles;
-}
-
-fun closeService(): Result<Array<Float>, .Exception> {
-  SKStore.runWithResult(closeService_)
 }
 
 class CheckRequest(
@@ -863,17 +864,15 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
     }
   }
 
-  fun getAll(
-    context: mutable SKStore.Context,
-  ): Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)> {
-    values = mutable Vector<(SKJSON.CJSON, Array<SKJSON.CJSON>)>[];
+  fun getAll(context: mutable SKStore.Context): Array<(K, Array<V>)> {
+    values = mutable Vector<(K, Array<V>)>[];
     dir = context.unsafeGetEagerDir(this.hdl.getDirName());
     for (kv in dir.unsafeGetFileIter()) {
       (key, files) = kv;
       values.push(
         (
-          JSONID::keyType(key).json,
-          files.collect(Array).map(x -> JSONFile::type(x).json),
+          this.converters.key(key),
+          files.collect(Array).map(this.converters.value),
         ),
       );
     };
@@ -891,11 +890,7 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
     identifier: String,
     session: Int,
     from: SKStore.Tick,
-    notify: (
-      Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
-      SKStore.Tick,
-      Bool,
-    ) ~> void,
+    notify: (Array<(K, Array<V>)>, SKStore.Tick, Bool) ~> void,
     close: () ~> void,
   ): void {
     context.subscribe(
@@ -906,10 +901,7 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
         (_dirName, values, tick, update) ~> {
           notify(
             values.map(v ->
-              (
-                JSONID::keyType(v.i0).json,
-                v.i1.map(x -> JSONFile::type(x).json),
-              )
+              (this.converters.key(v.i0), v.i1.map(this.converters.value))
             ),
             tick,
             update,
@@ -1037,7 +1029,7 @@ class LazyCollection<K: SKStore.Key, V: SKStore.File>(
 class CollectionWriter(dirName: SKStore.DirName) {
   //
   fun update(
-    values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+    values: Array<(SKStore.Key, Array<SKStore.File>)>,
     isInit: Bool,
   ): Result<void, .Exception> {
     getContext() match {
@@ -1058,7 +1050,7 @@ class CollectionWriter(dirName: SKStore.DirName) {
     }
   }
 
-  fun error(error: SKJSON.CJSON): Result<void, .Exception> {
+  fun error(error: IError): Result<void, .Exception> {
     getContext() match {
     | Some(context) ->
       try {
@@ -1092,7 +1084,7 @@ class CollectionWriter(dirName: SKStore.DirName) {
     }
   }
 
-  fun status(context: mutable SKStore.Context, status: Status): void {
+  fun status(context: mutable SKStore.Context, status: Status<IError>): void {
     context.maybeGetEagerDir(this.dirName) match {
     | Some(dir) ->
       dirname = this.sessionId(context, dir) match {
@@ -1104,14 +1096,18 @@ class CollectionWriter(dirName: SKStore.DirName) {
         StatusFile::type,
         dirname,
       );
-      shdl.writeArray(context, this.dirName, Array[StatusFile(status)])
+      shdl.writeArray(
+        context,
+        this.dirName,
+        Array[StatusFile(status.unTyped())],
+      )
     | _ -> void
     };
   }
 
   fun updateStatus(
     context: mutable SKStore.Context,
-    update: Status ~> Status,
+    update: Status<IError> ~> Status<IError>,
   ): void {
     context.maybeGetEagerDir(this.dirName) match {
     | Some(dir) ->
@@ -1125,14 +1121,18 @@ class CollectionWriter(dirName: SKStore.DirName) {
         dirname,
       );
       status = update(shdl.get(context, this.dirName).status);
-      shdl.writeArray(context, this.dirName, Array[StatusFile(status)])
+      shdl.writeArray(
+        context,
+        this.dirName,
+        Array[StatusFile(status.unTyped())],
+      )
     | _ -> void
     };
   }
 
   private fun update_(
     context: mutable SKStore.Context,
-    values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+    values: Array<(SKStore.Key, Array<SKStore.File>)>,
     isInit: Bool,
   ): void {
     dir = context.maybeGetEagerDir(this.dirName) match {
@@ -1140,16 +1140,18 @@ class CollectionWriter(dirName: SKStore.DirName) {
     | _ -> return void
     };
     keys = if (isInit) {
-      dir.keys().map(JSONID::keyType)
+      dir.keys()
     } else {
-      SortedSet<JSONID>[]
+      SortedSet<SKStore.Key>[]
     };
-    chdl = SKStore.EHandle(JSONID::keyType, JSONFile::type, this.dirName);
+    chdl = SKStore.EHandle(
+      kNOTYPE_CONVERTERS.key,
+      kNOTYPE_CONVERTERS.value,
+      this.dirName,
+    );
     values.each(e -> {
-      key = JSONID(e.i0);
-      fvalues = e.i1.map(v -> JSONFile(v));
-      chdl.writeArray(context, key, fvalues);
-      !keys = keys.remove(key);
+      chdl.writeArray(context, e.i0, e.i1);
+      !keys = keys.remove(e.i0);
     });
     keys.each(key -> chdl.writeArray(context, key, Array[]));
   }
@@ -1231,7 +1233,7 @@ fun closeReactiveResource(
 fun subscribe(
   context: mutable SKStore.Context,
   identifier: String,
-  notifier: Notifier,
+  notifier: Notifier<SKStore.Key, SKStore.File>,
   optWatermark: ?String,
 ): Int {
   garbageHdl = SKStore.EHandle(
@@ -1305,38 +1307,17 @@ fun unsubscribe(
 
 // WRITES
 
-fun put(
-  context: mutable SKStore.Context,
-  collection: String,
-  key: SKJSON.CJSON,
-  value: Array<SKJSON.CJSON>,
-): void {
-  chdl = SKStore.EHandle(
-    JSONID::keyType,
-    JSONFile::type,
-    SKStore.DirName::create(`/${collection}/`),
-  );
-  chdl.writeArray(context, JSONID(key), value.map(v -> JSONFile(v)));
-  updateContext(context);
-}
-
 fun update(
   context: mutable SKStore.Context,
   collection: String,
-  values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+  values: Array<(SKStore.Key, Array<SKStore.File>)>,
 ): void {
   chdl = SKStore.EHandle(
-    JSONID::keyType,
-    JSONFile::type,
+    kNOTYPE_CONVERTERS.key,
+    kNOTYPE_CONVERTERS.value,
     SKStore.DirName::create(`/${collection}/`),
   );
-  values.each(keyValue ->
-    chdl.writeArray(
-      context,
-      JSONID(keyValue.i0),
-      keyValue.i1.map(v -> JSONFile(v)),
-    )
-  );
+  values.each(keyValue -> chdl.writeArray(context, keyValue.i0, keyValue.i1));
   updateContext(context);
 }
 

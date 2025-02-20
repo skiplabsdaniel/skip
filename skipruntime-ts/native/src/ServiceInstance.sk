@@ -1,0 +1,211 @@
+module alias SR = SkipRuntime;
+
+module ServiceInstance;
+
+value class GetResult<T: frozen, E: frozen>(
+  request: ?String,
+  values: T,
+  errors: Array<E>,
+) {
+  fun loading(): Bool {
+    this.request.isSome()
+  }
+}
+
+value class Values(
+  values: Array<(SKStore.Key, Array<SKStore.File>)>,
+  watermark: String,
+)
+
+fun getStatusesResult<T: frozen>(
+  statuses: SR.RequestStatuses,
+  request: String,
+  values: T,
+): GetResult<T, SR.IError> {
+  errors = mutable Vector[];
+  loading: Bool = false;
+  for (resourceStatus in statuses.statuses) {
+    resourceStatus.status match {
+    | SR.Error(error, _, _) -> errors.push(error)
+    | SR.Loading _ -> !loading = true
+    | SR.Ok _ -> void
+    }
+  };
+  GetResult(if (loading) Some(request) else None(), values, errors.toArray())
+}
+
+fun getResourceInfoResult<T: frozen>(
+  context: mutable SKStore.Context,
+  resource: SR.ResourceInfo,
+  request: String,
+  values: T,
+): GetResult<T, SR.IError> {
+  SKStore.EHandle(
+    SKStore.SID::keyType,
+    SR.RequestStatuses::type,
+    resource.statusRef.sub("all"),
+  ).maybeGet(context, SKStore.SID(request)) match {
+  | Some(statuses) -> getStatusesResult(statuses, request, values)
+  | _ -> GetResult(None(), values, Array[])
+  }
+}
+
+fun getAll_(
+  context: mutable SKStore.Context,
+  resourceName: String,
+  params: SR.Parameters,
+  optRequest: ?SR.Request,
+): GetResult<Values, SR.IError> {
+  request(context, resourceName, params, optRequest, (context, resource) ~>
+    Values(
+      resource.collection.getAll(context),
+      `${resource.session}/${context.tick}`,
+    )
+  )
+}
+
+fun getAll(
+  resourceName: String,
+  params: SR.Parameters,
+  optRequest: ?SR.Request,
+): Result<GetResult<Values, SR.IError>, .Exception> {
+  (SR.getContext() match {
+  | Some(context) ->
+    try {
+      Success(getAll_(context, resourceName, params, optRequest))
+    } catch {
+    | ex -> Failure(ex)
+    }
+  | _ ->
+    SKStore.runWithResult(context ~> {
+      res = getAll_(context, resourceName, params, optRequest);
+      /* Ensure all resources closed at right time */
+      SR.updateContext(context);
+      res
+    })
+  })
+}
+
+fun getArray_(
+  context: mutable SKStore.Context,
+  resourceName: String,
+  params: SR.Parameters,
+  key: SKStore.Key,
+  optRequest: ?SR.Request,
+): GetResult<Array<SKStore.File>, SR.IError> {
+  request(context, resourceName, params, optRequest, (context, resource) ~> {
+    SR.pushContext(context);
+    values = resource.collection.getArray(key);
+    SR.popContext();
+    values
+  })
+}
+
+fun getArray(
+  resourceName: String,
+  params: SR.Parameters,
+  key: SKStore.Key,
+  optRequest: ?SR.Request,
+): Result<GetResult<Array<SKStore.File>, SR.IError>, .Exception> {
+  (SR.getContext() match {
+  | Some(context) ->
+    try {
+      Success(getArray_(context, resourceName, params, key, optRequest))
+    } catch {
+    | ex -> Failure(ex)
+    }
+  | _ ->
+    SKStore.runWithResult(context ~> {
+      res = getArray_(context, resourceName, params, key, optRequest);
+      /* Ensure all resources closed at right time */
+      SR.updateContext(context);
+      res
+    })
+  })
+}
+
+fun request<T: frozen>(
+  context: mutable SKStore.Context,
+  resourceName: String,
+  params: SR.Parameters,
+  optRequest: ?SR.Request,
+  getValues: (mutable SKStore.Context, SR.ResourceInfo) ~> T,
+): GetResult<T, SR.IError> {
+  (request, resource) = optRequest match {
+  | Some(SR.Identifier(req)) -> (req, SR.getReactiveResource(context, req))
+  | _ ->
+    resourceInstanceId = Ksuid::create().toString();
+    resource = SR.createReactiveResource(
+      context,
+      resourceInstanceId,
+      resourceName,
+      params,
+    );
+    optChecker = optRequest match {
+    | Some(checker @ SR.Checker _) -> Some(checker)
+    | _ -> None()
+    };
+    resource.createRequest(context, resourceInstanceId, optChecker);
+    (resourceInstanceId, resource)
+  };
+  values = getValues(context, resource);
+  // return result type
+  res = getResourceInfoResult(context, resource, request, values);
+  if (!res.loading()) {
+    optRequest match {
+    | Some(SR.Identifier _)
+    | None() ->
+      resource.clearRequest(context, request);
+      SR.closeReactiveResource(context, request, false)
+    | Some(SR.Checker _) -> void
+    };
+  };
+  res;
+}
+
+fun subscribe(
+  reactiveId: String,
+  notifier: SR.Notifier<SKStore.Key, SKStore.File>,
+  watermark: ?String,
+): Result<Int, .Exception> {
+  SKStore.runWithResult(context ~> {
+    SR.subscribe(context, reactiveId, notifier, watermark)
+  })
+}
+
+fun unsubscribe(session: Int): Result<void, .Exception> {
+  SKStore.runWithResult(context ~> {
+    SR.unsubscribe(context, session)
+  })
+}
+
+fun instantiateResource(
+  identifier: String,
+  resource: String,
+  params: SR.Parameters,
+): Result<void, .Exception> {
+  SKStore.runWithResult(context ~> {
+    _ = SR.createReactiveResource(context, identifier, resource, params)
+  })
+}
+
+fun closeResource(identifier: String): Result<void, .Exception> {
+  SKStore.runWithResult(context ~> {
+    SR.closeReactiveResource(context, identifier)
+  })
+}
+
+fun update(
+  input: String,
+  values: Array<(SKStore.Key, Array<SKStore.File>)>,
+): Result<void, .Exception> {
+  SKStore.runWithResult(context ~> {
+    SR.update(context, input, values)
+  })
+}
+
+fun close(): Result<Array<Float>, .Exception> {
+  SKStore.runWithResult(SR.closeService_)
+}
+
+module end;

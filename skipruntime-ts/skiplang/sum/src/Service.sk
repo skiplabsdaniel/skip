@@ -124,12 +124,12 @@ class Service extends SkipRuntime.Service {
     ics
   }
 }
-
 /*
 @export("Skip_SumService_init")
 fun init() {
 
 }
 */
+
 
 module end;
