@@ -160,4 +160,3 @@ fun throwUnreachableMethodCall(method: String): void {
 fun throwUnreachableWithExplanation(method: String): void {
   throw UnreachableWithExplanation(method)
 }
-
