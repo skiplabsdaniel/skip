@@ -27,9 +27,17 @@ fun asNumber(json: CJSON): Float {
   json match {
   | CJInt(v) -> v.toFloat()
   | CJFloat(v) -> v
+  | _ -> invariant_violation("Must be an Number value.")
+  }
+}
+
+fun asInt(json: CJSON): Int {
+  json match {
+  | CJInt(v) -> v
   | _ -> invariant_violation("Must be an Int value.")
   }
 }
+
 @export("SKIP_SKJSON_asBoolean")
 fun asBoolean(json: CJSON): Int32 {
   json match {
