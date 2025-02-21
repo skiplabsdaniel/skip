@@ -209,125 +209,142 @@ class EReducer<V2, V3: File>{
 /* A few predefined Reducers. */
 /*****************************************************************************/
 
-fun countReducer_<V: Intable>(
-  conv: File ~> V,
-  create: Int ~> V,
+fun countReducer_<V: File>(
+  value: File ~> Int,
+  create: Int ~> File,
+  type: File ~> V,
 ): EReducer<_, V> {
   EReducer{
-    type => conv,
+    type,
     canReset => false,
     init => iter ~> {
       count = 0;
       for (_ in iter) {
         !count = count + 1;
       };
-      Array[create(count)]
+      Array[type(create(count))]
     },
     update => (state, old, new) ~> {
-      count = state[0].toInt();
+      count = value(state[0]);
       for (_ in old) {
         !count = count - 1;
       };
       for (_ in new) {
         !count = count + 1;
       };
-      Some(Array[create(count)])
+      Some(Array[type(create(count))])
     },
   };
 }
 
 fun countReducer(): EReducer<_, IntFile> {
-  countReducer_(IntFile::type, v ~> IntFile(v))
+  countReducer_(v ~> IntFile::type(v).value, v ~> IntFile(v), IntFile::type)
 }
 
-fun sumReducer_<V: Intable>(conv: File ~> V, create: Int ~> V): EReducer<V, V> {
+fun sumReducer_<V: File>(
+  value: File ~> Int,
+  create: Int ~> File,
+  type: File ~> V,
+): EReducer<V, V> {
   EReducer{
-    type => conv,
+    type,
     canReset => false,
     init => iter ~> {
       sum = 0;
       for (x in iter) {
-        !sum = sum + x.toInt();
+        !sum = sum + value(x);
       };
-      Array[create(sum)]
+      Array[type(create(sum))]
     },
     update => (state, old, new) ~> {
-      sum = state[0].toInt();
+      sum = value(state[0]);
       for (x in old) {
-        !sum = sum - x.toInt();
+        !sum = sum - value(x);
       };
       for (x in new) {
-        !sum = sum + x.toInt();
+        !sum = sum + value(x);
       };
-      Some(Array[create(sum)])
+      Some(Array[type(create(sum))])
     },
   };
 }
 
 fun sumReducer(): EReducer<IntFile, IntFile> {
-  sumReducer_(IntFile::type, v ~> IntFile(v))
+  sumReducer_(v ~> IntFile::type(v).value, v ~> IntFile(v), IntFile::type)
 }
 
-fun minReducer_<V: Intable>(conv: File ~> V, create: Int ~> V): EReducer<V, V> {
+fun minReducer_<V: File>(
+  value: File ~> Int,
+  create: Int ~> File,
+  type: File ~> V,
+): EReducer<V, V> {
   EReducer{
-    type => conv,
+    type,
     canReset => true,
     init => iter ~> {
       min: ?Int = None();
       for (x in iter) {
-        if (min.isNone() || x.toInt() < min.fromSome()) !min = Some(x.toInt());
+        ix = value(x);
+        if (min.isNone() || ix < min.fromSome()) !min = Some(ix);
       };
       min match {
-      | Some(x) -> Array[create(x)]
+      | Some(x) -> Array[type(create(x))]
       | None() -> Array[]
       }
     },
     update => (state, old, new) ~> {
-      min = state[0].toInt();
+      min = value(state[0]);
       for (x in new) {
-        if (x.toInt() < min) !min = x.toInt();
+        ix = value(x);
+        if (ix < min) !min = ix;
       };
       for (x in old) {
-        if (x.toInt() <= min) return None()
+        if (value(x) <= min) return None()
       };
-      Some(Array[create(min)])
+      Some(Array[type(create(min))])
     },
   }
 }
 
 fun minReducer(): EReducer<IntFile, IntFile> {
-  minReducer_(IntFile::type, v ~> IntFile(v))
+  minReducer_(v ~> IntFile::type(v).value, v ~> IntFile(v), IntFile::type)
 }
 
-fun maxReducer_<V: Intable>(conv: File ~> V, create: Int ~> V): EReducer<V, V> {
+fun maxReducer_<V: File>(
+  value: File ~> Int,
+  create: Int ~> File,
+  type: File ~> V,
+): EReducer<V, V> {
   EReducer{
-    type => conv,
+    type,
     canReset => true,
     init => iter ~> {
       max: ?Int = None();
       for (x in iter) {
-        if (max.isNone() || x.toInt() > max.fromSome()) !max = Some(x.toInt());
+        ix = value(x);
+        if (max.isNone() || ix > max.fromSome()) !max = Some(ix);
       };
       max match {
-      | Some(x) -> Array[create(x)]
+      | Some(x) -> Array[type(create(x))]
       | None() -> Array[]
       }
     },
     update => (state, old, new) ~> {
-      max = state[0].toInt();
+      max = value(state[0]);
       for (x in new) {
-        if (x.toInt() > max) !max = x.toInt();
+        ix = value(x);
+        if (ix > max) !max = ix;
       };
       for (x in old) {
-        if (x.toInt() >= max) return None()
+        if (value(x) >= max) return None()
       };
-      Some(Array[create(max)])
+      Some(Array[type(create(max))])
     },
   }
 }
 
 fun maxReducer(): EReducer<IntFile, IntFile> {
-  maxReducer_(IntFile::type, v ~> IntFile(v))
+  maxReducer_(v ~> IntFile::type(v).value, v ~> IntFile(v), IntFile::type)
 }
 
 /*****************************************************************************/

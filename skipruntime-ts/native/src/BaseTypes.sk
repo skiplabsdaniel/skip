@@ -13,14 +13,15 @@ base class ValueConverter<V: frozen> {
 }
 
 class ConverterPair<K: frozen, V: frozen>(
-  key: SKStore.Key ~> K,
-  value: SKStore.File ~> V,
+  key: KeyConverter<K>,
+  value: ValueConverter<V>,
 )
 
-base class Reducer<V1: SKStore.File, V2: SKStore.File>(initial: V2) {
+base class Reducer<V1: frozen, V2: frozen>(initial: V2) {
   fun add(acc: V2, value: V1): V2;
   fun remove(acc: V2, value: V1): ?V2;
-  fun converter(): SKStore.File ~> V2;
+  fun valueConverter(): SKStore.File ~> V1;
+  fun accConverter(): ValueConverter<V2>;
 }
 
 /**
@@ -31,12 +32,7 @@ base class Reducer<V1: SKStore.File, V2: SKStore.File>(initial: V2) {
  * @param values - the values mapped to by `key` in the input collection
  * @returns an iterable of key/value pairs to output for the given input(s)
  */
-base class Mapper<
-  K1: SKStore.Key,
-  V1: SKStore.File,
-  K2: SKStore.Key,
-  V2: SKStore.File,
-> {
+base class Mapper<K1: frozen, V1: frozen, K2: frozen, V2: frozen> {
   fun mapEntry(
     key: K1,
     values: mutable SKStore.NonEmptyIterator<V1>,
@@ -45,7 +41,7 @@ base class Mapper<
   fun converters(): ConverterPair<K2, V2>;
 }
 
-base class LazyCompute<K: SKStore.Key, V: SKStore.File> {
+base class LazyCompute<K: frozen, V: frozen> {
   fun compute(self: LazyCollection<K, V>, key: K): Array<V>;
 }
 

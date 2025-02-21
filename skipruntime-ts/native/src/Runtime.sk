@@ -1,10 +1,8 @@
 module SkipRuntime;
 
-const kKeyToKey: SKStore.Key ~> SKStore.Key = k ~> k;
-const kFileToFile: SKStore.File ~> SKStore.File = f ~> f;
 const kGarbageMillis: Int = 30000;
 
-class IdentityMapper<K: SKStore.Key, V: SKStore.File>(
+class IdentityMapper<K: frozen, V: frozen>(
   converters_: ConverterPair<K, V>,
 ) extends Mapper<K, V, K, V> {
   fun mapEntry(
@@ -39,24 +37,24 @@ class UseExternalResourceException() extends Exception {
   }
 }
 
-class SKStoreMapper<
-  K1: SKStore.Key,
-  V1: SKStore.File,
-  K2: SKStore.Key,
-  V2: SKStore.File,
->(
+class SKStoreMapper<K1: frozen, V1: frozen, K2: frozen, V2: frozen>(
   mapper: Mapper<K1, V1, K2, V2>,
+  converters: ConverterPair<K1, V1>,
 ) {
   fun map(
     ctx: mutable SKStore.Context,
-    writer: mutable SKStore.TWriter<K2, V2>,
-    key: K1,
-    values: mutable SKStore.NonEmptyIterator<V1>,
+    writer: mutable SKStore.TWriter<SKStore.Key, SKStore.File>,
+    key: SKStore.Key,
+    values: mutable SKStore.NonEmptyIterator<SKStore.File>,
   ): void {
     pushContext(ctx);
     try {
-      for (entry in this.mapper.mapEntry(key, values)) {
-        writer.append(entry.i0, entry.i1)
+      mc = this.mapper.converters();
+      for (entry in this.mapper.mapEntry(
+        this.converters.key.fromKey(key),
+        values.map(this.converters.value.fromFile),
+      )) {
+        writer.append(mc.key.toKey(entry.i0), mc.value.toFile(entry.i1))
       };
       popContext();
     } catch {
@@ -235,7 +233,7 @@ class Input<K: SKStore.Key, V: SKStore.File>(
     Input(
       this.name,
       this.values.map(v -> (SKStore.Key::unTyped(v.i0), v.i1.map(unTypedFile))),
-      ConverterPair(k ~> k, v ~> v),
+      kNOTYPE_CONVERTERS,
     )
   }
 }
@@ -346,8 +344,8 @@ fun buildResourcesGraph(
         collection = resource.instantiate(collections);
         // Ensure the name of the resource result
         resourceData = collection.hdl.map(
-          collection.converters.key,
-          collection.converters.value,
+          kNOTYPE_KEY,
+          kNOTYPE_VALUE,
           context,
           dDirname.sub(resourceId),
           (_ctx, writer, key, it) ~> {
@@ -398,11 +396,7 @@ fun initService(service: Service): Result<void, .Exception> {
           serviceDef.service.initialData.each(input -> {
             iDirName = SKStore.DirName::create(`/${input.name}/`);
             ctx.mkdirMulti(iDirName, input.values.map(v -> (v.i0, v.i1)));
-            iHdl = SKStore.EHandle(
-              input.converters.key,
-              input.converters.value,
-              iDirName,
-            );
+            iHdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, iDirName);
             mInputs.add(input.name, Collection(iHdl, input.converters))
           });
           inputCollections = mInputs.chill();
@@ -548,16 +542,19 @@ fun createLazyCollection<K: SKStore.Key, V: SKStore.File>(
     collectionId = `collection_${SKStore.genSym(0)}`;
     dirName = subDirName(context, collectionId);
     lhdl = SKStore.LHandle::create(
-      converters.key,
-      converters.value,
+      kNOTYPE_KEY,
+      kNOTYPE_VALUE,
       context,
       dirName,
       (ctx, self, key) ~> {
         pushContext(ctx);
         try {
-          res = compute.compute(LazyCollection(self, converters), key);
+          res = compute.compute(
+            LazyCollection(self, converters),
+            converters.key.fromKey(key),
+          );
           popContext();
-          res
+          res.map(converters.value.toFile)
         } catch {
         | ex ->
           popContext();
@@ -627,8 +624,8 @@ fun useExternalCollection<K: SKStore.Key, V: SKStore.File>(
         instance = Ksuid::create().toString();
         storeDir = dirName.sub(base64(it.first.toString()));
         store = context.mkdir(
-          k ~> k,
-          f ~> f,
+          kNOTYPE_KEY,
+          kNOTYPE_VALUE,
           storeDir,
           Array[],
           true,
@@ -648,17 +645,14 @@ fun useExternalCollection<K: SKStore.Key, V: SKStore.File>(
     );
     Collection(
       hdl.map(
-        converters.key,
-        converters.value,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         dataDir,
         (context, writer, key, _it) ~> {
           remote = collectionHdl.get(context, key).value;
           remote.items(context).each(kv -> {
-            writer.setArray(
-              converters.key(kv.i0),
-              kv.i1.map(converters.value).collect(Array),
-            )
+            writer.setArray(kv.i0, kv.i1.collect(Array))
           });
         },
       ),
@@ -668,18 +662,18 @@ fun useExternalCollection<K: SKStore.Key, V: SKStore.File>(
   }
 }
 
-class Collection<K: SKStore.Key, V: SKStore.File>(
-  hdl: SKStore.EHandle<K, V>,
+class Collection<K: frozen, V: frozen>(
+  hdl: SKStore.EHandle<SKStore.Key, SKStore.File>,
   converters: ConverterPair<K, V>,
 ) {
   //
-  static fun forName<K: SKStore.Key, V: SKStore.File>(
+  static fun forName<K: frozen, V: frozen>(
     name: String,
     converters: ConverterPair<K, V>,
   ): Collection<K, V> {
-    hdl = SKStore.EHandle<K, V>(
-      converters.key,
-      converters.value,
+    hdl = SKStore.EHandle<SKStore.Key, SKStore.File>(
+      kNOTYPE_KEY,
+      kNOTYPE_VALUE,
       SKStore.DirName::create(name),
     );
     Collection(hdl, converters)
@@ -700,7 +694,9 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
       if (dir.creator == context.currentArrow()) {
         throw ReadInCreatorException()
       };
-      dir.getArray(context, key).map(this.hdl.getType())
+      dir
+        .getArray(context, this.converters.key.toKey(key))
+        .map(this.converters.value.fromFile)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -733,7 +729,7 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
    * @param reducer - function to combine results of the `mapper`
    * @returns An eager collection containing the output of the reducer
    */
-  fun mapReduce<K2: SKStore.Key, V2: SKStore.File, V3: SKStore.File>(
+  fun mapReduce<K2: frozen, V2: frozen, V3: frozen>(
     mapper: Mapper<K, V, K2, V2>,
     reducer: Reducer<V2, V3>,
   ): Collection<K2, V3> {
@@ -743,51 +739,60 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
       dirName = this.hdl.dirName.sub(collectionId);
       converters = mapper.converters();
       hdl = this.hdl.mapReduce(
-        converters.key,
-        converters.value,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         dirName,
-        SKStoreMapper(mapper).map,
+        SKStoreMapper(mapper, this.converters).map,
         accReducer(reducer),
       );
-      Collection(hdl, ConverterPair(converters.key, reducer.converter()))
+      Collection(hdl, ConverterPair(converters.key, reducer.accConverter()))
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
 
-  fun reduce<V2: SKStore.File>(reducer: Reducer<V, V2>): Collection<K, V2> {
+  fun reduce<V2: frozen>(reducer: Reducer<V, V2>): Collection<K, V2> {
     this.mapReduce(IdentityMapper(this.converters), reducer)
   }
 
-  fun unsafeCast<K2: SKStore.Key, V2: SKStore.File>(
+  fun unsafeCast<K2: frozen, V2: frozen>(
     converters: ConverterPair<K2, V2>,
   ): Collection<K2, V2> {
-    hdl = SKStore.EHandle(converters.key, converters.value, this.hdl.dirName);
+    hdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, this.hdl.dirName);
     Collection(hdl, converters)
   }
 
   fun unTyped(): Collection<SKStore.Key, SKStore.File> {
-    this.unsafeCast(ConverterPair(k ~> k, v ~> v))
+    this.unsafeCast(kNOTYPE_CONVERTERS)
   }
 
-  fun nativeMapReduce<K2: SKStore.Key, V2: SKStore.Intable>(
+  fun nativeMapReduce<K2: frozen, V2: frozen>(
     mapper: Mapper<K, V, K2, V2>,
     reducer: String,
+    value: V2 ~> Int,
     create: Int ~> V2,
   ): Collection<K2, V2> {
+    converters = mapper.converters();
     this.nativeMapReduceImpl(
       mapper,
-      this.eReducer(reducer, mapper.converters().value, create),
+      this.eReducer(
+        reducer,
+        v ~> value(converters.value.fromFile(v)),
+        v ~> converters.value.toFile(create(v)),
+      ),
     )
   }
 
-  fun nativeReduce[V: SKStore.Intable](
+  fun nativeReduce(
     reducer: String,
+    value: V ~> Int,
     create: Int ~> V,
   ): Collection<K, V> {
-    this.nativeMapReduceImpl(
+    this.nativeMapReduce(
       IdentityMapper(this.converters),
-      this.eReducer(reducer, this.converters.value, create),
+      reducer,
+      value,
+      create,
     )
   }
 
@@ -833,8 +838,8 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
       collectionId = `collection_${SKStore.genSym(0)}`;
       dirName = this.hdl.dirName.sub(collectionId);
       hdl = SKStore.EHandle::multiMap(
-        this.converters.key,
-        this.converters.value,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         Array[this].concat(others).map(c ->
           c match {
@@ -871,8 +876,8 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
       (key, files) = kv;
       values.push(
         (
-          this.converters.key(key),
-          files.collect(Array).map(this.converters.value),
+          this.converters.key.fromKey(key),
+          files.collect(Array).map(this.converters.value.fromFile),
         ),
       );
     };
@@ -882,7 +887,12 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
   fun items(
     context: mutable SKStore.Context,
   ): mutable Iterator<(K, mutable Iterator<V>)> {
-    this.hdl.items(context)
+    this.hdl.items(context).map(v ->
+      (
+        this.converters.key.fromKey(v.i0),
+        v.i1.map(this.converters.value.fromFile),
+      )
+    )
   }
 
   fun subscribe(
@@ -901,7 +911,10 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
         (_dirName, values, tick, update) ~> {
           notify(
             values.map(v ->
-              (this.converters.key(v.i0), v.i1.map(this.converters.value))
+              (
+                this.converters.key.fromKey(v.i0),
+                v.i1.map(this.converters.value.fromFile),
+              )
             ),
             tick,
             update,
@@ -923,7 +936,7 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
     )
   }
 
-  private fun map_<K2: SKStore.Key, V2: SKStore.File>(
+  private fun map_<K2: frozen, V2: frozen>(
     mapper: Mapper<K, V, K2, V2>,
     rangeOpt: ?Array<(K2, K2)> = None(),
   ): Collection<K2, V2> {
@@ -933,21 +946,28 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
       dirName = this.hdl.dirName.sub(collectionId);
       converters = mapper.converters();
       hdl = this.hdl.map(
-        converters.key,
-        converters.value,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         dirName,
-        SKStoreMapper(mapper).map,
-        rangeOpt.map(v -> v.map(r -> SKStore.KeyRange(r.i0, r.i1))),
+        SKStoreMapper(mapper, this.converters).map,
+        rangeOpt.map(v ->
+          v.map(r ->
+            SKStore.KeyRange(
+              converters.key.toKey(r.i0),
+              converters.key.toKey(r.i1),
+            )
+          )
+        ),
       );
       Collection(hdl, converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
 
-  private fun nativeMapReduceImpl<K2: SKStore.Key, V2: SKStore.Intable>(
+  private fun nativeMapReduceImpl<K2: frozen, V2: frozen>(
     mapper: Mapper<K, V, K2, V2>,
-    reducer: SKStore.EReducer<V2, V2>,
+    reducer: SKStore.EReducer<SKStore.File, SKStore.File>,
   ): Collection<K2, V2> {
     getContext() match {
     | Some(context) ->
@@ -955,45 +975,45 @@ class Collection<K: SKStore.Key, V: SKStore.File>(
       dirName = this.hdl.dirName.sub(collectionId);
       converters = mapper.converters();
       hdl = this.hdl.mapReduce(
-        converters.key,
-        converters.value,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         dirName,
-        SKStoreMapper(mapper).map,
+        SKStoreMapper(mapper, this.converters).map,
         reducer,
       );
-      Collection(hdl, ConverterPair(converters.key, converters.value))
+      Collection(hdl, converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
 
-  private fun eReducer<V2: SKStore.Intable>(
+  private fun eReducer(
     reducer: String,
-    conv: SKStore.File ~> V2,
-    create: Int ~> V2,
-  ): SKStore.EReducer<V2, V2> {
+    value: SKStore.File ~> Int,
+    create: Int ~> SKStore.File,
+  ): SKStore.EReducer<SKStore.File, SKStore.File> {
     reducer match {
-    | "sum" -> SKStore.sumReducer_(conv, create)
-    | "min" -> SKStore.minReducer_(conv, create)
-    | "max" -> SKStore.maxReducer_(conv, create)
-    | "count" -> SKStore.countReducer_(conv, create)
+    | "sum" -> SKStore.sumReducer_(value, create, kNOTYPE_VALUE)
+    | "min" -> SKStore.minReducer_(value, create, kNOTYPE_VALUE)
+    | "max" -> SKStore.maxReducer_(value, create, kNOTYPE_VALUE)
+    | "count" -> SKStore.countReducer_(value, create, kNOTYPE_VALUE)
     | _ -> throw SKStore.Error("Unrecognized native reducer: " + reducer)
     };
   }
 }
 
-class LazyCollection<K: SKStore.Key, V: SKStore.File>(
-  private hdl: SKStore.LHandle<K, V>,
+class LazyCollection<K: frozen, V: frozen>(
+  private hdl: SKStore.LHandle<SKStore.Key, SKStore.File>,
   converters: ConverterPair<K, V>,
 ) {
   //
-  static fun forName<K: SKStore.Key, V: SKStore.File>(
+  static fun forName<K: frozen, V: frozen>(
     name: String,
     converters: ConverterPair<K, V>,
   ): LazyCollection<K, V> {
     hdl = SKStore.LHandle(
-      converters.key,
-      converters.value,
+      kNOTYPE_KEY,
+      kNOTYPE_VALUE,
       SKStore.DirName::create(name),
     );
     LazyCollection(hdl, converters)
@@ -1009,7 +1029,10 @@ class LazyCollection<K: SKStore.Key, V: SKStore.File>(
    */
   fun getArray(key: K): Array<V> {
     getContext() match {
-    | Some(context) -> this.hdl.getArray(context, key)
+    | Some(context) ->
+      this.hdl.getArray(context, this.converters.key.toKey(key)).map(
+        this.converters.value.fromFile,
+      )
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -1020,7 +1043,10 @@ class LazyCollection<K: SKStore.Key, V: SKStore.File>(
    */
   fun getUnique(key: K): V {
     getContext() match {
-    | Some(context) -> this.hdl.get(context, key)
+    | Some(context) ->
+      this.converters.value.fromFile(
+        this.hdl.get(context, this.converters.key.toKey(key)),
+      )
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -1144,11 +1170,7 @@ class CollectionWriter(dirName: SKStore.DirName) {
     } else {
       SortedSet<SKStore.Key>[]
     };
-    chdl = SKStore.EHandle(
-      kNOTYPE_CONVERTERS.key,
-      kNOTYPE_CONVERTERS.value,
-      this.dirName,
-    );
+    chdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, this.dirName);
     values.each(e -> {
       chdl.writeArray(context, e.i0, e.i1);
       !keys = keys.remove(e.i0);
@@ -1313,8 +1335,8 @@ fun update(
   values: Array<(SKStore.Key, Array<SKStore.File>)>,
 ): void {
   chdl = SKStore.EHandle(
-    kNOTYPE_CONVERTERS.key,
-    kNOTYPE_CONVERTERS.value,
+    kNOTYPE_KEY,
+    kNOTYPE_VALUE,
     SKStore.DirName::create(`/${collection}/`),
   );
   values.each(keyValue -> chdl.writeArray(context, keyValue.i0, keyValue.i1));

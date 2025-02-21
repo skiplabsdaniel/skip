@@ -157,21 +157,7 @@ extension base class .Inspect {
 
 class VoidFile() extends File
 
-base class Intable extends File uses Orderable, Show {
-  fun +<T: Integral>(x: T): this;
-  fun -<T: Integral>(x: T): this;
-
-  fun toInt(): Int;
-
-  static fun btype(obj: File): Intable {
-    obj match {
-    | x @ Intable _ -> x
-    | _ -> invariant_violation("Must be an Intable.")
-    }
-  }
-}
-
-class IntFile(value: Int) extends Intable {
+class IntFile(value: Int) extends File uses Orderable, Show {
   fun +<T: Integral>(x: T): IntFile {
     !this.value = this.value + x;
     this
@@ -184,10 +170,6 @@ class IntFile(value: Int) extends Intable {
 
   fun toString(): String {
     this.value.toString()
-  }
-
-  fun toInt(): Int {
-    this.value
   }
 }
 
