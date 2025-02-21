@@ -224,7 +224,7 @@ fun unTypedFile(x: SKStore.File): SKStore.File {
   x
 }
 
-class Input<K: SKStore.Key, V: SKStore.File>(
+class Input<K: frozen, V: frozen>(
   name: String,
   values: Array<(K, Array<V>)>,
   converters: ConverterPair<K, V>,
@@ -232,7 +232,12 @@ class Input<K: SKStore.Key, V: SKStore.File>(
   fun unTyped(): Input<SKStore.Key, SKStore.File> {
     Input(
       this.name,
-      this.values.map(v -> (SKStore.Key::unTyped(v.i0), v.i1.map(unTypedFile))),
+      this.values.map(v ->
+        (
+          SKStore.Key::unTyped(this.converters.key.toKey(v.i0)),
+          v.i1.map(this.converters.value.toFile).map(unTypedFile),
+        )
+      ),
       kNOTYPE_CONVERTERS,
     )
   }
@@ -533,7 +538,7 @@ class CloseResource(
  * @param params - any additional parameters to the computation
  * @returns The resulting lazy collection
  */
-fun createLazyCollection<K: SKStore.Key, V: SKStore.File>(
+fun createLazyCollection<K: frozen, V: frozen>(
   compute: LazyCompute<K, V>,
   converters: ConverterPair<K, V>,
 ): LazyCollection<K, V> {
@@ -584,7 +589,7 @@ fun jsonExtract(from: SKJSON.CJObject, pattern: String): Array<SKJSON.CJSON> {
   values.toArray()
 }
 
-fun useExternalCollection<K: SKStore.Key, V: SKStore.File>(
+fun useExternalCollection<K: frozen, V: frozen>(
   supplier: String,
   resource: String,
   params: Parameters,
@@ -716,7 +721,7 @@ class Collection<K: frozen, V: frozen>(
    * @param mapper - function to apply to each element of this collection
    * @returns The resulting (eager) output collection
    */
-  fun map<K2: SKStore.Key, V2: SKStore.File>(
+  fun map<K2: frozen, V2: frozen>(
     mapper: Mapper<K, V, K2, V2>,
   ): Collection<K2, V2> {
     this.map_(mapper, None())
