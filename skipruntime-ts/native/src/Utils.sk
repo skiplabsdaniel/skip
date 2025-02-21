@@ -49,10 +49,10 @@ class JSONKeyConverter() extends KeyConverter<SKJSON.CJSON> {
   }
 }
 
-const kJSON_CONVERTERS: ConverterPair<SKJSON.CJSON, SKJSON.CJSON> = ConverterPair(
-  JSONKeyConverter(),
-  JSONValueConverter(),
-);
+const kJSON_CONVERTERS: ConverterPair<
+  SKJSON.CJSON,
+  SKJSON.CJSON,
+> = ConverterPair(JSONKeyConverter(), JSONValueConverter());
 
 class NOOPValueConverter() extends ValueConverter<SKStore.File> {
   fun fromFile(v: SKStore.File): SKStore.File {
@@ -173,7 +173,9 @@ fun toSuppliedResourceId(
   `${supplier}_${toResourceId(resource, params)}`;
 }
 
-fun collectionForNameJSON(name: String): Collection<SKJSON.CJSON, SKJSON.CJSON> {
+fun collectionForNameJSON(
+  name: String,
+): Collection<SKJSON.CJSON, SKJSON.CJSON> {
   Collection::forName(name, kJSON_CONVERTERS)
 }
 
@@ -195,6 +197,42 @@ fun collectionsByName(
   fields = mutable Vector[];
   collections.each((k, v) -> fields.push((k, SKJSON.CJString(v.getId()))));
   SKJSON.CJObject(SKJSON.CJFields::create(fields.toArray(), x -> x));
+}
+
+class IntValueConverter() extends ValueConverter<Int> {
+  fun fromFile(v: SKStore.File): Int {
+    SKStore.IntFile::type(v).value
+  }
+  fun toFile(v: Int): SKStore.File {
+    SKStore.IntFile(v)
+  }
+}
+
+class IntKeyConverter() extends KeyConverter<Int> {
+  fun fromKey(k: SKStore.Key): Int {
+    SKStore.IID::keyType(k).value
+  }
+  fun toKey(k: Int): SKStore.Key {
+    SKStore.IID(k)
+  }
+}
+
+class StringValueConverter() extends ValueConverter<String> {
+  fun fromFile(v: SKStore.File): String {
+    SKStore.StringFile::type(v).value
+  }
+  fun toFile(v: String): SKStore.File {
+    SKStore.StringFile(v)
+  }
+}
+
+class StringKeyConverter() extends KeyConverter<String> {
+  fun fromKey(k: SKStore.Key): String {
+    SKStore.SID::keyType(k).value
+  }
+  fun toKey(k: String): SKStore.Key {
+    SKStore.SID(k)
+  }
 }
 
 module end;
