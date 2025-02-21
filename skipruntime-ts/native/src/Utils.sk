@@ -235,4 +235,15 @@ class StringKeyConverter() extends KeyConverter<String> {
   }
 }
 
+class FileValueConverter<V: SKStore.File>(
+  type: SKStore.File ~> V,
+) extends ValueConverter<V> {
+  fun fromFile(v: SKStore.File): V {
+    this.type(v)
+  }
+  fun toFile(v: V): SKStore.File {
+    v
+  }
+}
+
 module end;
