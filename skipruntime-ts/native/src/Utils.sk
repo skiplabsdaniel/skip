@@ -29,62 +29,84 @@ class JSONID(json: SKJSON.CJSON) extends SKStore.Key {
   }
 }
 
-class JSONFile(json: SKJSON.CJSON) extends SKStore.Intable {
-  fun +<T: Integral>(x: T): JSONFile {
-    JSONFile(SKJSON.CJInt(this.toInt() + x))
-  }
+class JSONFile(json: SKJSON.CJSON) extends SKStore.File
 
-  fun -<T: Integral>(x: T): JSONFile {
-    JSONFile(SKJSON.CJInt(this.toInt() - x))
+class JSONValueConverter() extends ValueConverter<SKJSON.CJSON> {
+  fun fromFile(v: SKStore.File): SKJSON.CJSON {
+    JSONFile::type(v).json
   }
-
-  fun toString(): String {
-    this.json.prettyPrint()
-  }
-
-  fun toInt(): Int {
-    this.json match {
-    | SKJSON.CJInt(x) -> x
-    | _ -> throw SKStore.Error("Non-number JSON")
-    };
+  fun toFile(v: SKJSON.CJSON): SKStore.File {
+    JSONFile(v)
   }
 }
 
-const kJSON_CONVERTERS: ConverterPair<JSONID, JSONFile> = ConverterPair(
-  JSONID::keyType,
-  JSONFile::type,
+class JSONKeyConverter() extends KeyConverter<SKJSON.CJSON> {
+  fun fromKey(k: SKStore.Key): SKJSON.CJSON {
+    JSONID::keyType(k).json
+  }
+  fun toKey(k: SKJSON.CJSON): SKStore.Key {
+    JSONID(k)
+  }
+}
+
+const kJSON_CONVERTERS: ConverterPair<SKJSON.CJSON, SKJSON.CJSON> = ConverterPair(
+  JSONKeyConverter(),
+  JSONValueConverter(),
 );
+
+class NOOPValueConverter() extends ValueConverter<SKStore.File> {
+  fun fromFile(v: SKStore.File): SKStore.File {
+    v
+  }
+  fun toFile(v: SKStore.File): SKStore.File {
+    v
+  }
+}
+
+class NOOPKeyConverter() extends KeyConverter<SKStore.Key> {
+  fun fromKey(k: SKStore.Key): SKStore.Key {
+    k
+  }
+  fun toKey(k: SKStore.Key): SKStore.Key {
+    k
+  }
+}
 
 const kNOTYPE_CONVERTERS: ConverterPair<
   SKStore.Key,
   SKStore.File,
-> = ConverterPair(k ~> k, v ~> v);
+> = ConverterPair(NOOPKeyConverter(), NOOPValueConverter());
 
-fun accReducer<V1: SKStore.File, V2: SKStore.File>(
+const kNOTYPE_KEY: SKStore.Key ~> SKStore.Key = kNOTYPE_CONVERTERS.key.fromKey;
+const kNOTYPE_VALUE: SKStore.File ~> SKStore.File = kNOTYPE_CONVERTERS.value.fromFile;
+
+fun accReducer<V1: frozen, V2: frozen>(
   reducer: Reducer<V1, V2>,
-): SKStore.EReducer<V1, V2> {
+): SKStore.EReducer<SKStore.File, SKStore.File> {
+  valueConverter = reducer.valueConverter();
+  accConverter = reducer.accConverter();
   SKStore.EReducer{
-    type => reducer.converter(),
+    type => kNOTYPE_VALUE,
     canReset => true,
     init => iter ~> {
       acc = reducer.initial;
       for (x in iter) {
-        !acc = reducer.add(acc, x)
+        !acc = reducer.add(acc, valueConverter(x))
       };
-      Array[acc]
+      Array[accConverter.toFile(acc)]
     },
     update => (state, old, new) ~> {
-      acc = state[0];
+      acc = accConverter.fromFile(state[0]);
       for (x in old) {
-        reducer.remove(acc, x) match {
+        reducer.remove(acc, valueConverter(x)) match {
         | Some(v) -> !acc = v
         | _ -> return None()
         }
       };
       for (x in new) {
-        !acc = reducer.add(acc, x)
+        !acc = reducer.add(acc, valueConverter(x))
       };
-      Some(Array[acc])
+      Some(Array[accConverter.toFile(acc)])
     },
   }
 }
@@ -151,7 +173,7 @@ fun toSuppliedResourceId(
   `${supplier}_${toResourceId(resource, params)}`;
 }
 
-fun collectionForNameJSON(name: String): Collection<JSONID, JSONFile> {
+fun collectionForNameJSON(name: String): Collection<SKJSON.CJSON, SKJSON.CJSON> {
   Collection::forName(name, kJSON_CONVERTERS)
 }
 
@@ -159,7 +181,7 @@ fun collectionForName(name: String): Collection<SKStore.Key, SKStore.File> {
   Collection::forName(name, kNOTYPE_CONVERTERS)
 }
 
-fun lazyForNameJSON(name: String): LazyCollection<JSONID, JSONFile> {
+fun lazyForNameJSON(name: String): LazyCollection<SKJSON.CJSON, SKJSON.CJSON> {
   LazyCollection::forName(name, kJSON_CONVERTERS)
 }
 
