@@ -2,6 +2,26 @@ module alias SR = SkipRuntime;
 
 module ServiceInstance;
 
+class UnknownValuesParserException(
+  name: String,
+  values: String,
+) extends .Exception {
+  fun getMessage(): String {
+    `Unable to convert ${this.values} to valid values for input ${this.name}.`
+  }
+}
+
+class UnknownParamsParserException(
+  resource: String,
+  params: String,
+) extends .Exception {
+  fun getMessage(): String {
+    `Unable to convert ${this.params} to valid values for resource ${
+      this.resource
+    }.`
+  }
+}
+
 value class GetResult<T: frozen, E: frozen>(
   request: ?String,
   values: T,
@@ -206,6 +226,104 @@ fun update(
 
 fun close(): Result<Array<Float>, .Exception> {
   SKStore.runWithResult(SR.closeService_)
+}
+
+base class ValuesParser {
+  fun parse(values: String): Array<(SKStore.Key, Array<SKStore.File>)>;
+}
+
+base class ResourceParser {
+  fun parseParams(values: String): SR.Parameters;
+  fun parseKey(values: String): SKStore.Key;
+}
+
+class .ServiveInstance(
+  values: Map<String, ValuesParser>,
+  resources: Map<String, ResourceParser>,
+) {
+  fun getAll(
+    resource: String,
+    params: String,
+    optRequest: ?SR.Request,
+  ): Result<GetResult<Values, SR.IError>, .Exception> {
+    obstack = SKStore.newObstack();
+    res = this.resources.maybeGet(resource) match {
+    | Some(parser) -> getAll(resource, parser.parseParams(params), optRequest)
+    | _ -> Failure(UnknownParamsParserException(resource, params))
+    };
+    SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+  }
+
+  fun getArray(
+    resource: String,
+    params: String,
+    key: String,
+    optRequest: ?SR.Request,
+  ): Result<GetResult<Array<SKStore.File>, SR.IError>, .Exception> {
+    obstack = SKStore.newObstack();
+    res = this.resources.maybeGet(resource) match {
+    | Some(parser) ->
+      getArray(
+        resource,
+        parser.parseParams(params),
+        parser.parseKey(key),
+        optRequest,
+      )
+    | _ -> Failure(UnknownParamsParserException(resource, params))
+    };
+    SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+  }
+
+  fun update(input: String, values: String): Result<void, .Exception> {
+    obstack = SKStore.newObstack();
+    res = this.values.maybeGet(input) match {
+    | Some(parser) -> update(input, parser.parse(values))
+    | _ -> Failure(UnknownValuesParserException(input, values))
+    };
+    SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+  }
+
+  fun instantiateResource(
+    identifier: String,
+    resource: String,
+    params: String,
+  ): Result<void, .Exception> {
+    obstack = SKStore.newObstack();
+    res = this.resources.maybeGet(resource) match {
+    | Some(parser) ->
+      instantiateResource(identifier, resource, parser.parseParams(params))
+    | _ -> Failure(UnknownParamsParserException(resource, params))
+    };
+    SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+  }
+
+  fun closeResource(identifier: String): Result<void, .Exception> {
+    obstack = SKStore.newObstack();
+    res = closeResource(identifier);
+    SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+  }
+
+  fun subscribe(
+    reactiveId: String,
+    notifier: SR.Notifier<SKStore.Key, SKStore.File>,
+    watermark: ?String,
+  ): Result<Int, .Exception> {
+    obstack = SKStore.newObstack();
+    res = subscribe(reactiveId, notifier, watermark);
+    SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+  }
+
+  fun unsubscribe(session: Int): Result<void, .Exception> {
+    obstack = SKStore.newObstack();
+    res = unsubscribe(session);
+    SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+  }
+
+  fun close(): Result<Array<Float>, .Exception> {
+    obstack = SKStore.newObstack();
+    res = close();
+    SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+  }
 }
 
 module end;
