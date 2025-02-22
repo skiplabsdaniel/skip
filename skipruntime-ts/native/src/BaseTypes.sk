@@ -1,6 +1,8 @@
 module SkipRuntime;
 
 base class IError uses Show
+base class Parameters uses Orderable, Show
+base class Collections
 
 base class KeyConverter<K: frozen> {
   fun fromKey(SKStore.Key): K;
@@ -93,92 +95,48 @@ base class ExternalService {
   fun shutdown(): Float;
 }
 
-base class TExternalService<K: frozen, V: frozen, E: frozen, P: frozen> extends
-  ExternalService,
-{
-  fun subscribeTo(
-    instance: String,
-    writer: TWriter<K, V, E>,
-    resource: String,
-    params: P,
-  ): void;
-
-  fun subscribe(
-    instance: String,
-    writer: Writer,
-    resource: String,
-    params: Parameters,
-  ): void {
-    tWriter = TWriter<K, V, E>(
-      writer,
-      this.converters(),
-      this.errorConverter(),
-    );
-    this.subscribeTo(
-      instance,
-      tWriter,
-      resource,
-      this.paramsConverter().fromParams(params),
-    )
-  }
-
-  fun converters(): ConverterPair<K, V>;
-  fun errorConverter(): ErrorConverter<E>;
-  fun paramsConverter(): ParamsConverter<P>;
-}
-
-base class Parameters uses Orderable, Show
-
 base class Resource {
-  fun instantiate(
+  fun materialize(
     collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
   ): Collection<SKStore.Key, SKStore.File>;
 }
 
+base class ResourceBuilder {
+  fun produce(params: Parameters): Resource;
+}
+
 base class Data {
-  fun unTyped(): InitialData<SKStore.Key, SKStore.File>;
+  fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)>;
 }
 
 class InitialData<K: frozen, V: frozen>(
   values: Array<(K, Array<V>)>,
   converters: ConverterPair<K, V>,
 ) extends Data {
-  fun unTyped(): InitialData<SKStore.Key, SKStore.File> {
-    InitialData(
-      this.values.map(v ->
-        (
-          SKStore.Key::unTyped(this.converters.key.toKey(v.i0)),
-          v.i1.map(this.converters.value.toFile).map(unTypedFile),
-        )
-      ),
-      kNOTYPE_CONVERTERS,
+  fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)> {
+    this.values.map(v ->
+      (
+        SKStore.Key::unTyped(this.converters.key.toKey(v.i0)),
+        v.i1.map(this.converters.value.toFile).map(unTypedFile),
+      )
     )
   }
 }
 
+class EmptyData() extends Data {
+  fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)> {
+    Array[]
+  }
+}
+
 base class Service {
-  fun eachInitialData((String, Data) -> void): void;
-  fun buildResource(name: String, parameters: Parameters): Resource;
+  fun initialData(): Map<String, Data>;
+  fun resourceBuilders(): Map<String, ResourceBuilder>;
   fun externalServices(): Map<String, ExternalService>;
 
   fun createGraph(
     inputCollections: Map<String, Collection<SKStore.Key, SKStore.File>>,
   ): Map<String, Collection<SKStore.Key, SKStore.File>>;
-}
-
-base class Collections
-
-base class CollectionsConverter<CS: Collections> {
-  fun fromMap(Map<String, Collection<SKStore.Key, SKStore.File>>): CS;
-  fun toMap(CS): Map<String, Collection<SKStore.Key, SKStore.File>>;
-}
-
-base class TResource<K: frozen, V: frozen, CS: Collections> {
-  fun instantiate(collections: CS): Collection<K, V>;
-}
-
-base class TService<CI: Collections, CO: Collections> {
-  fun createGraph(collections: CI): CO;
 }
 
 base class Request {
@@ -202,8 +160,65 @@ base class Notifier<K: frozen, V: frozen> {
   fun close(): void;
 }
 
-/** Prevent unused pattern */
+// ************ Typed ************************
 
+base class TResourceBuilder<P: frozen> extends ResourceBuilder {
+  fun build(params: P): Resource;
+  fun fromParameters(params: Parameters): P;
+
+  fun produce(params: Parameters): Resource {
+    this.build(this.fromParameters(params))
+  }
+}
+
+base class TResource<K: frozen, V: frozen, CS: Collections> extends Resource {
+  fun materialize(
+    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Collection<SKStore.Key, SKStore.File> {
+    this.instantiate(this.fromMap(collections)).unTyped()
+  }
+
+  fun instantiate(collections: CS): Collection<K, V>;
+  fun fromMap(Map<String, Collection<SKStore.Key, SKStore.File>>): CS;
+}
+
+base class TService<CI: Collections, CO: Collections> extends Service {
+  fun createTypedGraph(collections: CI): CO;
+
+  fun createGraph(
+    inputCollections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Map<String, Collection<SKStore.Key, SKStore.File>> {
+    this.toMap(this.createTypedGraph(this.fromMap(inputCollections)))
+  }
+
+  fun fromMap(Map<String, Collection<SKStore.Key, SKStore.File>>): CI;
+  fun toMap(CO): Map<String, Collection<SKStore.Key, SKStore.File>>;
+}
+
+base class TExternalService<K: frozen, V: frozen, E: frozen, P: frozen>(
+  toSKStore: ((K, Array<V>)) ~> (SKStore.Key, Array<SKStore.File>),
+  toError: E ~> IError,
+  fromParameters: Parameters ~> P,
+) extends ExternalService {
+  fun subscribeTo(
+    instance: String,
+    writer: TWriter<K, V, E>,
+    resource: String,
+    params: P,
+  ): void;
+
+  fun subscribe(
+    instance: String,
+    writer: Writer,
+    resource: String,
+    params: Parameters,
+  ): void {
+    tWriter = TWriter<K, V, E>(writer, this.toSKStore, this.toError);
+    this.subscribeTo(instance, tWriter, resource, this.fromParameters(params))
+  }
+}
+
+// Prevent unused pattern
 class DummyChecker() extends Checker {
   fun check(_request: String): void {
     invariant_violation("dummy");
