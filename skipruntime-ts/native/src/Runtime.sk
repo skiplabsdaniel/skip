@@ -224,25 +224,6 @@ fun unTypedFile(x: SKStore.File): SKStore.File {
   x
 }
 
-class Input<K: frozen, V: frozen>(
-  name: String,
-  values: Array<(K, Array<V>)>,
-  converters: ConverterPair<K, V>,
-) {
-  fun unTyped(): Input<SKStore.Key, SKStore.File> {
-    Input(
-      this.name,
-      this.values.map(v ->
-        (
-          SKStore.Key::unTyped(this.converters.key.toKey(v.i0)),
-          v.i1.map(this.converters.value.toFile).map(unTypedFile),
-        )
-      ),
-      kNOTYPE_CONVERTERS,
-    )
-  }
-}
-
 fun buildResourcesGraph(
   context: mutable SKStore.Context,
   definitionHdl: SKStore.EHandle<SKStore.IID, ServiceDefinition>,
@@ -398,11 +379,12 @@ fun initService(service: Service): Result<void, .Exception> {
           serviceDef = it.first;
           pushContext(ctx);
           mInputs = mutable Map[];
-          serviceDef.service.initialData.each(input -> {
-            iDirName = SKStore.DirName::create(`/${input.name}/`);
-            ctx.mkdirMulti(iDirName, input.values.map(v -> (v.i0, v.i1)));
+          serviceDef.service.eachInitialData((name, tInitialData) -> {
+            iDirName = SKStore.DirName::create(`/${name}/`);
+            initialData = tInitialData.unTyped();
+            ctx.mkdirMulti(iDirName, initialData.values);
             iHdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, iDirName);
-            mInputs.add(input.name, Collection(iHdl, input.converters))
+            mInputs.add(name, Collection(iHdl, initialData.converters))
           });
           inputCollections = mInputs.chill();
           try {
@@ -477,7 +459,8 @@ fun closeService_(context: mutable SKStore.Context): Array<Float> {
   );
   handles = sessionHdl.maybeGet(context, SKStore.IID(0)) match {
   | Some(def) ->
-    def.service.externalServices
+    def.service
+      .externalServices()
       .values()
       .map(es -> es.shutdown())
       .collect(Array)
@@ -508,13 +491,14 @@ class CheckRequest(
 class LinkToResource(
   supplier: ExternalService,
   instance: String,
-  writer: CollectionWriter,
+  writer: Writer,
+  statusWriter: StatusWriter,
   name: String,
   params: Parameters,
 ) extends SKStore.Postponable {
   //
   fun perform(context: mutable SKStore.Context): void {
-    this.writer.status(context, Status::create());
+    this.statusWriter.status(context, Status::create());
     pushContext(context);
     this.supplier.subscribe(this.instance, this.writer, this.name, this.params);
     popContext();
@@ -609,7 +593,7 @@ fun useExternalCollection<K: frozen, V: frozen>(
       kSessionDir,
     );
     service = sessionHdl.get(context, SKStore.IID(0)).service;
-    externalSupplier = service.externalServices.get(supplier);
+    externalSupplier = service.externalServices().get(supplier);
     collectionId = toSuppliedResourceId(supplier, resource, params);
     dirName = subDirName(context, collectionId);
     paramsDir = dirName.sub("params");
@@ -628,6 +612,7 @@ fun useExternalCollection<K: frozen, V: frozen>(
       (context, writer, key, it) ~> {
         instance = Ksuid::create().toString();
         storeDir = dirName.sub(base64(it.first.toString()));
+        cwriter = CollectionWriter(storeDir);
         store = context.mkdir(
           kNOTYPE_KEY,
           kNOTYPE_VALUE,
@@ -638,7 +623,8 @@ fun useExternalCollection<K: frozen, V: frozen>(
             LinkToResource(
               externalSupplier,
               instance,
-              CollectionWriter(storeDir),
+              cwriter,
+              cwriter,
               resource,
               it.first.params,
             ),
@@ -914,16 +900,7 @@ class Collection<K: frozen, V: frozen>(
         identifier,
         from,
         (_dirName, values, tick, update) ~> {
-          notify(
-            values.map(v ->
-              (
-                this.converters.key.fromKey(v.i0),
-                v.i1.map(this.converters.value.fromFile),
-              )
-            ),
-            tick,
-            update,
-          )
+          notify(values.map(this.converters.fromSKStore), tick, update)
         },
         close,
         true,
@@ -1057,8 +1034,12 @@ class LazyCollection<K: frozen, V: frozen>(
   }
 }
 
-class CollectionWriter(dirName: SKStore.DirName) {
+class CollectionWriter(dirName: SKStore.DirName) extends Writer, StatusWriter {
   //
+  fun getId(): String {
+    this.dirName.toString()
+  }
+
   fun update(
     values: Array<(SKStore.Key, Array<SKStore.File>)>,
     isInit: Bool,
@@ -1438,6 +1419,27 @@ fun checkGarbage(context: mutable SKStore.Context): void {
 fun updateContext(context: mutable SKStore.Context): void {
   context.update();
   checkGarbage(context);
+}
+
+class TWriter<K: frozen, V: frozen, E: frozen>(
+  writer: Writer,
+  converters: ConverterPair<K, V>,
+  errorConverter: ErrorConverter<E>,
+) {
+  fun update(
+    values: Array<(K, Array<V>)>,
+    isInit: Bool,
+  ): Result<void, .Exception> {
+    this.writer.update(values.map(this.converters.toSKStore), isInit)
+  }
+
+  fun error(error: E): Result<void, .Exception> {
+    this.writer.error(this.errorConverter.toError(error))
+  }
+
+  fun loading(): Result<void, .Exception> {
+    this.writer.loading()
+  }
 }
 
 module end;
