@@ -19,26 +19,6 @@ class Inputs{
   input2: SR.Collection<String, Int>,
 } extends SR.Collections
 
-class InputsConverter() extends SR.CollectionsConverter<Inputs> {
-  fun fromMap(
-    map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
-  ): Inputs {
-    Inputs{
-      input1 => map.get("input1").unsafeCast(kSTRING_INT_TYPES),
-      input2 => map.get("input2").unsafeCast(kSTRING_INT_TYPES),
-    }
-  }
-
-  fun toMap(
-    inputs: Inputs,
-  ): Map<String, SR.Collection<SKStore.Key, SKStore.File>> {
-    Map[
-      "input1" => inputs.input1.unTyped(),
-      "input2" => inputs.input1.unTyped(),
-    ]
-  }
-}
-
 class Indexed(index: Int, value: Int) extends SKStore.File uses Orderable
 
 class AddIndex(
@@ -93,9 +73,24 @@ class Minus() extends SR.Mapper<String, Indexed, String, Int> {
   }
 }
 
+fun fromMap(
+  map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
+): Inputs {
+  Inputs{
+    input1 => map.get("input1").unsafeCast(kSTRING_INT_TYPES),
+    input2 => map.get("input2").unsafeCast(kSTRING_INT_TYPES),
+  }
+}
+
 class Add() extends SR.TResource<String, Int, Inputs> {
   fun instantiate(cs: Inputs): SR.Collection<String, Int> {
     cs.input1.merge(Array[cs.input2]).map(Plus())
+  }
+
+  fun fromMap(
+    map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
+  ): Inputs {
+    fromMap(map)
   }
 }
 
@@ -106,25 +101,47 @@ class Sub() extends SR.TResource<String, Int, Inputs> {
       .merge(Array[cs.input2.map(AddIndex(1))])
       .map(Minus())
   }
+
+  fun fromMap(
+    map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
+  ): Inputs {
+    fromMap(map)
+  }
 }
 
-class Service() extends SR.TService<Inputs, Inputs> {
-  fun buildResource(name: String, _parameters: SR.Parameters): SR.Resource {
-    name match {
-    | "add" -> SR.UResource(Add(), InputsConverter())
-    | "sub" -> SR.UResource(Sub(), InputsConverter())
-    | _ -> invariant_violation("Unknown resource")
-    }
+class Service() extends SR.TService<Inputs, Inputs> uses SR.WithServiceData {
+  const data: SR.ServiceData = SR.ServiceData{
+    initialData => Map["input1" => SR.EmptyData(), "input2" => SR.EmptyData()],
+    resourceBuilders => Map[
+      "add" => SR.NoParamsBuilder(Add()),
+      "sub" => SR.NoParamsBuilder(Sub()),
+    ],
+    externalServices => Map[],
+  };
+
+  fun createTypedGraph(ics: Inputs): Inputs {
+    ics
   }
 
-  fun createGraph(ics: Inputs): Inputs {
-    ics
+  fun fromMap(
+    map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
+  ): Inputs {
+    fromMap(map)
+  }
+
+  fun toMap(
+    inputs: Inputs,
+  ): Map<String, SR.Collection<SKStore.Key, SKStore.File>> {
+    Map[
+      "input1" => inputs.input1.unTyped(),
+      "input2" => inputs.input2.unTyped(),
+    ]
   }
 }
 
 @service
-fun init(): void {
-  void
+fun getService(): SR.Service {
+  Service()
 }
 
 module end;

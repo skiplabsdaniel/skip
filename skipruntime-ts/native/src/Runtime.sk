@@ -325,9 +325,9 @@ fun buildResourcesGraph(
               }
             },
           );
-        resource = service.buildResource(key.name, key.params);
+        resource = service.resourceBuilders().get(key.name).produce(key.params);
         collections = servicesHdl.get(context, SKStore.SID(runId)).value;
-        collection = resource.instantiate(collections);
+        collection = resource.materialize(collections);
         // Ensure the name of the resource result
         resourceData = collection.hdl.map(
           kNOTYPE_KEY,
@@ -379,12 +379,11 @@ fun initService(service: Service): Result<void, .Exception> {
           serviceDef = it.first;
           pushContext(ctx);
           mInputs = mutable Map[];
-          serviceDef.service.eachInitialData((name, tInitialData) -> {
+          serviceDef.service.initialData().each((name, initialData) -> {
             iDirName = SKStore.DirName::create(`/${name}/`);
-            initialData = tInitialData.unTyped();
-            ctx.mkdirMulti(iDirName, initialData.values);
+            ctx.mkdirMulti(iDirName, initialData.keyValues());
             iHdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, iDirName);
-            mInputs.add(name, Collection(iHdl, initialData.converters))
+            mInputs.add(name, Collection(iHdl, kNOTYPE_CONVERTERS))
           });
           inputCollections = mInputs.chill();
           try {
@@ -1423,18 +1422,18 @@ fun updateContext(context: mutable SKStore.Context): void {
 
 class TWriter<K: frozen, V: frozen, E: frozen>(
   writer: Writer,
-  converters: ConverterPair<K, V>,
-  errorConverter: ErrorConverter<E>,
+  toSKStore: ((K, Array<V>)) ~> (SKStore.Key, Array<SKStore.File>),
+  toError: E ~> IError,
 ) {
   fun update(
     values: Array<(K, Array<V>)>,
     isInit: Bool,
   ): Result<void, .Exception> {
-    this.writer.update(values.map(this.converters.toSKStore), isInit)
+    this.writer.update(values.map(this.toSKStore), isInit)
   }
 
   fun error(error: E): Result<void, .Exception> {
-    this.writer.error(this.errorConverter.toError(error))
+    this.writer.error(this.toError(error))
   }
 
   fun loading(): Result<void, .Exception> {
