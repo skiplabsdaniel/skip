@@ -246,14 +246,29 @@ class FileValueConverter<V: SKStore.File>(
   }
 }
 
-class UResource<K: frozen, V: frozen, CS: Collections>(
-  resource: TResource<K, V, CS>,
-  converter: CollectionsConverter<CS>,
-) extends Resource {
-  fun instantiate(
-    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
-  ): Collection<SKStore.Key, SKStore.File> {
-    this.resource.instantiate(this.converter.fromMap(collections)).unTyped()
+class ServiceData{
+  initialData: Map<String, Data>,
+  resourceBuilders: Map<String, ResourceBuilder>,
+  externalServices: Map<String, ExternalService>,
+}
+
+class NoParamsBuilder(resource: Resource) extends ResourceBuilder {
+  fun produce(_params: Parameters): Resource {
+    this.resource
+  }
+}
+
+trait WithServiceData {
+  macro fun initialData(): Map<String, Data> {
+    static::data.initialData
+  }
+
+  macro fun resourceBuilders(): Map<String, ResourceBuilder> {
+    static::data.resourceBuilders
+  }
+
+  macro fun externalServices(): Map<String, ExternalService> {
+    static::data.externalServices
   }
 }
 

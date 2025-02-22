@@ -248,7 +248,7 @@ fun createResource(resource: UInt32): ExternResource {
 }
 
 class ExternResource(eptr: SKStore.ExternalPointer) extends Resource {
-  fun instantiate(
+  fun materialize(
     collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
   ): Collection<SKStore.Key, SKStore.File> {
     collectionName = instantiateOfResource(
@@ -273,8 +273,8 @@ native fun buildOfResourceBuilder(
 native fun deleteResourceBuilder(resourceBuilder: UInt32): void;
 
 @export("SkipRuntime_createResourceBuilder")
-fun createResourceBuilder(resourceBuilder: UInt32): ResourceBuilder {
-  ResourceBuilder(
+fun createResourceBuilder(resourceBuilder: UInt32): ExternResourceBuilder {
+  ExternResourceBuilder(
     SKStore.ExternalPointer::create(resourceBuilder, deleteResourceBuilder),
   )
 }
@@ -291,9 +291,15 @@ class JSONError(error: SKJSON.CJSON) extends IError {
   }
 }
 
-class ResourceBuilder(eptr: SKStore.ExternalPointer) {
-  fun build(params: JSONParams): Resource {
-    buildOfResourceBuilder(this.eptr.value, params.json)
+class ExternResourceBuilder(
+  eptr: SKStore.ExternalPointer,
+) extends TResourceBuilder<SKJSON.CJSON> {
+  fun build(params: SKJSON.CJSON): Resource {
+    buildOfResourceBuilder(this.eptr.value, params)
+  }
+
+  fun fromParameters(params: Parameters): SKJSON.CJSON {
+    (params as JSONParams _).json
   }
 }
 
@@ -328,15 +334,15 @@ class ExternChecker(eptr: SKStore.ExternalPointer) extends Checker {
 @export("SkipRuntime_createService")
 fun createService(
   service: UInt32,
-  jsInputs: SKJSON.CJObject,
-  resources: mutable Map<String, ResourceBuilder>,
+  jsInitialData: SKJSON.CJObject,
+  resourceBuilders: mutable Map<String, ResourceBuilder>,
   externalServices: mutable Map<String, ExternalService>,
 ): ExternService {
-  inputs = mutable Map[];
-  jsInputs match {
+  initialData = mutable Map[];
+  jsInitialData match {
   | SKJSON.CJObject(fields) ->
     for (fieldName => field in fields) {
-      inputs.add(
+      initialData.add(
         fieldName,
         InitialData(
           SKJSON.expectArray(field).map(v -> {
@@ -350,8 +356,8 @@ fun createService(
   };
   ExternService(
     SKStore.ExternalPointer::create(service, deleteService),
-    resources.chill(),
-    inputs.chill(),
+    initialData.chill(),
+    resourceBuilders.chill(),
     externalServices.chill(),
   )
 }
@@ -369,12 +375,16 @@ native fun createGraphOfService(
 
 class ExternService(
   eptr: SKStore.ExternalPointer,
-  resources: Map<String, ResourceBuilder>,
-  initialData_: Map<String, InitialData<SKJSON.CJSON, SKJSON.CJSON>>,
+  initialData_: Map<String, Data>,
+  resourceBuilders_: Map<String, ResourceBuilder>,
   externalServices_: Map<String, ExternalService>,
 ) extends Service {
-  fun eachInitialData(fn: (String, Data) -> void): void {
-    this.initialData_.each(fn)
+  fun initialData(): Map<String, Data> {
+    this.initialData_
+  }
+
+  fun resourceBuilders(): Map<String, ResourceBuilder> {
+    this.resourceBuilders_
   }
 
   fun externalServices(): Map<String, ExternalService> {
@@ -394,10 +404,6 @@ class ExternService(
     };
     map.chill()
   }
-
-  fun buildResource(name: String, parameters: Parameters): Resource {
-    this.resources.get(name).build(parameters as JSONParams _)
-  }
 }
 
 /************  ResourceBuilderMap ****************/
@@ -411,7 +417,7 @@ fun createOfResourceBuilderMap(): mutable Map<String, ResourceBuilder> {
 fun addOfResourceBuilderMap(
   builders: mutable Map<String, ResourceBuilder>,
   name: String,
-  builder: ResourceBuilder,
+  builder: ExternResourceBuilder,
 ): void {
   builders.add(name, builder)
 }
