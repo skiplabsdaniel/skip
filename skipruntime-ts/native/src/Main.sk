@@ -1,0 +1,136 @@
+module SkipRuntime;
+
+fun validNameChar(c: Char): Bool {
+  (c >= 'a' && c <= 'z') ||
+    (c >= 'A' && c <= 'Z') ||
+    (c >= '0' && c <= '9') ||
+    c == '_' ||
+    c == '-'
+}
+
+fun token(v: String): ?(String, String) {
+  v.search(ch ~> Chars.isWhitespace(ch)) match {
+  | Some(i) ->
+    name = v.getIter().substring(i);
+    while (i.current().map(Chars.isWhitespace).default(false)) {
+      _ = i.next();
+    };
+    Some((name, i.substring(v.getEndIter())))
+  | None() -> None()
+  }
+}
+
+fun write(command: String): Result<void, String> {
+  usage = () ~> {
+    print_string("write <input name> <input values>.");
+    print_string("  Where <input values> is [[k1, [v1, v2]]]");
+  };
+  if (command == "") {
+    usage();
+    Success(void)
+  } else {
+    token(command) match {
+    | Some((name, values)) ->
+      name.search(ch ~> !validNameChar(ch)) match {
+      | Some _ -> return Failure(`Invalid  input name '${name}'.`)
+      | _ -> void
+      };
+      try {
+        json = SKJSON.decode(values, x ~> x);
+        debug(json);
+        obstack = SKStore.newObstack();
+        res = ServiceInstance.update(name, Array[]) match {
+        | Success _ -> Success(void)
+        | Failure(e) -> Failure(e.getMessage())
+        };
+        SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
+      } catch {
+      | e @ .Exception _ -> Failure(e.getMessage())
+      }
+    | _ ->
+      usage();
+      Failure(`Invalid write command.`)
+    }
+  }
+}
+
+const commands: Array<(String, (String) ~> Result<void, String>)> = Array[
+  ("write ", write),
+  ("w ", write),
+];
+
+fun trimRight(v: String): String {
+  v.searchRight(ch ~> ch != '\n' && ch != '\r') match {
+  | Some(i) ->
+    _ = i.next();
+    v.getIter().substring(i)
+  | None() -> ""
+  }
+}
+
+fun terminal(): void {
+  obstack = SKStore.newObstack();
+  services = mutable Vector[];
+  #forEachFunction (@skipruntime_service, #function, #functionName) {
+    services.push(#function())
+  };
+  if (services.isEmpty()) {
+    print_error("No service found.");
+    SKStore.destroyObstack(obstack);
+    skipExit(1)
+  };
+  if (services.size() > 1) {
+    print_error("Multiple services are not managed.");
+    SKStore.destroyObstack(obstack);
+    skipExit(1)
+  };
+  service = services[0];
+  initService(service) match {
+  | Failure(e) ->
+    print_error(e.getMessage());
+    SKStore.destroyObstack(obstack);
+    skipExit(1)
+  | Success _ -> void
+  };
+  exited = false;
+  stdin = mutable IO.BufferedReader(IO.stdin());
+  while (!exited) {
+    print_raw("> ");
+    flushStdout();
+    line = stdin.read_line() match {
+    | Failure(e) ->
+      print_error(e.getMessage());
+      break void
+    | Success(v) -> trimRight(v)
+    };
+    line match {
+    | "exit" -> !exited = true
+    | command ->
+      info: ?((String) ~> Result<void, String>, String) = for (c in commands) {
+        if (command.startsWith(c.i0)) {
+          remaining = command.sub(
+            command.getIter().drop(c.i0.chars().size()),
+            command.chars().size(),
+          );
+          break Some((c.i1, remaining))
+        };
+        if (command == c.i0.trimRight()) {
+          break Some((c.i1, ""))
+        }
+      } else {
+        None()
+      };
+      info match {
+      | Some(c) ->
+        c.i0(c.i1) match {
+        | Failure(e) -> print_error(e)
+        | _ -> void
+        }
+      | _ -> if (command != "") print_string(`Unknown command ${command}.`)
+      }
+    }
+  };
+  SKStore.destroyObstack(obstack);
+}
+
+module end;
