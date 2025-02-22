@@ -165,13 +165,13 @@ class ExternExternalService(
 ) extends ExternalService {
   fun subscribe(
     instance: String,
-    collection: CollectionWriter,
+    writer: Writer,
     resource: String,
     params: Parameters,
   ): void {
     subscribeOfExternalService(
       this.eptr.value,
-      collection.dirName.toString(),
+      writer.getId(),
       instance,
       resource,
       (params as JSONParams _).json,
@@ -332,13 +332,13 @@ fun createService(
   resources: mutable Map<String, ResourceBuilder>,
   externalServices: mutable Map<String, ExternalService>,
 ): ExternService {
-  inputs = mutable Vector[];
+  inputs = mutable Map[];
   jsInputs match {
   | SKJSON.CJObject(fields) ->
     for (fieldName => field in fields) {
-      inputs.push(
-        Input(
-          fieldName,
+      inputs.add(
+        fieldName,
+        InitialData(
           SKJSON.expectArray(field).map(v -> {
             e = SKJSON.expectArray(v);
             (e[0], SKJSON.expectArray(e[1]))
@@ -351,7 +351,7 @@ fun createService(
   ExternService(
     SKStore.ExternalPointer::create(service, deleteService),
     resources.chill(),
-    JSONInputs(inputs.toArray()),
+    inputs.chill(),
     externalServices.chill(),
   )
 }
@@ -367,18 +367,19 @@ native fun createGraphOfService(
   collections: SKJSON.CJObject,
 ): SKJSON.CJObject;
 
-class JSONInputs(
-  inputs: Array<Input<SKJSON.CJSON, SKJSON.CJSON>>,
-) extends Inputs {
-  fun each(fn: Input<SKStore.Key, SKStore.File> -> void): void {
-    this.inputs.each(i -> fn(i.unTyped()))
-  }
-}
-
 class ExternService(
   eptr: SKStore.ExternalPointer,
   resources: Map<String, ResourceBuilder>,
+  initialData_: Map<String, InitialData<SKJSON.CJSON, SKJSON.CJSON>>,
+  externalServices_: Map<String, ExternalService>,
 ) extends Service {
+  fun eachInitialData(fn: (String, Data) -> void): void {
+    this.initialData_.each(fn)
+  }
+
+  fun externalServices(): Map<String, ExternalService> {
+    this.externalServices_
+  }
   //
   fun createGraph(
     inputs: Map<String, Collection<SKStore.Key, SKStore.File>>,

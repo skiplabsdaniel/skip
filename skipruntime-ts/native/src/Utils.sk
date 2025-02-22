@@ -246,4 +246,15 @@ class FileValueConverter<V: SKStore.File>(
   }
 }
 
+class UResource<K: frozen, V: frozen, CS: Collections>(
+  resource: TResource<K, V, CS>,
+  converter: CollectionsConverter<CS>,
+) extends Resource {
+  fun instantiate(
+    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Collection<SKStore.Key, SKStore.File> {
+    this.resource.instantiate(this.converter.fromMap(collections)).unTyped()
+  }
+}
+
 module end;
