@@ -1,7 +1,13 @@
 [package]
 name = "sum-example"
-version = "0.1.0"
+version = "0.0.1"
 
 [dependencies]
 skipruntime = { path = "../../native" }
 
+[build-dependencies]
+skbuild = { path = "../../../skiplang/skbuild" }
+
+[[bin]]
+name = "sksumcmd"
+main = "SkipRuntime.terminal"

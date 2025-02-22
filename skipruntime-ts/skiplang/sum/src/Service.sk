@@ -139,7 +139,7 @@ class Service() extends SR.TService<Inputs, Inputs> uses SR.WithServiceData {
   }
 }
 
-@service
+@skipruntime_service
 fun getService(): SR.Service {
   Service()
 }
