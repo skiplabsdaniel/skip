@@ -1,0 +1,20 @@
+[package]
+name = "skipruntime_server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libc = "0.2.85"
+actix-web = "4"
+#sse
+actix-web-lab = "0.18.5"
+parking_lot = "0.12.1"
+futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
+
+[dependencies.uuid]
+version = "1.15.0"
+features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+]
