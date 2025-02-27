@@ -1,0 +1,69 @@
+processors:
+  resource:
+      attributes:
+      - key: service.name
+        value: "skiplabs-host-metrics"
+        action: insert
+      - key: service.instance.id
+        value: "627cc493-f310-47de-96bd-71410b7dec09"
+        action: insert
+      - key: service.namespace
+        value: "skdb.server"
+        action: insert
+  batch:
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:4318
+  hostmetrics:
+    collection_interval: 10s
+    scrapers:
+      # CPU utilization metrics
+      cpu:
+      # Disk I/O metrics
+      disk:
+      # File System utilization metrics
+      filesystem:
+      # CPU load metrics
+      load:
+      # Memory utilization metrics
+      memory:
+      # Network interface I/O metrics & TCP connection metrics
+      network:
+      # Paging/Swap space utilization and I/O metrics
+      paging:
+
+exporters:
+  debug:
+  otlp/uptrace:
+    endpoint: localhost:14317
+    tls: { insecure: true }
+    headers: { 'uptrace-dsn': 'http://project2_secret_token@localhost:14317/2' }
+  otlp/uptrace2:
+    endpoint: localhost:14317
+    tls: { insecure: true }
+    headers: { 'uptrace-dsn': 'http://skdb_secret_token@localhost:14317/3' }
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, otlp/uptrace2]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, otlp/uptrace2]
+    metrics/host:
+      receivers: [hostmetrics]
+      processors: [batch, resource]
+      exporters: [debug, otlp/uptrace]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, otlp/uptrace2]
+  telemetry:
+    logs:
+      level: "debug"
