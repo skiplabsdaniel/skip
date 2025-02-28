@@ -4,6 +4,8 @@ use actix_web::rt::time::interval;
 use actix_web_lab::sse::{self, ChannelStream, Sse};
 use parking_lot::Mutex;
 use std::collections::HashMap;
+#[path = "./ffi.rs"]
+mod ffi;
 
 #[derive(Debug, Clone, Default)]
 struct ClientsInner {
@@ -35,6 +37,22 @@ impl Clients {
         });
     }
 
+    async fn check_client(&self, uuid: &String) {
+        match self.inner.lock().clients.get(uuid) {
+            Some(client) => {
+                if !(client
+                    .send(sse::Event::Comment("ping".into()))
+                    .await
+                    .is_ok())
+                {
+                    println!("To close {};", uuid);
+                    self.inner.lock().clients.remove(uuid);
+                }
+            }
+            None => (),
+        }
+    }
+
     /// Removes all non-responsive clients from broadcast list.
     pub async fn check_stale_clients(&self) {
         let clients = self.inner.lock().clients.clone();
@@ -56,8 +74,11 @@ impl Clients {
 
     /// Registers client with clients, returning an SSE response body.
     pub async fn new_client(&self, uuid: String) -> Sse<ChannelStream> {
+        self.check_client(&uuid).await;
         let (tx, rx) = sse::channel(10);
         self.inner.lock().clients.insert(uuid, tx);
         rx
     }
 }
+
+//RUSTFLAGS="-C link-args=-Wl,-rpath,/the/lib/path" cargo build

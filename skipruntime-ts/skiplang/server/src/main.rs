@@ -1,4 +1,6 @@
 mod clients;
+#[path = "./ffi.rs"]
+mod ffi;
 use actix_web::http::header::HeaderName;
 use actix_web::{App, HttpRequest, HttpResponse, HttpServer, Responder, get, post, web};
 use actix_web_lab::extract::Path;
@@ -15,8 +17,6 @@ pub async fn sse_client(
     state: web::Data<AppState>,
     Path((uuid,)): Path<(String,)>,
 ) -> impl Responder {
-    println!("hello there!\n");
-    state.clients.check_stale_clients().await;
     state.clients.new_client(uuid).await
 }
 
@@ -52,7 +52,13 @@ pub async fn instanciate_resource(
 ) -> impl Responder {
     if check_content_type("application/json", req) {
         let uuid = Uuid::new_v4();
-        HttpResponse::Created().body(format!("{resource} {uuid} {data}\n"))
+        match ffi::instantiate_resource(uuid.to_string(), resource, data) {
+            Ok(()) => HttpResponse::Created().finish(),
+            Err(e) => {
+                eprintln!("{}", e.msg);
+                HttpResponse::InternalServerError().finish()
+            }
+        }
     } else {
         HttpResponse::NotAcceptable().finish()
     }
