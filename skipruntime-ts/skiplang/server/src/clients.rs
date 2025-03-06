@@ -1,11 +1,13 @@
+#[warn(dead_code)]
 use std::{sync::Arc, time::Duration};
 
+use crate::ffi;
 use actix_web::rt::time::interval;
-use actix_web_lab::sse::{self, ChannelStream, Sse};
+use actix_web_lab::sse::{self, ChannelStream, SendError, Sse};
+use log::error;
 use parking_lot::Mutex;
 use std::collections::HashMap;
-#[path = "./ffi.rs"]
-mod ffi;
+use tokio::{self, spawn};
 
 #[derive(Debug, Clone, Default)]
 struct ClientsInner {
@@ -14,6 +16,31 @@ struct ClientsInner {
 
 pub struct Clients {
     inner: Mutex<ClientsInner>,
+}
+
+#[allow(dead_code)]
+pub struct SseNotifier {
+    sender: sse::Sender,
+}
+
+impl ffi::Notifier for SseNotifier {
+    fn update(&self, values: String, watermark: String, is_initial: bool) -> Result<(), SendError> {
+        let event = match is_initial {
+            true => "init",
+            false => "update",
+        };
+        actix_web::rt::System::new().block_on(
+            self.sender
+                .send(sse::Data::new(values).event(event).id(watermark)),
+        )
+    }
+
+    fn close(&self) -> () {
+        let clone = self.sender.clone();
+        spawn(async move {
+            drop(clone); // drop used to close the stream
+        });
+    }
 }
 
 impl Clients {
@@ -45,8 +72,10 @@ impl Clients {
                     .await
                     .is_ok())
                 {
-                    println!("To close {};", uuid);
-                    self.inner.lock().clients.remove(uuid);
+                    match ffi::unsubscribe(uuid.to_string()) {
+                        Ok(()) => _ = self.inner.lock().clients.remove(uuid),
+                        Err(e) => error!("{}", e.msg),
+                    }
                 }
             }
             None => (),
@@ -65,17 +94,24 @@ impl Clients {
             {
                 ok_clients.insert(uuid, client.clone());
             } else {
-                println!("To close {};", uuid);
-                // close
+                match ffi::unsubscribe(uuid.to_string()) {
+                    Ok(()) => (),
+                    Err(e) => error!("{}", e.msg),
+                }
             }
         }
         self.inner.lock().clients = ok_clients;
     }
 
     /// Registers client with clients, returning an SSE response body.
-    pub async fn new_client(&self, uuid: String) -> Sse<ChannelStream> {
+    pub async fn new_client(
+        &self,
+        uuid: String,
+        mut subscriber: ffi::Subscriber<SseNotifier>,
+    ) -> Sse<ChannelStream> {
         self.check_client(&uuid).await;
         let (tx, rx) = sse::channel(10);
+        subscriber.init(SseNotifier { sender: tx.clone() });
         self.inner.lock().clients.insert(uuid, tx);
         rx
     }
