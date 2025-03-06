@@ -10,6 +10,8 @@ actix-web = "4"
 actix-web-lab = "0.18.5"
 parking_lot = "0.12.1"
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
+log = "0.4.26"
+tokio = "1.43.0"
 
 [dependencies.uuid]
 version = "1.15.0"
