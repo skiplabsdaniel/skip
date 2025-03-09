@@ -107,11 +107,11 @@ impl Clients {
     pub async fn new_client(
         &self,
         uuid: String,
-        mut subscriber: ffi::Subscriber<SseNotifier>,
+        init: Box<dyn Fn(SseNotifier) + Send + Sync>,
     ) -> Sse<ChannelStream> {
         self.check_client(&uuid).await;
         let (tx, rx) = sse::channel(10);
-        subscriber.init(SseNotifier { sender: tx.clone() });
+        init(SseNotifier { sender: tx.clone() });
         self.inner.lock().clients.insert(uuid, tx);
         rx
     }

@@ -12,6 +12,7 @@ parking_lot = "0.12.1"
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 log = "0.4.26"
 tokio = "1.43.0"
+lazy_static = "1.5.0"
 
 [dependencies.uuid]
 version = "1.15.0"

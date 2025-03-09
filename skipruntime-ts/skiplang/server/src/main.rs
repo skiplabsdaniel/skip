@@ -3,7 +3,6 @@ mod error;
 mod ffi;
 mod worker;
 
-use crate::clients::SseNotifier;
 use actix_web::http::header::{ContentType, HeaderName};
 use actix_web::{App, Either, HttpRequest, HttpResponse, HttpServer, Responder, web};
 use actix_web_lab::extract::Path;
@@ -29,7 +28,7 @@ pub async fn sse_client(state: web::Data<AppState>, Path((uuid,)): Path<(String,
     let uuid_clone = uuid.clone();
     match state
         .worker
-        .submit::<_, _>(move || ffi::subscribe::<SseNotifier>(uuid_clone.to_string()))
+        .submit::<_, _>(move || ffi::subscribe(uuid_clone.to_string(), None))
     {
         Ok(sub) => {
             let client = state.clients.new_client(uuid, sub).await;
