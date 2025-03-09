@@ -9,8 +9,8 @@ class IdentityMapper<K: frozen, V: frozen>(
     key: K,
     values: mutable SKStore.NonEmptyIterator<V>,
   ): mutable Iterator<(K, V)> {
-    vec = mutable Vector[(key, values.first)];
-    values.iter.each(v -> vec.push((key, v)));
+    vec = mutable Vector[];
+    values.values().each(v -> vec.push((key, v)));
     vec.iterator()
   }
 
@@ -52,7 +52,7 @@ class SKStoreMapper<K1: frozen, V1: frozen, K2: frozen, V2: frozen>(
       mc = this.mapper.converters();
       for (entry in this.mapper.mapEntry(
         this.converters.key.fromKey(key),
-        values.map(this.converters.value.fromFile),
+        values.nonEmptyMap(this.converters.value.fromFile),
       )) {
         writer.append(mc.key.toKey(entry.i0), mc.value.toFile(entry.i1))
       };
