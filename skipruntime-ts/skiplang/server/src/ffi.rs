@@ -2,9 +2,10 @@
 use crate::clients::SseNotifier;
 use actix_web_lab::sse::SendError;
 use lazy_static::lazy_static;
+use libc::free;
 use log;
 use std::collections::HashMap;
-use std::ffi::{CString, c_char, c_void};
+use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::sync::Mutex;
 use std::{thread, time};
 
@@ -25,31 +26,55 @@ pub fn register_notifier(notifier: Box<dyn MutNotifier + Send + Sync>) -> u32 {
     id
 }
 
-fn unregister_notifier(id: u32) {
+#[unsafe(no_mangle)]
+pub extern "C" fn free_string(s: *mut c_char) {
+    if s.is_null() {
+        return;
+    }
+    unsafe {
+        drop(CString::from_raw(s));
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn Skip_unregister_notifier(id: u32) {
     let mut callbacks = CALLBACKS.lock().unwrap();
     callbacks.remove(&id);
 }
 
-fn update_notifier(id: u32, values: String, watermark: String, is_initial: bool) -> String {
+#[unsafe(no_mangle)]
+pub extern "C" fn Skip_notifier__notify(
+    id: u32,
+    skvalues: *const c_char,
+    skwatermark: *const c_char,
+    is_initial: c_int,
+) -> *mut c_char {
+    let values = copy_c_string(skvalues);
+    let watermark = copy_c_string(skwatermark);
     let mut callbacks = CALLBACKS.lock().unwrap();
-    if let Some(callback) = callbacks.get_mut(&id) {
-        match callback.update(values, watermark, is_initial) {
+    let result = if let Some(callback) = callbacks.get_mut(&id) {
+        match callback.update(values, watermark, is_initial != 0) {
             Ok(()) => "".to_string(),
             Err(e) => e.to_string(),
         }
     } else {
         "Invalid callback '{}'".to_string()
-    }
+    };
+    let s = CString::new(result).unwrap();
+    s.into_raw()
 }
 
-fn close_notifier(id: u32) -> String {
+#[unsafe(no_mangle)]
+pub extern "C" fn Skip_notifier__close(id: u32) -> *mut c_char {
     let mut callbacks = CALLBACKS.lock().unwrap();
-    if let Some(callback) = callbacks.get_mut(&id) {
+    let result = if let Some(callback) = callbacks.get_mut(&id) {
         callback.close();
         "".to_string()
     } else {
         "Invalid callback '{}'".to_string()
-    }
+    };
+    let s = CString::new(result).unwrap();
+    s.into_raw()
 }
 
 fn init_notifier(id: u32, notifier: SseNotifier) -> () {
@@ -146,30 +171,48 @@ impl MutNotifier for Subscriber {
 }
 
 unsafe extern "C" {
-    fn SkipRuntime_instantiateResource(
+    fn Skip_instantiate_resource(
         identifier: *const c_char,
         resource: *const c_char,
         parameters: *const c_char,
     ) -> *mut c_char;
-    fn SkipRuntime_closeResourceInstance(identifier: *const c_char) -> *mut c_char;
-    fn SkipRuntime_subscribe(
+    fn Skip_close_resource_instance(identifier: *const c_char) -> *mut c_char;
+    fn Skip_subscribe(
         identifier: *const c_char,
-        notifier: *const c_void,
+        notifier: u32,
         watermark: *const c_char,
     ) -> *mut c_char;
-    fn SkipRuntime_unsubscribe(identifier: *const c_char) -> *mut c_char;
-    fn SkipRuntime_getAll(
+    fn Skip_unsubscribe(identifier: *const c_char) -> *mut c_char;
+    fn Skip_get_all(
         resource: *const c_char,
         parameters: *const c_char,
         request: *const c_char,
     ) -> *mut c_char;
-    fn SkipRuntime_getArray(
+    fn Skip_get_array(
         resource: *const c_char,
         key_parameters: *const c_char,
         request: *const c_char,
     ) -> *mut c_char;
-    fn SkipRuntime_update(input: *const c_char, data: *const c_char) -> *mut c_char;
-    fn SkipRuntime_createNotifier(handle: u32) -> *const c_void;
+    fn Skip_set_input(input: *const c_char, data: *const c_char) -> *mut c_char;
+}
+
+fn copy_c_string(s: *const c_char) -> String {
+    unsafe {
+        let c_str = CStr::from_ptr(s);
+        let rust_str = c_str.to_str().expect("Bad encoding");
+        let owned = rust_str.to_owned();
+        owned
+    }
+}
+
+fn copy_c_string_and_free(s: *mut c_char) -> String {
+    unsafe {
+        let c_str = CStr::from_ptr(s);
+        let rust_str = c_str.to_str().expect("Bad encoding");
+        let owned = rust_str.to_owned();
+        free(s as *mut c_void);
+        owned
+    }
 }
 
 pub fn instantiate_resource(
@@ -181,15 +224,12 @@ pub fn instantiate_resource(
         let c_identifier = CString::new(identifier).expect("CString::new failed");
         let c_resource = CString::new(resource).expect("CString::new failed");
         let c_parameters = CString::new(parameters).expect("CString::new failed");
-        let result = SkipRuntime_instantiateResource(
+        let result = Skip_instantiate_resource(
             c_identifier.as_ptr(),
             c_resource.as_ptr(),
             c_parameters.as_ptr(),
         );
-        // Supposed to free the result mut char *
-        let c_str = CString::from_raw(result);
-        let rust_str = c_str.to_str().expect("Bad encoding");
-        let owned = rust_str.to_owned();
+        let owned = copy_c_string_and_free(result);
         if owned.is_empty() {
             return Ok(());
         } else {
@@ -201,7 +241,7 @@ pub fn instantiate_resource(
 pub fn close_resource_instance(identifier: String) -> Result<(), error::SkipError> {
     unsafe {
         let c_identifier = CString::new(identifier).expect("CString::new failed");
-        let result = SkipRuntime_closeResourceInstance(c_identifier.as_ptr());
+        let result = Skip_close_resource_instance(c_identifier.as_ptr());
         // Supposed to free the result mut char *
         let c_str = CString::from_raw(result);
         let rust_str = c_str.to_str().expect("Bad encoding");
@@ -229,8 +269,7 @@ pub fn subscribe(
             _ => 0x0 as *const u8,
         };
         let handle = register_notifier(Box::new(Subscriber::new()));
-        let sknotifier = SkipRuntime_createNotifier(handle);
-        let result = SkipRuntime_subscribe(c_identifier.as_ptr(), sknotifier, c_watermark_ptr);
+        let result = Skip_subscribe(c_identifier.as_ptr(), handle, c_watermark_ptr);
         // Supposed to free the result mut char *
         let c_str = CString::from_raw(result);
         let rust_str = c_str.to_str().expect("Bad encoding");
@@ -248,7 +287,7 @@ pub fn subscribe(
 pub fn unsubscribe(identifier: String) -> Result<(), error::SkipError> {
     unsafe {
         let c_identifier = CString::new(identifier).expect("CString::new failed");
-        let result = SkipRuntime_unsubscribe(c_identifier.as_ptr());
+        let result = Skip_unsubscribe(c_identifier.as_ptr());
         // Supposed to free the result mut char *
         let c_str = CString::from_raw(result);
         let rust_str = c_str.to_str().expect("Bad encoding");
@@ -306,7 +345,7 @@ where
 
 pub fn resource_snapshot(resource: String, parameters: String) -> Result<String, error::SkipError> {
     resource_snapshot_(resource, parameters, |p1, p2, p3| unsafe {
-        SkipRuntime_getAll(p1, p2, p3)
+        Skip_get_all(p1, p2, p3)
     })
 }
 
@@ -315,15 +354,15 @@ pub fn resource_snapshot_lookup(
     key_parameters: String,
 ) -> Result<String, error::SkipError> {
     resource_snapshot_(resource, key_parameters, |p1, p2, p3| unsafe {
-        SkipRuntime_getArray(p1, p2, p3)
+        Skip_get_array(p1, p2, p3)
     })
 }
 
-pub fn input(input: String, data: String) -> Result<(), error::SkipError> {
+pub fn set_input(input: String, data: String) -> Result<(), error::SkipError> {
     unsafe {
         let c_input = CString::new(input).expect("CString::new failed");
         let c_data = CString::new(data).expect("CString::new failed");
-        let result = SkipRuntime_update(c_input.as_ptr(), c_data.as_ptr());
+        let result = Skip_set_input(c_input.as_ptr(), c_data.as_ptr());
         // Supposed to free the result mut char *
         let c_str = CString::from_raw(result);
         let rust_str = c_str.to_str().expect("Bad encoding");

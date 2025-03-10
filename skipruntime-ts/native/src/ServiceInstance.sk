@@ -228,6 +228,8 @@ fun close(): Result<Array<Float>, .Exception> {
   SKStore.runWithResult(SR.closeService_)
 }
 
+
+/* 
 base class ValuesParser {
   fun parse(values: String): Array<(SKStore.Key, Array<SKStore.File>)>;
 }
@@ -324,6 +326,14 @@ class .ServiveInstance(
     res = close();
     SKStore.destroyObstackWithValue(obstack, List[res]).getHead()
   }
+}
+
+*/
+
+fun getResourceBuilder(
+  resource: String,
+): Result<SR.ResourceBuilder,.Exception> {
+  SKStore.runWithResult(context ~> SR.getResourceBuilder(context, resource))
 }
 
 module end;

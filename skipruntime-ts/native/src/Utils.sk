@@ -252,7 +252,17 @@ class ServiceData{
   externalServices: Map<String, ExternalService>,
 }
 
+class EmptyParameters() extends Parameters {
+  fun toString(): String {
+    ""
+  }
+}
+
 class NoParamsBuilder(resource: Resource) extends ResourceBuilder {
+  fun parseParameters(_params: String): Parameters {
+    EmptyParameters()
+  }
+
   fun produce(_params: Parameters): Resource {
     this.resource
   }
@@ -269,6 +279,31 @@ trait WithServiceData {
 
   macro fun externalServices(): Map<String, ExternalService> {
     static::data.externalServices
+  }
+}
+
+class JSONParams(json: SKJSON.CJSON) extends Parameters {
+  fun toString(): String {
+    this.json.prettyPrint()
+  }
+}
+
+class JSONError(error: SKJSON.CJSON) extends IError {
+  fun toString(): String {
+    this.error.prettyPrint()
+  }
+}
+
+trait SKJSONParameters {
+  fun fromParameters(params: Parameters): SKJSON.CJSON {
+    params match {
+      | JSONParams(json) -> json
+      | _ -> invariant_violation("Must be a JSONParams")
+    }
+  }
+
+  fun parseParameters(params: String): Parameters {
+    JSONParams(SKJSON.decode(params, x ~> x))
   }
 }
 

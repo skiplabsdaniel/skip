@@ -41,7 +41,7 @@ class Plus() extends SR.Mapper<String, Int, String, Int> {
     key: String,
     values: mutable SKStore.NonEmptyIterator<Int>,
   ): mutable Iterator<(String, Int)> {
-    val = values.collect(Array).reduce((p, c) ~> p + c, 0);
+    val = values.values().reduce((p, c) ~> p + c, 0);
     Array[(key, val)].iterator();
   }
 
@@ -61,7 +61,7 @@ class Minus() extends SR.Mapper<String, Indexed, String, Int> {
       | _ -> Some(c.value)
       }
     };
-    res = values.collect(Array).sorted().reduce(acc, None()) match {
+    res = values.values().collect(Array).sorted().reduce(acc, None()) match {
     | Some(val) -> Array[(key, val)]
     | _ -> Array[]
     };

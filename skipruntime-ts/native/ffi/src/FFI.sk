@@ -279,27 +279,11 @@ fun createResourceBuilder(resourceBuilder: UInt32): ExternResourceBuilder {
   )
 }
 
-class JSONParams(json: SKJSON.CJSON) extends Parameters {
-  fun toString(): String {
-    this.json.prettyPrint()
-  }
-}
-
-class JSONError(error: SKJSON.CJSON) extends IError {
-  fun toString(): String {
-    this.error.prettyPrint()
-  }
-}
-
 class ExternResourceBuilder(
   eptr: SKStore.ExternalPointer,
-) extends TResourceBuilder<SKJSON.CJSON> {
+) extends TResourceBuilder<SKJSON.CJSON> uses SKJSONParameters {
   fun build(params: SKJSON.CJSON): Resource {
     buildOfResourceBuilder(this.eptr.value, params)
-  }
-
-  fun fromParameters(params: Parameters): SKJSON.CJSON {
-    (params as JSONParams _).json
   }
 }
 

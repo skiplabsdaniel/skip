@@ -3,11 +3,7 @@ name = "sum-example"
 version = "0.0.1"
 
 [dependencies]
-skipruntime = { path = "../../native" }
+services-ffi = { path = "../services-ffi" }
 
-[build-dependencies]
-skbuild = { path = "../../../skiplang/skbuild" }
-
-[[bin]]
-name = "sksumcmd"
-main = "SkipRuntime.terminal"
+[lib]
+type = ["cdylib"]

@@ -56,7 +56,7 @@ fn check_content_type(supported_type: &str, req: HttpRequest) -> bool {
     }
 }
 
-pub async fn instanciate_resource(
+pub async fn instantiate_resource(
     state: web::Data<RestState>,
     Path((resource,)): Path<(String,)>,
     data: String,
@@ -154,7 +154,7 @@ pub async fn input(
     if check_content_type("application/json", req) {
         match state
             .worker
-            .submit::<_, _>(move || ffi::input(collection.to_string(), data.to_string()))
+            .submit::<_, _>(move || ffi::set_input(collection.to_string(), data.to_string()))
         {
             Ok(()) => HttpResponse::Ok().finish(),
             Err(e) => {
@@ -178,7 +178,7 @@ async fn main() -> std::io::Result<()> {
             App::new().app_data(web::Data::new(RestState { worker: worker1.clone() }))
             .route(
                 "/v1/streams/{resource}",
-                web::post().to(instanciate_resource),
+                web::post().to(instantiate_resource),
             )
             .route(
                 "/v1/streams/{uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}",

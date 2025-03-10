@@ -1,0 +1,18 @@
+@debug
+fun main(): void {
+  profile = Environ.var("PROFILE");
+
+  profile match {
+  | "release" ->
+    Environ.set_var("DEBUG", "false");
+    Environ.set_var("OPT_LEVEL", "3")
+  | "debug" | "dev" ->
+    Environ.set_var("DEBUG", "true");
+    Environ.set_var("OPT_LEVEL", "0")
+  | p -> invariant_violation(`Unrecognized profile ${p}`)
+  };
+
+  srcs = Array["cc/context.cpp", "cc/ffi.cpp"];
+  srcs.each(src -> print_string(`skargo:rerun-if-changed=${src}`));
+  Cc.Build().flags(Cc.kRecommendedCflags).files(srcs).compile("services-ffi")
+}
