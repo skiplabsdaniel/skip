@@ -181,10 +181,13 @@ fun updateOfCollectionWriter(
   };
 }
 
-@export("SkipRuntime_CollectionWriter__loading")
-fun loadingOfCollectionWriter(collection: String): Float {
+@export("SkipRuntime_CollectionWriter__initialized")
+fun initializedOfCollectionWriter(
+  collection: String,
+  error: SKJSON.CJSON,
+): Float {
   writer = CollectionWriter(SKStore.DirName::create(collection));
-  writer.loading() match {
+  writer.initiliazed(error) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -278,6 +281,37 @@ fun createIdentifier(request: String): Identifier {
 class ExternChecker(eptr: SKStore.ExternalPointer) extends Checker {
   fun check(request: String): void {
     checkOfChecker(this.eptr.value, request)
+  }
+}
+
+/************  VoidExecutor ****************/
+
+@cpp_extern("SkipRuntime_VoidExecutor__resolve")
+@debug
+native fun resolveOfVoidExecutor(executor: UInt32): void;
+
+@cpp_extern("SkipRuntime_VoidExecutor__reject")
+@debug
+native fun rejectOfVoidExecutor(executor: UInt32, errorHandle: Float): void;
+
+@cpp_extern("SkipRuntime_deleteVoidExecutor")
+@debug
+native fun deleteVoidExecutor(mapper: UInt32): void;
+
+@export("SkipRuntime_createVoidExecutor")
+fun createVoidExecutor(executor: UInt32): ExternVoidExecutor {
+  ExternVoidExecutor(
+    SKStore.ExternalPointer::create(executor, deleteVoidExecutor),
+  )
+}
+
+class ExternVoidExecutor(eptr: SKStore.ExternalPointer) extends VoidExecutor {
+  fun resolve(): void {
+    resolveOfVoidExecutor(this.eptr.value)
+  }
+
+  fun reject(exc: .Exception): void {
+    rejectOfVoidExecutor(this.eptr.value, getErrorHdl(exc))
   }
 }
 
@@ -572,9 +606,16 @@ fun createResourceOfRuntime(
   identifier: String,
   resource: String,
   params: SKJSON.CJSON,
+  executor: VoidExecutor,
 ): Float {
   SKStore.runWithResult(context ~> {
-    createReactiveResource(context, identifier, resource, params)
+    createReactiveResource(
+      context,
+      identifier,
+      resource,
+      params,
+      Some(executor),
+    )
   }) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)

@@ -83,8 +83,8 @@ export class PostgresExternalService implements ExternalService {
    * @param params.syncHistoricData - (**Optional**) Boolean flag, `true` by default.  If false, Skip will ignore pre-existing data and only synchronize updates **after** subscription.
    * @param callbacks - Callbacks to react on error/loading/update.
    * @param callbacks.error - Error callback.
-   * @param callbacks.loading - Loading callback.
    * @param callbacks.update - Update callback.
+   * @param callbacks.initialized - Update initialized.
    * @returns {void}
    */
   subscribe(
@@ -100,7 +100,7 @@ export class PostgresExternalService implements ExternalService {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      loading: () => void;
+      initialized: (error?: Json) => void;
     },
   ): void {
     const table = resource;
@@ -115,7 +115,6 @@ export class PostgresExternalService implements ExternalService {
       if (!(params.syncHistoricData ?? true)) {
         callbacks.update([], true);
       } else {
-        callbacks.loading();
         const init = await this.client.query(
           format("SELECT * FROM %I;", table),
         );
@@ -168,11 +167,7 @@ FOR EACH ROW EXECUTE FUNCTION %I();`,
     };
 
     const setup = async () => {
-      await initData().catch(
-        error(
-          `Uncaught error during Skip async initialization for Postgres table ${table}:`,
-        ),
-      );
+      await initData();
 
       this.client.on("notification", (msg) => {
         if (msg.channel == instance && msg.payload !== undefined) {
@@ -186,16 +181,17 @@ FOR EACH ROW EXECUTE FUNCTION %I();`,
           );
         }
       });
-      await setupPgNotify().catch(
-        error(`Uncaught error setting up Postgres triggers on ${table}:`),
-      );
+      await setupPgNotify();
     };
 
-    setup().catch(
-      error(
-        `Uncaught error during async Skip update of Postgres table ${table}`,
-      ),
-    );
+    setup()
+      .then(() => callbacks.initialized())
+      .catch((e: unknown) => {
+        callbacks.initialized(JSON.stringify(e, Object.getOwnPropertyNames(e)));
+        error(
+          `Uncaught error during async Skip update of Postgres table ${table}`,
+        );
+      });
   }
 
   unsubscribe(instance: string): void {

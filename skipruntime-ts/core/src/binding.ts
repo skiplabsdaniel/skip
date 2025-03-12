@@ -32,6 +32,11 @@ export interface Checker {
   check(request: string): void;
 }
 
+export type VoidExecutor = {
+  resolve: () => void;
+  reject: (reason: Error) => void;
+};
+
 export interface FromBinding {
   // NonEmptyIterator
   SkipRuntime_NonEmptyIterator__next(
@@ -73,7 +78,10 @@ export interface FromBinding {
     error: Pointer<Internal.CJSON>,
   ): Handle<Error>;
 
-  SkipRuntime_CollectionWriter__loading(name: string): Handle<Error>;
+  SkipRuntime_CollectionWriter__initialized(
+    name: string,
+    error: Pointer<Internal.CJSON>,
+  ): Handle<Error>;
 
   // Resource
 
@@ -186,6 +194,7 @@ export interface FromBinding {
     identifier: string,
     resource: string,
     jsonParams: Pointer<Internal.CJObject>,
+    executor: Pointer<Internal.VoidExecutor>,
   ): Handle<Error>;
 
   SkipRuntime_Runtime__getAll(
@@ -251,4 +260,10 @@ export interface FromBinding {
   SkipRuntime_createIdentifier(supplier: string): Pointer<Internal.Request>;
 
   SkipRuntime_createChecker(ref: Handle<Checker>): Pointer<Internal.Request>;
+
+  // VoidExecutor
+
+  SkipRuntime_createVoidExecutor(
+    ref: Handle<VoidExecutor>,
+  ): Pointer<Internal.VoidExecutor>;
 }
