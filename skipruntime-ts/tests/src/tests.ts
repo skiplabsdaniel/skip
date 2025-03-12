@@ -1201,8 +1201,10 @@ export function initTests(
       [0, [5]],
       [1, [10]],
     ]);
-    const constantResourceId = "unsafe.identifier";
-    await service.instantiateResource(constantResourceId, resource, {});
+    const constantResourceId1 = "unsafe.identifier.1";
+    await service.instantiateResource(constantResourceId1, resource, {});
+    const constantResourceId2 = "unsafe.identifier.2";
+    await service.instantiateResource(constantResourceId2, resource, {});
     try {
       expect(service.getAll(resource).payload).toEqual([
         [0, [[10, 15]]],
@@ -1224,7 +1226,8 @@ export function initTests(
         [1, [[20, 31]]],
       ]);
     } finally {
-      service.closeResourceInstance(constantResourceId);
+      service.closeResourceInstance(constantResourceId1);
+      service.closeResourceInstance(constantResourceId2);
       await service.close();
     }
   });
