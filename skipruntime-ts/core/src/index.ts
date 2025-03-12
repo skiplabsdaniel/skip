@@ -50,6 +50,7 @@ import {
   ResourceBuilder,
   type Notifier,
   type Checker,
+  type VoidExecutor,
   type Handle,
   type FromBinding,
 } from "./binding.js";
@@ -353,10 +354,11 @@ class CollectionWriter<K extends Json, V extends Json> {
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
 
-  loading(): void {
+  initialized(error?: Json): void {
     const loading_ = () => {
-      return this.refs.binding.SkipRuntime_CollectionWriter__loading(
+      return this.refs.binding.SkipRuntime_CollectionWriter__initialized(
         this.collection,
+        this.refs.skjson.exportJSON(error ?? null),
       );
     };
     const errorHdl = this.refs.needGC()
@@ -442,7 +444,7 @@ export type GetResult<T> = {
 
 export type Executor<T> = {
   resolve: (value: T) => void;
-  reject: (reason?: any) => void;
+  reject: (reason: any) => void;
 };
 
 class AllChecker<K extends Json, V extends Json> implements Checker {
@@ -518,15 +520,22 @@ export class ServiceInstance {
     identifier: string,
     resource: string,
     params: Json,
-  ): void {
-    const errorHdl = this.refs.runWithGC(() => {
-      return this.refs.binding.SkipRuntime_Runtime__createResource(
-        identifier,
-        resource,
-        this.refs.skjson.exportJSON(params),
-      );
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const errorHdl = this.refs.runWithGC(() => {
+        const exHdl = this.refs.handles.register({
+          resolve,
+          reject: (ex: Error) => reject(ex),
+        });
+        return this.refs.binding.SkipRuntime_Runtime__createResource(
+          identifier,
+          resource,
+          this.refs.skjson.exportJSON(params),
+          this.refs.binding.SkipRuntime_createVoidExecutor(exHdl),
+        );
+      });
+      if (errorHdl) reject(this.refs.handles.deleteHandle(errorHdl));
     });
-    if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
 
   /**
@@ -834,17 +843,11 @@ export class ToBinding {
   ): Pointer<Internal.CJArray> {
     const skjson = this.getJsonConverter();
     const mapper = this.handles.get(skmapper);
-    try {
-      const result = mapper.mapEntry(
-        skjson.importJSON(key) as Json,
-        new ValuesImpl<Json>(skjson, this.binding, values),
-      );
-      return skjson.exportJSON(Array.from(result));
-    } catch (e: unknown) {
-      console.error("Uncaught error during Skip runtime reactive update: ", e);
-      // Exception in async context will be dropped -- this `throw` is just to appease typechecker
-      throw e;
-    }
+    const result = mapper.mapEntry(
+      skjson.importJSON(key) as Json,
+      new ValuesImpl<Json>(skjson, this.binding, values),
+    );
+    return skjson.exportJSON(Array.from(result));
   }
 
   SkipRuntime_deleteMapper(mapper: Handle<JSONMapper>): void {
@@ -1032,7 +1035,7 @@ export class ToBinding {
     supplier.subscribe(instance, resource, params, {
       update: writer.update.bind(writer),
       error: writer.error.bind(writer),
-      loading: writer.loading.bind(writer),
+      initialized: writer.initialized.bind(writer),
     });
   }
 
@@ -1067,6 +1070,25 @@ export class ToBinding {
 
   SkipRuntime_deleteChecker(checker: Handle<Checker>): void {
     this.handles.deleteHandle(checker);
+  }
+
+  // VoidExecutor
+
+  SkipRuntime_VoidExecutor__resolve(skexecutor: Handle<VoidExecutor>): void {
+    const checker = this.handles.get(skexecutor);
+    checker.resolve();
+  }
+
+  SkipRuntime_VoidExecutor__reject(
+    skexecutor: Handle<VoidExecutor>,
+    error: Handle<Error>,
+  ): void {
+    const checker = this.handles.get(skexecutor);
+    checker.reject(this.handles.deleteHandle(error));
+  }
+
+  SkipRuntime_deleteVoidExecutor(executor: Handle<VoidExecutor>): void {
+    this.handles.deleteHandle(executor);
   }
 
   initService(service: SkipService): ServiceInstance {

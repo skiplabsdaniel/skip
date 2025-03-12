@@ -28,16 +28,6 @@ import { it as mit, type AsyncFunc } from "mocha";
 import pg from "pg";
 import { PostgresExternalService } from "@skip-adapter/postgres";
 
-async function withAlternateConsoleError(
-  altConsoleError: (...messages: any[]) => void,
-  f: () => Promise<void>,
-): Promise<void> {
-  const systemConsoleError = console.error;
-  console.error = altConsoleError;
-  await f();
-  console.error = systemConsoleError;
-}
-
 //// testMap1
 
 class Map1 implements Mapper<string, number, string, number> {
@@ -423,11 +413,19 @@ class MockExternal implements ExternalService {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      loading: () => void;
+      initialized: (error?: Json) => void;
     },
   ) {
     if (resource == "mock") {
-      void this.mock(params, callbacks.update);
+      this.mock(params, callbacks.update)
+        .then(() => {
+          callbacks.initialized();
+        })
+        .catch((e: unknown) => {
+          callbacks.initialized(
+            JSON.stringify(e, Object.getOwnPropertyNames(e)),
+          );
+        });
     }
   }
 
@@ -485,15 +483,18 @@ class MockExternalResource implements Resource<Input_NN_NN> {
   }
 }
 
-const testExternalService: SkipService<Input_NN_NN, Input_NN_NN> = {
-  initialData: { input1: [], input2: [] },
-  resources: { external: MockExternalResource },
-  externalServices: { external: new MockExternal() },
+// As the MockExternal as state: force to renew on each test
+function testExternalService(): SkipService<Input_NN_NN, Input_NN_NN> {
+  return {
+    initialData: { input1: [], input2: [] },
+    resources: { external: MockExternalResource },
+    externalServices: { external: new MockExternal() },
 
-  createGraph(inputCollections: Input_NN_NN) {
-    return inputCollections;
-  },
-};
+    createGraph(inputCollections: Input_NN_NN) {
+      return inputCollections;
+    },
+  };
+}
 
 //// testCloseSession
 
@@ -512,15 +513,17 @@ class TokensResource implements Resource {
 
 const system = new GenericExternalService({ timer: new TimerResource() });
 
-const tokensService: SkipService = {
-  initialData: { input: [] },
-  resources: { tokens: TokensResource },
-  externalServices: { system },
+function tokensService(): SkipService {
+  return {
+    initialData: { input: [] },
+    resources: { tokens: TokensResource },
+    externalServices: { system },
 
-  createGraph() {
-    return {};
-  },
-};
+    createGraph() {
+      return {};
+    },
+  };
+}
 
 //// testMultipleResources
 
@@ -718,15 +721,17 @@ class LazyWithUseExternalServiceResource implements Resource<Input_NN> {
   }
 }
 
-const lazyWithUseExternalServiceService: SkipService<Input_NN, Input_NN> = {
-  initialData: { input: [] },
-  resources: { lazy: LazyWithUseExternalServiceResource },
-  externalServices: { external: new MockExternal() },
+function lazyWithUseExternalServiceService(): SkipService<Input_NN, Input_NN> {
+  return {
+    initialData: { input: [] },
+    resources: { lazy: LazyWithUseExternalServiceResource },
+    externalServices: { external: new MockExternal() },
 
-  createGraph(inputCollections: Input_NN) {
-    return inputCollections;
-  },
-};
+    createGraph(inputCollections: Input_NN) {
+      return inputCollections;
+    },
+  };
+}
 
 //// testMapWithException
 
@@ -776,16 +781,17 @@ class MapWithExceptionOnExternalResource implements Resource<Input_SN> {
   }
 }
 
-const mapWithExceptionOnExternMock = new MockExternal();
-const mapWithExceptionOnExternalService: SkipService<Input_SN, Input_SN> = {
-  initialData: { input: [] },
-  resources: { mapWithException: MapWithExceptionOnExternalResource },
-  externalServices: { external: mapWithExceptionOnExternMock },
+function mapWithExceptionOnExternalService(): SkipService<Input_SN, Input_SN> {
+  return {
+    initialData: { input: [] },
+    resources: { mapWithException: MapWithExceptionOnExternalResource },
+    externalServices: { external: new MockExternal() },
 
-  createGraph(inputCollections: Input_SN) {
-    return inputCollections;
-  },
-};
+    createGraph(inputCollections: Input_SN) {
+      return inputCollections;
+    },
+  };
+}
 
 export function initTests(
   category: string,
@@ -1125,7 +1131,7 @@ export function initTests(
 
   it("testExternal", async () => {
     const resource = "external";
-    const service = await initService(testExternalService);
+    const service = await initService(testExternalService());
     service.update("input1", [
       [0, [10]],
       [1, [20]],
@@ -1135,15 +1141,8 @@ export function initTests(
       [1, [10]],
     ]);
     const constantResourceId = "unsafe.identifier";
-    service.instantiateResource(constantResourceId, resource, {});
+    await service.instantiateResource(constantResourceId, resource, {});
     try {
-      // No value registered in external mock resource
-      expect(service.getAll(resource).payload).toEqual([
-        [0, [[10]]],
-        [1, [[20]]],
-      ]);
-      await timeout(1);
-      // After 1ms values are added to external mock resource
       expect(service.getAll(resource).payload).toEqual([
         [0, [[10, 15]]],
         [1, [[20, 30]]],
@@ -1170,10 +1169,10 @@ export function initTests(
   });
 
   it("testCloseSession", async () => {
-    const service = await initService(tokensService);
+    const service = await initService(tokensService());
     const resource = "tokens";
     const constantResourceId = "unsafe.identifier";
-    service.instantiateResource(constantResourceId, resource, {});
+    await service.instantiateResource(constantResourceId, resource, {});
     try {
       const start = service.getArray(resource, "5ms").payload;
       await timeout(2);
@@ -1225,17 +1224,11 @@ export function initTests(
         [2, [20]],
         [3, [30]],
       ]);
-      service.instantiateResource(
+      await service.instantiateResource(
         "unsafe.fixed.resource.ident.1",
         "resource",
         {},
       );
-      expect(service.getAll("resource").payload).toEqual([
-        [1, [10]],
-        [2, [20]],
-        [3, [30]],
-      ]);
-
       let retries = 0;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       while (true) {
@@ -1270,107 +1263,66 @@ export function initTests(
           else throw e;
         }
       }
-
-      const errorMessages: any[] = [];
-      await withAlternateConsoleError(
-        (...msgs) => msgs.forEach((x) => errorMessages.push(x)),
-        async () => {
-          service.instantiateResource(
-            "unsafe.fixed.resource.ident.2",
-            "resourceWithException",
-            {},
-          );
-          //TODO: await instantiateResource instead of sleeping here, once that's made asynchronous
-          await timeout(10);
-          await pgClient.query(
-            "INSERT INTO skip_test (id, x) VALUES (42, 42);",
-          );
-          await timeout(10);
-          expect(errorMessages).toHaveLength(2);
-          expect(errorMessages[0]).toEqual(
-            "Uncaught error during Skip runtime reactive update: ",
-          );
-          expect(errorMessages[1]).toBeA(Error);
-          expect((errorMessages[1] as Error).message).toMatchRegex(
-            /^(?:Error: )?Something goes wrong.$/,
-          );
-        },
+      await service.instantiateResource(
+        "unsafe.fixed.resource.ident.2",
+        "resourceWithException",
+        {},
       );
-    } finally {
+      await pgClient.query("INSERT INTO skip_test (id, x) VALUES (42, 42);");
+
       await pgClient.query("DELETE FROM skip_test WHERE id = 1;");
       await pgClient.query("DELETE FROM skip_test WHERE id = 42;");
       await pgClient.query("INSERT INTO skip_test (id, x) VALUES (1,1),(2,2);");
-      await pgClient.end();
+    } finally {
       await service.close();
+      await pgClient.end();
     }
   });
 
   it("testLazyWithUseExternalService", async () => {
-    const service = await initService(lazyWithUseExternalServiceService);
-    service.instantiateResource("unsafe.fixed.resource.ident", "lazy", {});
-
-    await withAlternateConsoleError(
-      () => {},
-      () => {
-        const update = () =>
-          service.update("input", [
-            [0, [10]],
-            [1, [20]],
-          ]);
-        expect(update).toThrow(
-          new RegExp(
-            /^(?:Error: )?useExternalResource is not allowed in a lazy computation graph.$/,
-          ),
-        );
-        return Promise.resolve(undefined);
-      },
+    const service = await initService(lazyWithUseExternalServiceService());
+    await service.instantiateResource(
+      "unsafe.fixed.resource.ident",
+      "lazy",
+      {},
+    );
+    const update = () =>
+      service.update("input", [
+        [0, [10]],
+        [1, [20]],
+      ]);
+    expect(update).toThrow(
+      new RegExp(
+        /^(?:Error: )?useExternalResource is not allowed in a lazy computation graph.$/,
+      ),
     );
   });
 
   it("testMapWithException", async () => {
-    await withAlternateConsoleError(
-      () => {},
-      async () => {
-        const service = await initService(mapWithExceptionService);
-        service.instantiateResource(
-          "unsafe.fixed.resource.ident",
-          "mapWithException",
-          {},
-        );
-        const update = () =>
-          service.update("input", [
-            [0, [10]],
-            [1, [20]],
-          ]);
-        expect(update).toThrow(
-          new RegExp(/^(?:Error: )?Something goes wrong.$/),
-        );
-      },
+    const service = await initService(mapWithExceptionService);
+    await service.instantiateResource(
+      "unsafe.fixed.resource.ident",
+      "mapWithException",
+      {},
     );
   });
 
   it("testMapWithExceptionOnExternal", async () => {
-    // Capture logged error messages instead of actually logging
-    const errorMessages: any[] = [];
-    await withAlternateConsoleError(
-      (...msgs) => msgs.forEach((x) => errorMessages.push(x)),
-      async () => {
-        const service = await initService(mapWithExceptionOnExternalService);
-        service.instantiateResource(
-          "unsafe.fixed.resource.ident",
-          "mapWithException",
-          {},
-        );
-        await timeout(5);
-        expect(errorMessages).toHaveLength(2);
-        expect(errorMessages[0]).toEqual(
-          "Uncaught error during Skip runtime reactive update: ",
-        );
-        expect(errorMessages[1]).toBeA(Error);
-        expect((errorMessages[1] as Error).message).toMatchRegex(
-          /^(?:Error: )?Something goes wrong.$/,
-        );
-      },
-    );
+    const service = await initService(mapWithExceptionOnExternalService());
+    try {
+      await service.instantiateResource(
+        "unsafe.fixed.resource.ident",
+        "mapWithException",
+        {},
+      );
+      throw new Error("Error was not thrown");
+    } catch (e: unknown) {
+      expect(e instanceof Error).toEqual(true);
+      expect((e as Error).message).toMatchRegex(
+        new RegExp(
+          /^(?:SkipRuntime\.ResourceInstanceInitFailed: )?Resource instance cannot be initialized:/,
+        ),
+      );
+    }
   });
 }

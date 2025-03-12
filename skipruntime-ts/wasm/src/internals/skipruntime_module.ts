@@ -31,6 +31,7 @@ import type {
   Handle,
   ResourceBuilder,
   Notifier,
+  VoidExecutor,
 } from "@skipruntime/core/binding.js";
 
 import type { Json } from "@skipruntime/core/json.js";
@@ -82,8 +83,9 @@ export interface FromWasm {
     error: ptr<Internal.CJSON>,
   ): Handle<Error>;
 
-  SkipRuntime_CollectionWriter__loading(
+  SkipRuntime_CollectionWriter__initialized(
     name: ptr<Internal.String>,
+    error: ptr<Internal.CJSON>,
   ): Handle<Error>;
 
   // Resource
@@ -200,6 +202,7 @@ export interface FromWasm {
     identifier: ptr<Internal.String>,
     resource: ptr<Internal.String>,
     params: ptr<Internal.CJSON>,
+    executor: ptr<Internal.VoidExecutor>,
   ): Handle<Error>;
 
   SkipRuntime_Runtime__getAll(
@@ -269,6 +272,12 @@ export interface FromWasm {
   ): ptr<Internal.Request>;
 
   SkipRuntime_createChecker(ref: Handle<Checker>): ptr<Internal.Request>;
+
+  // VoidExecutor
+
+  SkipRuntime_createVoidExecutor(
+    ref: Handle<VoidExecutor>,
+  ): ptr<Internal.VoidExecutor>;
 }
 
 interface ToWasm {
@@ -391,6 +400,17 @@ interface ToWasm {
   ): void;
 
   SkipRuntime_deleteChecker(checker: Handle<Checker>): void;
+
+  // VoidExecutor
+
+  SkipRuntime_VoidExecutor__resolve(skexecutor: Handle<VoidExecutor>): void;
+
+  SkipRuntime_VoidExecutor__reject(
+    skexecutor: Handle<VoidExecutor>,
+    error: Handle<Error>,
+  ): void;
+
+  SkipRuntime_deleteVoidExecutor(executor: Handle<VoidExecutor>): void;
 }
 
 export class WasmFromBinding implements FromBinding {
@@ -450,9 +470,13 @@ export class WasmFromBinding implements FromBinding {
     );
   }
 
-  SkipRuntime_CollectionWriter__loading(name: string): Handle<Error> {
-    return this.fromWasm.SkipRuntime_CollectionWriter__loading(
+  SkipRuntime_CollectionWriter__initialized(
+    name: string,
+    error: Pointer<Internal.CJSON>,
+  ): Handle<Error> {
+    return this.fromWasm.SkipRuntime_CollectionWriter__initialized(
       this.utils.exportString(name),
+      toPtr(error),
     );
   }
 
@@ -669,11 +693,13 @@ export class WasmFromBinding implements FromBinding {
     identifier: string,
     resource: string,
     params: Pointer<Internal.CJSON>,
+    executor: Pointer<Internal.VoidExecutor>,
   ): Handle<Error> {
     return this.fromWasm.SkipRuntime_Runtime__createResource(
       this.utils.exportString(identifier),
       this.utils.exportString(resource),
       toPtr(params),
+      toPtr(executor),
     );
   }
 
@@ -790,6 +816,12 @@ export class WasmFromBinding implements FromBinding {
 
   SkipRuntime_createChecker(ref: Handle<Checker>): Pointer<Internal.Request> {
     return this.fromWasm.SkipRuntime_createChecker(ref);
+  }
+
+  SkipRuntime_createVoidExecutor(
+    ref: Handle<VoidExecutor>,
+  ): Pointer<Internal.VoidExecutor> {
+    return this.fromWasm.SkipRuntime_createVoidExecutor(ref);
   }
 }
 
@@ -1026,6 +1058,19 @@ class LinksImpl implements Links {
   deleteChecker(checker: Handle<Checker>) {
     this.tobinding.SkipRuntime_deleteChecker(checker);
   }
+
+  // VoidExecutor
+  resolveOfVoidExecutor(skexecutor: Handle<VoidExecutor>) {
+    this.tobinding.SkipRuntime_VoidExecutor__resolve(skexecutor);
+  }
+
+  rejectOfVoidExecutor(skexecutor: Handle<VoidExecutor>, error: Handle<Error>) {
+    this.tobinding.SkipRuntime_VoidExecutor__reject(skexecutor, error);
+  }
+
+  deleteVoidExecutor(skexecutor: Handle<VoidExecutor>) {
+    this.tobinding.SkipRuntime_deleteVoidExecutor(skexecutor);
+  }
 }
 
 export class ServiceInstanceFactory implements Shared {
@@ -1116,6 +1161,15 @@ class Manager implements ToWasmManager {
 
     toWasm.SkipRuntime_Checker__check = links.checkOfChecker.bind(links);
     toWasm.SkipRuntime_deleteChecker = links.deleteChecker.bind(links);
+
+    // VoidExecutor
+
+    toWasm.SkipRuntime_VoidExecutor__resolve =
+      links.resolveOfVoidExecutor.bind(links);
+    toWasm.SkipRuntime_VoidExecutor__reject =
+      links.rejectOfVoidExecutor.bind(links);
+    toWasm.SkipRuntime_deleteVoidExecutor =
+      links.deleteVoidExecutor.bind(links);
 
     return links;
   }

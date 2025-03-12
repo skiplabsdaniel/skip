@@ -12,7 +12,7 @@ export interface ExternalResource {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      loading: () => void;
+      initialized: (error?: Json) => void;
     },
   ): void;
 
@@ -41,7 +41,7 @@ export class GenericExternalService implements ExternalService {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      loading: () => void;
+      initialized: (error?: Json) => void;
     },
   ) {
     const resource = this.resources[resourceName];
@@ -79,7 +79,7 @@ export class TimerResource implements ExternalResource {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      loading: () => void;
+      initialized: (error?: Json) => void;
     },
   ) {
     const time = new Date().getTime();
@@ -88,6 +88,7 @@ export class TimerResource implements ExternalResource {
       values.push([name, [time]]);
     }
     callbacks.update(values, true);
+    callbacks.initialized();
     const intervals: Timeouts = {};
     for (const [name, duration] of Object.entries(params)) {
       const ms = Number(duration);
@@ -177,23 +178,29 @@ export class Polled<S extends Json, K extends Json, V extends Json>
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      loading: () => void;
+      initialized: (error?: Json) => void;
     },
   ) {
     const url = `${this.url}${this.encodeParams(params)}`;
-    const call = () => {
-      callbacks.loading();
+    const call = (init: boolean) => {
       fetchJSON(url, "GET", this.options)
         .then((r) => {
           callbacks.update(this.conv(r[0] as S), true);
+          if (init) callbacks.initialized();
         })
         .catch((e: unknown) => {
-          callbacks.error(e instanceof Error ? e.message : JSON.stringify(e));
+          callbacks.error(
+            e instanceof Error
+              ? e.message
+              : JSON.stringify(e, Object.getOwnPropertyNames(e)),
+          );
+          // TODO: filter the error type to reject the resource
           console.error(e);
+          if (init) callbacks.initialized();
         });
     };
-    call();
-    this.intervals.set(instance, setInterval(call, this.duration));
+    call(true);
+    this.intervals.set(instance, setInterval(call, this.duration, false));
   }
 
   close(instance: string): void {

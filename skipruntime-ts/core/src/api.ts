@@ -415,9 +415,9 @@ export interface ExternalService {
    * @param instance - Instance identifier of the external resource.
    * @param resource - Name of the external resource.
    * @param params - Parameters of the external resource.
-   * @param callbacks - Callbacks to react on error/loading/update.
+   * @param callbacks - Callbacks to react on initialized/error/update.
+   * @param callbacks.initialized - Initialized callback.
    * @param callbacks.error - Error callback.
-   * @param callbacks.loading - Loading callback.
    * @param callbacks.update - Update callback.
    * @returns {void}
    */
@@ -428,7 +428,7 @@ export interface ExternalService {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      loading: () => void;
+      initialized: (error?: Json) => void;
     },
   ): void;
 

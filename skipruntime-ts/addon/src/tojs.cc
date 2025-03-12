@@ -11,7 +11,7 @@ namespace skipruntime {
 extern "C" {
 double SkipRuntime_CollectionWriter__update(char* collection, CJArray values,
                                             int32_t isInit);
-double SkipRuntime_CollectionWriter__loading(char* collection);
+double SkipRuntime_CollectionWriter__initialized(char* collection, CJSON error);
 double SkipRuntime_CollectionWriter__error(char* collection, CJSON error);
 
 SKResourceBuilderMap SkipRuntime_ResourceBuilderMap__create();
@@ -33,6 +33,7 @@ SKExternalService SkipRuntime_createExternalService(int32_t ref);
 SKResource SkipRuntime_createResource(int32_t ref);
 SKResourceBuilder SkipRuntime_createResourceBuilder(int32_t ref);
 SKChecker SkipRuntime_createChecker(int32_t ref);
+SKVoidExecutor SkipRuntime_createVoidExecutor(int32_t ref);
 SKIdentifier SkipRuntime_createIdentifier(char* name);
 SKService SkipRuntime_createService(int32_t ref, CJObject inputs,
                                     SKResourceBuilderMap resources,
@@ -63,7 +64,8 @@ CJSON SkipRuntime_LazyCollection__getArray(char* handle, CJSON key);
 CJSON SkipRuntime_LazyCollection__getUnique(char* handle, CJSON key);
 
 double SkipRuntime_Runtime__createResource(char* identifier, char* resource,
-                                           CJObject jsonParams);
+                                           CJObject jsonParams,
+                                           SKVoidExecutor executor);
 double SkipRuntime_Runtime__closeResource(char* identifier);
 int64_t SkipRuntime_Runtime__subscribe(char* reactiveId, SKNotifier notifier,
                                        char* watermark);
@@ -130,23 +132,31 @@ void UpdateOfCollectionWriter(const FunctionCallbackInfo<Value>& args) {
   });
 }
 
-void LoadingOfCollectionWriter(const FunctionCallbackInfo<Value>& args) {
+void InitializedOfCollectionWriter(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
-  if (args.Length() != 1) {
+  if (args.Length() != 2) {
     // Throw an Error that is passed back to JavaScript
     isolate->ThrowException(
-        Exception::TypeError(FromUtf8(isolate, "Must have one parameters.")));
+        Exception::TypeError(FromUtf8(isolate, "Must have two parameters.")));
     return;
   };
   if (!args[0]->IsString()) {
     // Throw an Error that is passed back to JavaScript
     isolate->ThrowException(Exception::TypeError(
-        FromUtf8(isolate, "The parameter must be a string.")));
+        FromUtf8(isolate, "The first parameter must be a string.")));
+    return;
+  }
+  if (!args[1]->IsExternal()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The second parameter must be a pointer.")));
     return;
   }
   NatTryCatch(isolate, [&args](Isolate* isolate) {
     char* skcollection = ToSKString(isolate, args[0].As<String>());
-    double skerror = SkipRuntime_CollectionWriter__loading(skcollection);
+    CJSON skerr = args[1].As<External>()->Value();
+    double skerror =
+        SkipRuntime_CollectionWriter__initialized(skcollection, skerr);
     args.GetReturnValue().Set(Number::New(isolate, skerror));
   });
 }
@@ -456,6 +466,27 @@ void CreateChecker(const FunctionCallbackInfo<Value>& args) {
     SKChecker skChecker =
         SkipRuntime_createChecker(args[0].As<Int32>()->Value());
     args.GetReturnValue().Set(External::New(isolate, skChecker));
+  });
+}
+
+void CreateVoidExecutor(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  if (args.Length() != 1) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(
+        Exception::TypeError(FromUtf8(isolate, "Must have one parameter.")));
+    return;
+  };
+  if (!args[0]->IsNumber()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The parameter must be a number.")));
+    return;
+  }
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    SKVoidExecutor skVoidExecutor =
+        SkipRuntime_createVoidExecutor(args[0].As<Int32>()->Value());
+    args.GetReturnValue().Set(External::New(isolate, skVoidExecutor));
   });
 }
 
@@ -979,7 +1010,14 @@ void GetUniqueOfLazyCollection(const FunctionCallbackInfo<Value>& args) {
 
 void CreateResourceOfRuntime(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
-  if (!args[0]->IsString() || !args[1]->IsString() || !args[2]->IsExternal()) {
+  if (args.Length() != 4) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(
+        Exception::TypeError(FromUtf8(isolate, "Must have four parameters.")));
+    return;
+  }
+  if (!args[0]->IsString() || !args[1]->IsString() || !args[2]->IsExternal() ||
+      !args[3]->IsExternal()) {
     // Throw an Error that is passed back to JavaScript
     isolate->ThrowException(
         Exception::TypeError(FromUtf8(isolate, "Invalid parameters.")));
@@ -989,8 +1027,9 @@ void CreateResourceOfRuntime(const FunctionCallbackInfo<Value>& args) {
     char* skidentifier = ToSKString(isolate, args[0].As<String>());
     char* skresource = ToSKString(isolate, args[1].As<String>());
     CJObject skparams = args[2].As<External>()->Value();
-    double skerror =
-        SkipRuntime_Runtime__createResource(skidentifier, skresource, skparams);
+    CJObject skexecutor = args[3].As<External>()->Value();
+    double skerror = SkipRuntime_Runtime__createResource(
+        skidentifier, skresource, skparams, skexecutor);
     args.GetReturnValue().Set(Number::New(isolate, skerror));
   });
 }
@@ -1157,8 +1196,8 @@ void GetToJSBinding(const FunctionCallbackInfo<Value>& args) {
   Local<Object> binding = Object::New(isolate);
   AddFunction(isolate, binding, "SkipRuntime_CollectionWriter__update",
               UpdateOfCollectionWriter);
-  AddFunction(isolate, binding, "SkipRuntime_CollectionWriter__loading",
-              LoadingOfCollectionWriter);
+  AddFunction(isolate, binding, "SkipRuntime_CollectionWriter__initialized",
+              InitializedOfCollectionWriter);
   AddFunction(isolate, binding, "SkipRuntime_CollectionWriter__error",
               ErrorOfCollectionWriter);
   //
@@ -1190,6 +1229,8 @@ void GetToJSBinding(const FunctionCallbackInfo<Value>& args) {
   AddFunction(isolate, binding, "SkipRuntime_createChecker", CreateChecker);
   AddFunction(isolate, binding, "SkipRuntime_createIdentifier",
               CreateIdentifier);
+  AddFunction(isolate, binding, "SkipRuntime_createVoidExecutor",
+              CreateVoidExecutor);
   AddFunction(isolate, binding, "SkipRuntime_createService", CreateService);
   AddFunction(isolate, binding, "SkipRuntime_createNotifier", CreateNotifier);
   AddFunction(isolate, binding, "SkipRuntime_createReducer", CreateReducer);

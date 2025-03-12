@@ -25,6 +25,15 @@ base class LazyCompute {
   fun compute(self: LazyCollection, key: SKJSON.CJSON): Array<SKJSON.CJSON>;
 }
 
+class ResourceInstanceInitFailed(
+  errors: Array<SKJSON.CJSON>,
+) extends Exception {
+  fun getMessage(): String {
+    errors = this.errors.map(e -> e.prettyPrint()).join("\n  ");
+    `Resource instance cannot be initialized:\n  ${errors}`
+  }
+}
+
 base class ExternalService {
   fun subscribe(
     instance: String,
@@ -68,6 +77,11 @@ base class Request {
 
 base class Checker extends Request {
   fun check(request: String): void;
+}
+
+base class VoidExecutor {
+  fun resolve(): void;
+  fun reject(exc: .Exception): void;
 }
 
 base class Notifier {
