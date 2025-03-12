@@ -233,7 +233,10 @@ export interface FromBinding {
   ): Pointer<Internal.Reducer>;
 
   // initService
-  SkipRuntime_initService(service: Pointer<Internal.Service>): Handle<Error>;
+  SkipRuntime_initService(
+    service: Pointer<Internal.Service>,
+    executor: Pointer<Internal.VoidExecutor>,
+  ): Handle<Error>;
 
   // closeClose
   SkipRuntime_closeService(): Pointer<Internal.CJSON>;

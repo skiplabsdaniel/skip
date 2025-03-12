@@ -34,6 +34,13 @@ class ResourceInstanceInitFailed(
   }
 }
 
+class ServiceInstanceInitFailed(errors: Array<SKJSON.CJSON>) extends Exception {
+  fun getMessage(): String {
+    errors = this.errors.map(e -> e.prettyPrint()).join("\n  ");
+    `Service instance cannot be initialized:\n  ${errors}`
+  }
+}
+
 base class ExternalService {
   fun subscribe(
     instance: String,

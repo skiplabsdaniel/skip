@@ -158,7 +158,11 @@ FOR EACH ROW EXECUTE FUNCTION %I();`,
       await initData();
 
       this.client.on("notification", (msg) => {
-        if (msg.channel == instance && msg.payload !== undefined) {
+        if (
+          msg.channel == instance &&
+          msg.payload !== undefined &&
+          this.open_instances.has(instance)
+        ) {
           const query = key.select(table, msg.payload);
           this.client.query(query).then(
             (changes) => {

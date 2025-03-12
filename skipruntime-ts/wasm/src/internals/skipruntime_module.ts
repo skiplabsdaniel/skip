@@ -243,7 +243,10 @@ export interface FromWasm {
   ): ptr<Internal.Reducer>;
 
   // initService
-  SkipRuntime_initService(service: ptr<Internal.Service>): Handle<Error>;
+  SkipRuntime_initService(
+    service: ptr<Internal.Service>,
+    executor: ptr<Internal.VoidExecutor>,
+  ): Handle<Error>;
 
   // closeClose
   SkipRuntime_closeService(): ptr<Internal.CJSON>;
@@ -768,8 +771,14 @@ export class WasmFromBinding implements FromBinding {
     return this.fromWasm.SkipRuntime_createReducer(ref, toPtr(defaultValue));
   }
 
-  SkipRuntime_initService(service: Pointer<Internal.Service>): Handle<Error> {
-    return this.fromWasm.SkipRuntime_initService(toPtr(service));
+  SkipRuntime_initService(
+    service: Pointer<Internal.Service>,
+    executor: ptr<Internal.VoidExecutor>,
+  ): Handle<Error> {
+    return this.fromWasm.SkipRuntime_initService(
+      toPtr(service),
+      toPtr(executor),
+    );
   }
 
   SkipRuntime_closeService(): Pointer<Internal.CJSON> {
@@ -1075,10 +1084,10 @@ class LinksImpl implements Links {
 
 export class ServiceInstanceFactory implements Shared {
   constructor(
-    private readonly init: (service: SkipService) => ServiceInstance,
+    private readonly init: (service: SkipService) => Promise<ServiceInstance>,
   ) {}
 
-  initService(service: SkipService): ServiceInstance {
+  initService(service: SkipService): Promise<ServiceInstance> {
     return this.init(service);
   }
 
