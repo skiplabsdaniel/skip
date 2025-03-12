@@ -41,7 +41,7 @@ SKService SkipRuntime_createService(int32_t ref, CJObject inputs,
 SKNotifier SkipRuntime_createNotifier(int32_t ref);
 SKReducer SkipRuntime_createReducer(int32_t ref, CJSON json);
 
-double SkipRuntime_initService(SKService service);
+double SkipRuntime_initService(SKService service, SKVoidExecutor executor);
 CJSON SkipRuntime_closeService();
 
 CJArray SkipRuntime_Collection__getArray(char* collection, CJSON key);
@@ -590,20 +590,21 @@ void CreateReducer(const FunctionCallbackInfo<Value>& args) {
 
 void InitService(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
-  if (args.Length() != 1) {
+  if (args.Length() != 2) {
     // Throw an Error that is passed back to JavaScript
     isolate->ThrowException(
         Exception::TypeError(FromUtf8(isolate, "Must have one parameter.")));
     return;
   };
-  if (!args[0]->IsExternal()) {
+  if (!args[0]->IsExternal() || !args[1]->IsExternal()) {
     // Throw an Error that is passed back to JavaScript
     isolate->ThrowException(Exception::TypeError(
-        FromUtf8(isolate, "The parameter must be a pointer.")));
+        FromUtf8(isolate, "The parameters must be pointers.")));
     return;
   }
   NatTryCatch(isolate, [&args](Isolate* isolate) {
-    double skerror = SkipRuntime_initService(args[0].As<External>()->Value());
+    double skerror = SkipRuntime_initService(args[0].As<External>()->Value(),
+                                             args[1].As<External>()->Value());
     args.GetReturnValue().Set(Number::New(isolate, skerror));
   });
 }

@@ -783,8 +783,8 @@ fun useExternalResource(
 /************ initService ****************/
 
 @export("SkipRuntime_initService")
-fun initSkipRuntimeService(service: Service): Float {
-  initService(service) match {
+fun initSkipRuntimeService(service: Service, executor: VoidExecutor): Float {
+  initService(service, executor) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };

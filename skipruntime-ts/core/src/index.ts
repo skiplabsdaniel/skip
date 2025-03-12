@@ -1087,44 +1087,57 @@ export class ToBinding {
     this.handles.deleteHandle(executor);
   }
 
-  initService(service: SkipService): ServiceInstance {
-    const refs = this.refs();
-    const errorHdl = refs.runWithGC(() => {
-      const skExternalServices =
-        refs.binding.SkipRuntime_ExternalServiceMap__create();
-      if (service.externalServices) {
-        for (const [name, remote] of Object.entries(service.externalServices)) {
-          const skremote = refs.binding.SkipRuntime_createExternalService(
-            refs.handles.register(remote),
+  initService(service: SkipService): Promise<ServiceInstance> {
+    return new Promise((resolve, reject) => {
+      const refs = this.refs();
+      const errorHdl = refs.runWithGC(() => {
+        const skExternalServices =
+          refs.binding.SkipRuntime_ExternalServiceMap__create();
+        if (service.externalServices) {
+          for (const [name, remote] of Object.entries(
+            service.externalServices,
+          )) {
+            const skremote = refs.binding.SkipRuntime_createExternalService(
+              refs.handles.register(remote),
+            );
+            refs.binding.SkipRuntime_ExternalServiceMap__add(
+              skExternalServices,
+              name,
+              skremote,
+            );
+          }
+        }
+        const skresources =
+          refs.binding.SkipRuntime_ResourceBuilderMap__create();
+        for (const [name, builder] of Object.entries(service.resources)) {
+          const skbuilder = refs.binding.SkipRuntime_createResourceBuilder(
+            refs.handles.register(new ResourceBuilder(builder)),
           );
-          refs.binding.SkipRuntime_ExternalServiceMap__add(
-            skExternalServices,
+          refs.binding.SkipRuntime_ResourceBuilderMap__add(
+            skresources,
             name,
-            skremote,
+            skbuilder,
           );
         }
-      }
-      const skresources = refs.binding.SkipRuntime_ResourceBuilderMap__create();
-      for (const [name, builder] of Object.entries(service.resources)) {
-        const skbuilder = refs.binding.SkipRuntime_createResourceBuilder(
-          refs.handles.register(new ResourceBuilder(builder)),
-        );
-        refs.binding.SkipRuntime_ResourceBuilderMap__add(
+        const skservice = refs.binding.SkipRuntime_createService(
+          refs.handles.register(service),
+          refs.skjson.exportJSON(service.initialData ?? {}),
           skresources,
-          name,
-          skbuilder,
+          skExternalServices,
         );
-      }
-      const skservice = refs.binding.SkipRuntime_createService(
-        refs.handles.register(service),
-        refs.skjson.exportJSON(service.initialData ?? {}),
-        skresources,
-        skExternalServices,
-      );
-      return refs.binding.SkipRuntime_initService(skservice);
+        const exHdl = refs.handles.register({
+          resolve: () => {
+            resolve(new ServiceInstance(refs));
+          },
+          reject: (ex: Error) => reject(ex),
+        });
+        return refs.binding.SkipRuntime_initService(
+          skservice,
+          refs.binding.SkipRuntime_createVoidExecutor(exHdl),
+        );
+      });
+      if (errorHdl) reject(refs.handles.deleteHandle(errorHdl));
     });
-    if (errorHdl) throw refs.handles.deleteHandle(errorHdl);
-    return new ServiceInstance(refs);
   }
 
   //

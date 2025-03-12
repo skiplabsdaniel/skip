@@ -14,6 +14,7 @@ import type {
   Entry,
   ExternalService,
   ServiceInstance,
+  Nullable,
 } from "@skipruntime/core";
 import { SkipNonUniqueValueError } from "@skipruntime/core";
 import {
@@ -442,7 +443,7 @@ class MockExternal implements ExternalService {
   subscribe(
     _instance: string,
     resource: string,
-    params: { v1: string; v2: string },
+    params: { v1: number; v2: number },
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
@@ -471,14 +472,14 @@ class MockExternal implements ExternalService {
   }
 
   private async mock(
-    params: { v1: string; v2: string },
+    params: { v1: number; v2: number },
     cb: (updates: Entry<Json, Json>[], isInit: boolean) => void,
   ) {
     await timeout(0);
     cb(
       [
-        [0, [10 + Number(params.v1)]],
-        [1, [20 + Number(params.v2)]],
+        [0, [10 + params.v1]],
+        [1, [20 + params.v2]],
       ],
       false,
     );
@@ -493,8 +494,9 @@ class MockExternalCheck implements Mapper<number, number, number, number[]> {
       const result = this.external.getUnique(key);
       return [[key, [...values, result]]];
     } catch (e) {
-      if (e instanceof SkipNonUniqueValueError)
+      if (e instanceof SkipNonUniqueValueError) {
         return [[key, values.toArray()]];
+      }
       throw e;
     }
   }
@@ -505,8 +507,8 @@ class MockExternalResource implements Resource<Input_NN_NN> {
     cs: Input_NN_NN,
     context: Context,
   ): EagerCollection<number, number[]> {
-    const v1 = cs.input2.getUnique(0).toString();
-    const v2 = cs.input2.getUnique(1).toString();
+    const v1 = cs.input2.getUnique(0);
+    const v2 = cs.input2.getUnique(1);
     const external = context.useExternalResource<number, number>({
       service: "external",
       identifier: "mock",
@@ -528,6 +530,33 @@ function testExternalService(): SkipService<Input_NN_NN, Input_NN_NN> {
     },
   };
 }
+
+type Col_N_NA = {
+  c: EagerCollection<number, number[]>;
+};
+
+class CResource implements Resource<Col_N_NA> {
+  instantiate(cs: Col_N_NA): EagerCollection<number, number[]> {
+    return cs.c;
+  }
+}
+
+const initServiceWithExternalService: SkipService<Input_NN, Col_N_NA> = {
+  initialData: { input: [] },
+  resources: { display: CResource },
+  externalServices: { external: new MockExternal() },
+
+  createGraph(is: Input_NN, context: Context) {
+    const external = context.useExternalResource<number, number>({
+      service: "external",
+      identifier: "mock",
+      params: { v1: 5, v2: 10 },
+    });
+    return {
+      c: is.input.map(MockExternalCheck, external),
+    };
+  },
+};
 
 //// testCloseSession
 
@@ -907,6 +936,38 @@ function mapWithExceptionOnExternalService(): SkipService<Input_SN, Input_SN> {
   };
 }
 
+// testInitServiceWithExternalServiceFailure
+
+class NNResource implements Resource<Input_NN> {
+  instantiate(cs: Input_NN): EagerCollection<number, number> {
+    return cs.input;
+  }
+}
+
+function initServiceWithExternalServiceFailure(): SkipService<
+  NamedCollections,
+  Input_NN
+> {
+  return {
+    initialData: {},
+    resources: { display: NNResource },
+    externalServices: { external: new MockExternal() },
+
+    createGraph(_is: NamedCollections, context: Context) {
+      const external = context
+        .useExternalResource<number, number>({
+          service: "external",
+          identifier: "mock",
+          params: { v1: 32, v2: 20 },
+        })
+        .map(NMapWithException);
+      return {
+        input: external,
+      };
+    },
+  };
+}
+
 export function initTests(
   category: string,
   initService: (service: SkipService) => Promise<ServiceInstance>,
@@ -1282,6 +1343,34 @@ export function initTests(
     }
   });
 
+  it("testInitServiceWithExternalService", async () => {
+    const resource = "display";
+    const service = await initService(initServiceWithExternalService);
+    service.update("input", [
+      [0, [10]],
+      [1, [20]],
+    ]);
+    const constantResourceId = "unsafe.identifier";
+    await service.instantiateResource(constantResourceId, resource, {});
+    try {
+      expect(service.getAll(resource).payload).toEqual([
+        [0, [[10, 15]]],
+        [1, [[20, 30]]],
+      ]);
+      service.update("input", [
+        [0, [20]],
+        [1, [30]],
+      ]);
+      expect(service.getAll(resource).payload).toEqual([
+        [0, [[20, 15]]],
+        [1, [[30, 30]]],
+      ]);
+    } finally {
+      service.closeResourceInstance(constantResourceId);
+      await service.close();
+    }
+  });
+
   it("testCloseSession", async () => {
     const service = await initService(tokensService());
     const resource = "tokens";
@@ -1474,6 +1563,23 @@ export function initTests(
       "mapWithException",
       {},
     );
+  });
+
+  it("testInitServiceWithExternalServiceFailure", async () => {
+    let service: Nullable<ServiceInstance> = null;
+    try {
+      service = await initService(initServiceWithExternalServiceFailure());
+      throw new Error("Error was not thrown");
+    } catch (e: unknown) {
+      expect(e instanceof Error).toEqual(true);
+      expect((e as Error).message).toMatchRegex(
+        new RegExp(
+          /^(?:SkipRuntime\.ServiceInstanceInitFailed: )?Service instance cannot be initialized:/,
+        ),
+      );
+    } finally {
+      if (service) await service.close();
+    }
   });
 
   it("testMapWithExceptionOnExternal", async () => {
