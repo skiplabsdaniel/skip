@@ -440,8 +440,18 @@ async function timeout(ms: number) {
 }
 
 class MockExternal implements ExternalService {
+  public subscribed: string[] = [];
+  public initialized: string[] = [];
+  public unsubscribed: string[] = [];
+
+  clear() {
+    this.subscribed = [];
+    this.initialized = [];
+    this.unsubscribed = [];
+  }
+
   subscribe(
-    _instance: string,
+    instance: string,
     resource: string,
     params: { v1: number; v2: number },
     callbacks: {
@@ -450,9 +460,11 @@ class MockExternal implements ExternalService {
       initialized: (error?: Json) => void;
     },
   ) {
+    this.subscribed.push(instance);
     if (resource == "mock") {
       this.mock(params, callbacks.update)
         .then(() => {
+          this.initialized.push(instance);
           callbacks.initialized();
         })
         .catch((e: unknown) => {
@@ -463,8 +475,8 @@ class MockExternal implements ExternalService {
     }
   }
 
-  unsubscribe(_instance: string) {
-    return;
+  unsubscribe(instance: string) {
+    this.unsubscribed.push(instance);
   }
 
   shutdown() {
@@ -1305,6 +1317,10 @@ export function initTests(
   });
 
   it("testExternal", async () => {
+    const mockExternal = testExternalService.externalServices![
+      "external"
+    ] as MockExternal;
+    mockExternal.clear();
     const resource = "external";
     const service = await initService(testExternalService());
     service.update("input1", [
@@ -1320,6 +1336,8 @@ export function initTests(
     const constantResourceId2 = "unsafe.identifier.2";
     await service.instantiateResource(constantResourceId2, resource, {});
     try {
+      expect(mockExternal.subscribed.length).toEqual(1);
+      expect(mockExternal.initialized).toEqual(mockExternal.subscribed);
       expect(service.getAll(resource).payload).toEqual([
         [0, [[10, 15]]],
         [1, [[20, 30]]],
@@ -1328,12 +1346,16 @@ export function initTests(
         [0, [6]],
         [1, [11]],
       ]);
+      expect(mockExternal.subscribed.length).toEqual(2);
+      expect(mockExternal.initialized.length).toEqual(1);
       // New params => No value registered in external mock resource
       expect(service.getAll(resource).payload).toEqual([
         [0, [[10]]],
         [1, [[20]]],
       ]);
       await timeout(6);
+      expect(mockExternal.initialized).toEqual(mockExternal.subscribed);
+
       // After 5ms values are added to external mock resource
       expect(service.getAll(resource).payload).toEqual([
         [0, [[10, 16]]],
@@ -1344,6 +1366,9 @@ export function initTests(
       service.closeResourceInstance(constantResourceId2);
       await service.close();
     }
+    expect(mockExternal.unsubscribed.sort()).toEqual(
+      mockExternal.subscribed.sort(),
+    );
   });
 
   it("testInitServiceWithExternalService", async () => {
