@@ -12,9 +12,8 @@ export interface ExternalResource {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      initialized: (error?: Json) => void;
     },
-  ): void;
+  ): Promise<void>;
 
   close(instance: string): void;
 }
@@ -41,9 +40,8 @@ export class GenericExternalService implements ExternalService {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      initialized: (error?: Json) => void;
     },
-  ) {
+  ): Promise<void> {
     const resource = this.resources[resourceName];
     if (!resource) {
       throw new SkipUnknownResourceError(
@@ -51,7 +49,7 @@ export class GenericExternalService implements ExternalService {
       );
     }
     this.instances.set(instance, resource);
-    resource.open(instance, params, callbacks);
+    return resource.open(instance, params, callbacks);
   }
 
   unsubscribe(instance: string) {
@@ -81,14 +79,13 @@ export class TimerResource implements ExternalResource {
       error: (error: Json) => void;
       initialized: (error?: Json) => void;
     },
-  ) {
+  ): Promise<void> {
     const time = new Date().getTime();
     const values: Entry<string, number>[] = [];
     for (const name of Object.keys(params)) {
       values.push([name, [time]]);
     }
     callbacks.update(values, true);
-    callbacks.initialized();
     const intervals: Timeouts = {};
     for (const [name, duration] of Object.entries(params)) {
       const ms = Number(duration);
@@ -100,6 +97,7 @@ export class TimerResource implements ExternalResource {
       }
     }
     this.intervals.set(instance, intervals);
+    return Promise.resolve();
   }
 
   close(instance: string): void {
@@ -172,35 +170,27 @@ export class Polled<S extends Json, K extends Json, V extends Json>
     },
   ) {}
 
-  open(
+  async open(
     instance: string,
     params: Json,
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
-      error: (error: Json) => void;
-      initialized: (error?: Json) => void;
+      error: (error: unknown) => void;
     },
-  ) {
+  ): Promise<void> {
     const url = `${this.url}${this.encodeParams(params)}`;
-    const call = (init: boolean) => {
-      fetchJSON(url, "GET", this.options)
+    const call = () => {
+      fetchJSON<S>(url, "GET", this.options)
         .then((r) => {
-          callbacks.update(this.conv(r[0] as S), true);
-          if (init) callbacks.initialized();
+          callbacks.update(this.conv(r[0]!), true);
         })
         .catch((e: unknown) => {
-          callbacks.error(
-            e instanceof Error
-              ? e.message
-              : JSON.stringify(e, Object.getOwnPropertyNames(e)),
-          );
-          // TODO: filter the error type to reject the resource
-          console.error(e);
-          if (init) callbacks.initialized();
+          callbacks.error(e);
         });
     };
-    call(true);
-    this.intervals.set(instance, setInterval(call, this.duration, false));
+    const [data, _] = await fetchJSON<S>(url, "GET", this.options);
+    callbacks.update(this.conv(data!), true);
+    this.intervals.set(instance, setInterval(call, this.duration));
   }
 
   close(instance: string): void {

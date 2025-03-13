@@ -348,11 +348,11 @@ class CollectionWriter<K extends Json, V extends Json> {
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
 
-  initialized(error?: Json): void {
+  initialized(error?: unknown): void {
     const loading_ = () => {
       return this.refs.binding.SkipRuntime_CollectionWriter__initialized(
         this.collection,
-        this.refs.skjson.exportJSON(error ?? null),
+        this.refs.skjson.exportJSON(error ? this.toJSONError(error) : null),
       );
     };
     const errorHdl = this.refs.needGC()
@@ -361,17 +361,27 @@ class CollectionWriter<K extends Json, V extends Json> {
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
 
-  error(error: Json): void {
+  error(error: unknown): void {
     const error_ = () => {
       return this.refs.binding.SkipRuntime_CollectionWriter__error(
         this.collection,
-        this.refs.skjson.exportJSON(error),
+        this.refs.skjson.exportJSON(this.toJSONError(error)),
       );
     };
     const errorHdl = this.refs.needGC()
       ? this.refs.runWithGC(error_)
       : error_();
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
+  }
+
+  private toJSONError(error: unknown): Json {
+    if (error instanceof Error) return error.message;
+    if (typeof error == "number") return error;
+    if (typeof error == "boolean") return error;
+    if (typeof error == "string") return error;
+    return JSON.parse(
+      JSON.stringify(error, Object.getOwnPropertyNames(error)),
+    ) as Json;
   }
 }
 
@@ -963,11 +973,19 @@ export class ToBinding {
     const supplier = this.handles.get(sksupplier);
     const writer = new CollectionWriter(writerId, this.refs());
     const params = skjson.importJSON(skparams, true) as Json;
-    supplier.subscribe(instance, resource, params, {
-      update: writer.update.bind(writer),
-      error: writer.error.bind(writer),
-      initialized: writer.initialized.bind(writer),
-    });
+    supplier
+      .subscribe(instance, resource, params, {
+        update: writer.update.bind(writer),
+        error: writer.error.bind(writer),
+      })
+      .then(() => writer.initialized())
+      .catch((e: unknown) =>
+        writer.initialized(
+          e instanceof Error
+            ? e.message
+            : JSON.stringify(e, Object.getOwnPropertyNames(e)),
+        ),
+      );
   }
 
   SkipRuntime_ExternalService__unsubscribe(

@@ -70,7 +70,10 @@ export async function fetchJSON<V extends Json>(
     signal: AbortSignal.timeout(options.timeout ?? 1000),
   });
   if (!response.ok) {
-    throw new SkipFetchError(`${response.status}: ${response.statusText}`);
+    throw new SkipFetchError(
+      response.status,
+      `${response.status}: ${response.statusText}`,
+    );
   }
   const responseText = await response.text();
   const responseJSON =
