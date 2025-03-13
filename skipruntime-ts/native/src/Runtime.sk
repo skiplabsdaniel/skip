@@ -128,27 +128,19 @@ base class Status(
 
 class StatusFile(status: Status) extends SKStore.File
 
-class RequestFile(
-  timestamp: Int,
-  resource: ResourceInfo,
-  checker: ?Checker,
-) extends SKStore.File
-
 class RequestStatuses(
   statuses: Array<ExternalServiceStatus>,
 ) extends SKStore.File {
   //
-  fun getResult<T>(request: String, values: T): GetResult<T> {
+  fun getResult<T>(values: T): GetResult<T> {
     errors = mutable Vector[];
-    loading: Bool = false;
     for (resourceStatus in this.statuses) {
       resourceStatus.status match {
       | Error(error, _, _, _) -> errors.push(error)
-      | Loading _ -> !loading = true
-      | Ok _ -> void
+      | _ -> void
       }
     };
-    GetResult(if (loading) Some(request) else None(), values, errors.toArray())
+    GetResult(values, errors.toArray())
   }
 
   fun isLoading(): Bool {
@@ -222,47 +214,15 @@ class ResourceInfo(
   statusRef: SKStore.DirName,
   session: String,
 ) extends SKStore.File {
-  /**
-   * Create a status request
-   */
-  fun createRequest(
-    context: mutable SKStore.Context,
-    requestId: String,
-    optChecker: ?Checker,
-  ): void {
+  fun getResult<T>(context: mutable SKStore.Context, values: T): GetResult<T> {
     SKStore.EHandle(
-      SKStore.SID::keyType,
-      RequestFile::type,
-      this.statusRef.sub("requests"),
-    ).writeArray(
-      context,
-      SKStore.SID(requestId),
-      Array[RequestFile(Time.time_ms(), this, optChecker)],
-    );
-    context.update();
-  }
-
-  fun getResult<T>(
-    context: mutable SKStore.Context,
-    request: String,
-    values: T,
-  ): GetResult<T> {
-    SKStore.EHandle(
-      SKStore.SID::keyType,
+      SKStore.IID::keyType,
       RequestStatuses::type,
       this.statusRef.sub("all"),
-    ).maybeGet(context, SKStore.SID(request)) match {
-    | Some(statuses) -> statuses.getResult(request, values)
-    | _ -> GetResult(None(), values, Array[])
+    ).maybeGet(context, SKStore.IID(0)) match {
+    | Some(statuses) -> statuses.getResult(values)
+    | _ -> GetResult(values, Array[])
     }
-  }
-
-  fun clearRequest(context: mutable SKStore.Context, requestId: String): void {
-    SKStore.EHandle(
-      SKStore.SID::keyType,
-      RequestFile::type,
-      this.statusRef.sub("requests"),
-    ).writeArray(context, SKStore.SID(requestId), Array[]);
   }
 }
 
@@ -384,35 +344,17 @@ fun buildResourcesGraph(
               writer.set(lkey, it.first)
             },
           );
-        _sRequestsHdl = context
-          .mkdir(
-            SKStore.SID::keyType,
-            RequestFile::type,
-            statusRef.sub("requests"),
-            Array[],
-            true,
-          )
-          .map(
-            SKStore.SID::keyType,
-            RequestStatuses::type,
-            context,
-            statusRef.sub("all"),
-            (ctx, writer, key, it) ~> {
-              rf = it.first;
-              timestamp = rf.timestamp;
-              statuses = statusHdl
-                .getArray(ctx, SKStore.IID(0))
-                .concat(sStatusHdl.getArray(ctx, SKStore.IID(0)))
-                .filter(rs -> rs.status.created <= timestamp);
-              requestStatuses = RequestStatuses(statuses);
-              writer.set(key, requestStatuses);
-              rf.checker match {
-              | Some(checker) if (!requestStatuses.isLoading()) ->
-                ctx.postpone(CheckRequest(statusRef, key, checker))
-              | _ -> void
-              }
-            },
-          );
+        _ = sStatusHdl.map(
+          SKStore.IID::keyType,
+          RequestStatuses::type,
+          context,
+          statusRef.sub("all"),
+          (ctx, writer, key, it) ~> {
+            statuses = statusHdl.getArray(ctx, key).concat(it.toArray());
+            requestStatuses = RequestStatuses(statuses);
+            writer.set(key, requestStatuses);
+          },
+        );
         resourceBuilder = resources.get(key.name);
         resource = resourceBuilder.build(key.params);
         collections = servicesHdl.get(context, SKStore.SID(runId)).value;
@@ -687,24 +629,6 @@ class CheckInitialisation(resourceId: ResourceID) extends SKStore.Postponable {
         destroyReactiveResource(context, SKStore.SID(instance.value))
       }
     })
-  }
-}
-
-class CheckRequest(
-  statusRef: SKStore.DirName,
-  request: SKStore.SID,
-  checker: Checker,
-) extends SKStore.Postponable {
-  //
-  fun perform(context: mutable SKStore.Context): void {
-    pushContext(context);
-    this.checker.check(this.request.value);
-    popContext();
-    SKStore.EHandle(
-      SKStore.SID::keyType,
-      RequestFile::type,
-      this.statusRef.sub("requests"),
-    ).writeArray(context, this.request, Array[]);
   }
 }
 
@@ -1452,68 +1376,27 @@ class CollectionWriter(dirName: SKStore.DirName) {
   }
 }
 
-value class GetResult<T>(
-  request: ?String,
-  values: T,
-  errors: Array<SKJSON.CJSON>,
-) {
-  fun loading(): Bool {
-    this.request.isSome()
-  }
-}
-
-fun request<T>(
-  context: mutable SKStore.Context,
-  resourceName: String,
-  params: SKJSON.CJSON,
-  optRequest: ?Request,
-  getValues: (mutable SKStore.Context, ResourceInfo) ~> T,
-): GetResult<T> {
-  (request, resource) = optRequest match {
-  | Some(Identifier(req)) -> (req, getReactiveResource(context, req))
-  | _ ->
-    resourceInstanceId = Ksuid::create().toString();
-    resource = createReactiveResource(
-      context,
-      resourceInstanceId,
-      resourceName,
-      params,
-      None(),
-    );
-    optChecker = optRequest match {
-    | Some(checker @ Checker _) -> Some(checker)
-    | _ -> None()
-    };
-    resource.createRequest(context, resourceInstanceId, optChecker);
-    (resourceInstanceId, resource)
-  };
-  values = getValues(context, resource);
-  // return result type
-  res = resource.getResult(context, request, values);
-  if (!res.loading()) {
-    optRequest match {
-    | Some(Identifier _)
-    | None() ->
-      resource.clearRequest(context, request);
-      closeReactiveResource(context, request, false)
-    | Some(Checker _) -> void
-    };
-  };
-  res;
-}
+value class GetResult<T>(values: T, errors: Array<SKJSON.CJSON>)
 
 fun getAll(
   context: mutable SKStore.Context,
   resourceName: String,
   params: SKJSON.CJSON,
-  optRequest: ?Request,
 ): GetResult<Values> {
-  request(context, resourceName, params, optRequest, (context, resource) ~>
+  graphHdl = SKStore.EHandle(
+    ResourceID::keyType,
+    ResourceInfo::type,
+    kResourceCollectionsDir,
+  );
+  resourceID = ResourceID(resourceName, params);
+  resource = graphHdl.get(context, resourceID);
+  resource.getResult(
+    context,
     Values(
       resource.collection.getAll(context),
       `${resource.session}/${context.tick}`,
-    )
-  )
+    ),
+  );
 }
 
 fun getForKey(
@@ -1521,14 +1404,18 @@ fun getForKey(
   resourceName: String,
   params: SKJSON.CJSON,
   key: SKJSON.CJSON,
-  optRequest: ?Request,
 ): GetResult<Array<SKJSON.CJSON>> {
-  request(context, resourceName, params, optRequest, (context, resource) ~> {
-    pushContext(context);
-    values = resource.collection.getArray(key);
-    popContext();
-    values
-  })
+  graphHdl = SKStore.EHandle(
+    ResourceID::keyType,
+    ResourceInfo::type,
+    kResourceCollectionsDir,
+  );
+  resourceID = ResourceID(resourceName, params);
+  resource = graphHdl.get(context, resourceID);
+  pushContext(context);
+  values = resource.collection.getArray(key);
+  popContext();
+  resource.getResult(context, values);
 }
 
 fun destroyReactiveResource(

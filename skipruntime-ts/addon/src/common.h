@@ -74,6 +74,5 @@ struct SkipException : std::exception {
 #define SKNotifier void*
 #define SKReducer void*
 #define SKMapper void*
-#define SKRequest void*
 
 #endif  // SKCOMMON_H

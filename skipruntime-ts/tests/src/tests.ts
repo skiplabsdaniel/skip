@@ -990,7 +990,7 @@ export function initTests(
   it("testMap1", async () => {
     const service = await initService(map1Service);
     service.update("input", [["1", [10]]]);
-    expect(service.getArray("map1", "1").payload).toEqual([12]);
+    expect(await service.getArray("map1", "1")).toEqual([12]);
   });
 
   it("testMap2", async () => {
@@ -998,10 +998,10 @@ export function initTests(
     const resource = "map2";
     service.update("input1", [["1", [10]]]);
     service.update("input2", [["1", [20]]]);
-    expect(service.getArray(resource, "1").payload).toEqual([30]);
+    expect(await service.getArray(resource, "1")).toEqual([30]);
     service.update("input1", [["2", [3]]]);
     service.update("input2", [["2", [7]]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       ["1", [30]],
       ["2", [10]],
     ]);
@@ -1012,10 +1012,10 @@ export function initTests(
     const resource = "map3";
     service.update("input1", [["1", [1, 2, 3]]]);
     service.update("input2", [["1", [10]]]);
-    expect(service.getArray(resource, "1").payload).toEqual([36]);
+    expect(await service.getArray(resource, "1")).toEqual([36]);
     service.update("input1", [["2", [3]]]);
     service.update("input2", [["2", [7]]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       ["1", [36]],
       ["2", [10]],
     ]);
@@ -1030,7 +1030,7 @@ export function initTests(
       [5, [5]],
       [10, [10]],
     ]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [2]],
       [2, [6]],
       [5, [30]],
@@ -1045,7 +1045,7 @@ export function initTests(
       [1, [0]],
       [2, [2]],
     ]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [0]],
       [2, [2]],
     ]);
@@ -1053,12 +1053,12 @@ export function initTests(
       [1, [10]],
       [2, [5]],
     ]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [2]],
       [2, [4]],
     ]);
     service.update("input2", [[1, []]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [1]],
       [2, [3]],
     ]);
@@ -1072,7 +1072,7 @@ export function initTests(
       return [i, [i]];
     });
     service.update("input", values);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [1]],
       [3, [9]],
       [4, [16]],
@@ -1090,18 +1090,18 @@ export function initTests(
       [0, [10]],
       [1, [20]],
     ]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [0, [2]],
       [1, [2]],
     ]);
     service.update("input", [[2, [4]]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [0, [2]],
       [1, [2]],
       [2, [2]],
     ]);
     service.update("input", [[2, []]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [0, [2]],
       [1, [2]],
     ]);
@@ -1115,12 +1115,12 @@ export function initTests(
       [1, [1]],
       [2, [1]],
     ]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [0, [2]],
       [1, [1]],
     ]);
     service.update("input", [[3, [2]]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [0, [2]],
       [1, [3]],
     ]);
@@ -1128,13 +1128,13 @@ export function initTests(
       [0, [2]],
       [1, [2]],
     ]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [0, [3]],
       [1, [4]],
     ]);
 
     service.update("input", [[3, []]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [0, [3]],
       [1, [2]],
     ]);
@@ -1148,12 +1148,12 @@ export function initTests(
       [1, [1]],
       [2, [1, 2]],
     ]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [1]],
       [2, [2]],
     ]);
     service.update("input", [[3, [1, 2, 3]]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [1]],
       [2, [2]],
       [3, [3]],
@@ -1163,7 +1163,7 @@ export function initTests(
       [1, [5, 6]],
       [3, []],
     ]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [0, [1]],
       [1, [2]],
       [2, [2]],
@@ -1176,15 +1176,15 @@ export function initTests(
     const resource = "merge1";
     service.update("input1", [[1, [10]]]);
     service.update("input2", [[1, [20]]]);
-    expect(sorted(service.getAll(resource).payload)).toEqual([[1, [10, 20]]]);
+    expect(sorted(await service.getAll(resource))).toEqual([[1, [10, 20]]]);
     service.update("input1", [[2, [3]]]);
     service.update("input2", [[2, [7]]]);
-    expect(sorted(service.getAll(resource).payload)).toEqual([
+    expect(sorted(await service.getAll(resource))).toEqual([
       [1, [10, 20]],
       [2, [3, 7]],
     ]);
     service.update("input1", [[1, []]]);
-    expect(sorted(service.getAll(resource).payload)).toEqual([
+    expect(sorted(await service.getAll(resource))).toEqual([
       [1, [20]],
       [2, [3, 7]],
     ]);
@@ -1195,15 +1195,15 @@ export function initTests(
     const resource = "mergeReduce";
     service.update("input1", [[1, [10]]]);
     service.update("input2", [[1, [20]]]);
-    expect(service.getAll(resource).payload).toEqual([[1, [30]]]);
+    expect(await service.getAll(resource)).toEqual([[1, [30]]]);
     service.update("input1", [[2, [3]]]);
     service.update("input2", [[2, [7]]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [30]],
       [2, [10]],
     ]);
     service.update("input1", [[1, []]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [20]],
       [2, [10]],
     ]);
@@ -1214,15 +1214,15 @@ export function initTests(
     const resource = "mergeMapReduce";
     service.update("input1", [[1, [10]]]);
     service.update("input2", [[1, [20]]]);
-    expect(service.getAll(resource).payload).toEqual([[1, [40]]]);
+    expect(await service.getAll(resource)).toEqual([[1, [40]]]);
     service.update("input1", [[2, [3]]]);
     service.update("input2", [[2, [7]]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [40]],
       [2, [20]],
     ]);
     service.update("input1", [[1, []]]);
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [1, [25]],
       [2, [20]],
     ]);
@@ -1237,22 +1237,18 @@ export function initTests(
       y: { a: 7, bs: [14, 14], extra_garbage: "not used by resource" },
     };
     service.update("input", [[1, [1]]]);
-    expect(
-      service.getAll(resource, { offsets: plus15_params }).payload,
-    ).toEqual([[1, [16]]]);
-    expect(
-      service.getAll(resource, { offsets: plus42_params }).payload,
-    ).toEqual([[1, [43]]]);
+    expect(await service.getAll(resource, { offsets: plus15_params })).toEqual([
+      [1, [16]],
+    ]);
+    expect(await service.getAll(resource, { offsets: plus42_params })).toEqual([
+      [1, [43]],
+    ]);
     service.update("input", [[2, [2]]]);
-    expect(
-      service.getAll(resource, { offsets: plus15_params }).payload,
-    ).toEqual([
+    expect(await service.getAll(resource, { offsets: plus15_params })).toEqual([
       [1, [16]],
       [2, [17]],
     ]);
-    expect(
-      service.getAll(resource, { offsets: plus42_params }).payload,
-    ).toEqual([
+    expect(await service.getAll(resource, { offsets: plus42_params })).toEqual([
       [1, [43]],
       [2, [44]],
     ]);
@@ -1291,7 +1287,7 @@ export function initTests(
       ],
     ]);
     //
-    expect(service.getAll(resource).payload).toEqual([
+    expect(await service.getAll(resource)).toEqual([
       [
         0,
         [
@@ -1338,7 +1334,7 @@ export function initTests(
     try {
       expect(mockExternal.subscribed.length).toEqual(1);
       expect(mockExternal.initialized).toEqual(mockExternal.subscribed);
-      expect(service.getAll(resource).payload).toEqual([
+      expect(await service.getAll(resource)).toEqual([
         [0, [[10, 15]]],
         [1, [[20, 30]]],
       ]);
@@ -1349,7 +1345,7 @@ export function initTests(
       expect(mockExternal.subscribed.length).toEqual(2);
       expect(mockExternal.initialized.length).toEqual(1);
       // New params => No value registered in external mock resource
-      expect(service.getAll(resource).payload).toEqual([
+      expect(await service.getAll(resource)).toEqual([
         [0, [[10]]],
         [1, [[20]]],
       ]);
@@ -1357,7 +1353,7 @@ export function initTests(
       expect(mockExternal.initialized).toEqual(mockExternal.subscribed);
 
       // After 5ms values are added to external mock resource
-      expect(service.getAll(resource).payload).toEqual([
+      expect(await service.getAll(resource)).toEqual([
         [0, [[10, 16]]],
         [1, [[20, 31]]],
       ]);
@@ -1381,7 +1377,7 @@ export function initTests(
     const constantResourceId = "unsafe.identifier";
     await service.instantiateResource(constantResourceId, resource, {});
     try {
-      expect(service.getAll(resource).payload).toEqual([
+      expect(await service.getAll(resource)).toEqual([
         [0, [[10, 15]]],
         [1, [[20, 30]]],
       ]);
@@ -1389,7 +1385,7 @@ export function initTests(
         [0, [20]],
         [1, [30]],
       ]);
-      expect(service.getAll(resource).payload).toEqual([
+      expect(await service.getAll(resource)).toEqual([
         [0, [[20, 15]]],
         [1, [[30, 30]]],
       ]);
@@ -1405,11 +1401,11 @@ export function initTests(
     const constantResourceId = "unsafe.identifier";
     await service.instantiateResource(constantResourceId, resource, {});
     try {
-      const start = service.getArray(resource, "5ms").payload;
+      const start = await service.getArray(resource, "5ms");
       await timeout(2);
-      expect(service.getArray(resource, "5ms").payload).toEqual(start);
+      expect(await service.getArray(resource, "5ms")).toEqual(start);
       await timeout(4);
-      const current = service.getArray(resource, "5ms").payload;
+      const current = await service.getArray(resource, "5ms");
       expect(current == start).toEqual(false);
     } finally {
       service.closeResourceInstance(constantResourceId);
@@ -1420,13 +1416,13 @@ export function initTests(
   it("testMultipleResources", async () => {
     const service = await initService(multipleResourcesService);
     service.update("input1", [["1", [10]]]);
-    expect(service.getArray("resource1", "1").payload).toEqual([10]);
+    expect(await service.getArray("resource1", "1")).toEqual([10]);
     service.update("input2", [["1", [20]]]);
-    expect(service.getArray("resource2", "1").payload).toEqual([20]);
+    expect(await service.getArray("resource2", "1")).toEqual([20]);
     service.update("input1", [["1", [30]]]);
-    expect(service.getArray("resource1", "1").payload).toEqual([30]);
+    expect(await service.getArray("resource1", "1")).toEqual([30]);
     service.update("input2", [["1", [40]]]);
-    expect(service.getArray("resource2", "1").payload).toEqual([40]);
+    expect(await service.getArray("resource2", "1")).toEqual([40]);
   });
 
   it("testPostgres", async function () {
@@ -1465,7 +1461,7 @@ export function initTests(
       while (true) {
         try {
           await timeout(5 + 100 * 2 ** retries);
-          expect(service.getAll("resource").payload).toEqual([
+          expect(await service.getAll("resource")).toEqual([
             [1, [111]],
             [2, [222]],
             [3, [333]],
@@ -1483,7 +1479,7 @@ export function initTests(
       while (true) {
         try {
           await timeout(5 + 100 * 2 ** retries);
-          expect(service.getAll("resource").payload).toEqual([
+          expect(await service.getAll("resource")).toEqual([
             [1, [1110]],
             [2, [220]],
             [3, [333]],
