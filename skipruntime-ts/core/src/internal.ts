@@ -51,8 +51,5 @@ export type Reducer = T<typeof reducer>;
 declare const notifier: unique symbol;
 export type Notifier = T<typeof notifier>;
 
-declare const request: unique symbol;
-export type Request = T<typeof request>;
-
 declare const voidexecutor: unique symbol;
 export type VoidExecutor = T<typeof voidexecutor>;

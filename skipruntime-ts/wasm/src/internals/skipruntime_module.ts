@@ -208,14 +208,12 @@ export interface FromWasm {
   SkipRuntime_Runtime__getAll(
     resource: ptr<Internal.String>,
     params: ptr<Internal.CJSON>,
-    request: ptr<Internal.Request> | null,
   ): ptr<Internal.CJObject | Internal.CJFloat>;
 
   SkipRuntime_Runtime__getForKey(
     resource: ptr<Internal.String>,
     params: ptr<Internal.CJSON>,
     key: ptr<Internal.CJSON>,
-    request: ptr<Internal.Request> | null,
   ): ptr<Internal.CJObject | Internal.CJFloat>;
 
   SkipRuntime_Runtime__closeResource(
@@ -267,14 +265,6 @@ export interface FromWasm {
     identifier: ptr<Internal.String>,
     params: ptr<Internal.CJSON>,
   ): ptr<Internal.String>;
-
-  // Checker
-
-  SkipRuntime_createIdentifier(
-    supplier: ptr<Internal.String>,
-  ): ptr<Internal.Request>;
-
-  SkipRuntime_createChecker(ref: Handle<Checker>): ptr<Internal.Request>;
 
   // VoidExecutor
 
@@ -709,12 +699,10 @@ export class WasmFromBinding implements FromBinding {
   SkipRuntime_Runtime__getAll(
     resource: string,
     params: Pointer<Internal.CJSON>,
-    request: Nullable<Pointer<Internal.Request>>,
   ): Pointer<Internal.CJObject | Internal.CJFloat> {
     return this.fromWasm.SkipRuntime_Runtime__getAll(
       this.utils.exportString(resource),
       toPtr(params),
-      toNullablePtr(request),
     );
   }
 
@@ -722,13 +710,11 @@ export class WasmFromBinding implements FromBinding {
     resource: string,
     params: Pointer<Internal.CJSON>,
     key: Pointer<Internal.CJSON>,
-    request: Pointer<Internal.Request> | null,
   ): Pointer<Internal.CJObject | Internal.CJFloat> {
     return this.fromWasm.SkipRuntime_Runtime__getForKey(
       this.utils.exportString(resource),
       toPtr(params),
       toPtr(key),
-      toNullablePtr(request),
     );
   }
 
@@ -815,16 +801,6 @@ export class WasmFromBinding implements FromBinding {
         toPtr(params),
       ),
     );
-  }
-
-  SkipRuntime_createIdentifier(supplier: string): Pointer<Internal.Request> {
-    return this.fromWasm.SkipRuntime_createIdentifier(
-      this.utils.exportString(supplier),
-    );
-  }
-
-  SkipRuntime_createChecker(ref: Handle<Checker>): Pointer<Internal.Request> {
-    return this.fromWasm.SkipRuntime_createChecker(ref);
   }
 
   SkipRuntime_createVoidExecutor(
@@ -1055,19 +1031,6 @@ class LinksImpl implements Links {
     this.tobinding.SkipRuntime_deleteExternalService(supplier);
   }
 
-  // Checker
-
-  checkOfChecker(skchecker: Handle<Checker>, skrequest: ptr<Internal.String>) {
-    this.tobinding.SkipRuntime_Checker__check(
-      skchecker,
-      this.utils.importString(skrequest),
-    );
-  }
-
-  deleteChecker(checker: Handle<Checker>) {
-    this.tobinding.SkipRuntime_deleteChecker(checker);
-  }
-
   // VoidExecutor
   resolveOfVoidExecutor(skexecutor: Handle<VoidExecutor>) {
     this.tobinding.SkipRuntime_VoidExecutor__resolve(skexecutor);
@@ -1165,11 +1128,6 @@ class Manager implements ToWasmManager {
     toWasm.SkipRuntime_Reducer__add = links.addOfReducer.bind(links);
     toWasm.SkipRuntime_Reducer__remove = links.removeOfReducer.bind(links);
     toWasm.SkipRuntime_deleteReducer = links.deleteReducer.bind(links);
-
-    // Checker
-
-    toWasm.SkipRuntime_Checker__check = links.checkOfChecker.bind(links);
-    toWasm.SkipRuntime_deleteChecker = links.deleteChecker.bind(links);
 
     // VoidExecutor
 

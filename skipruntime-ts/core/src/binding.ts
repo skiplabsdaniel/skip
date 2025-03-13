@@ -200,14 +200,12 @@ export interface FromBinding {
   SkipRuntime_Runtime__getAll(
     resource: string,
     jsonParams: Pointer<Internal.CJObject>,
-    request: Pointer<Internal.Request> | null,
   ): Pointer<Internal.CJObject | Internal.CJFloat>;
 
   SkipRuntime_Runtime__getForKey(
     resource: string,
     jsonParams: Pointer<Internal.CJObject>,
     key: Pointer<Internal.CJSON>,
-    request: Pointer<Internal.Request> | null,
   ): Pointer<Internal.CJObject | Internal.CJFloat>;
 
   SkipRuntime_Runtime__closeResource(identifier: string): Handle<Error>;
@@ -257,12 +255,6 @@ export interface FromBinding {
     identifier: string,
     params: Pointer<Internal.CJObject>,
   ): string;
-
-  // Checker
-
-  SkipRuntime_createIdentifier(supplier: string): Pointer<Internal.Request>;
-
-  SkipRuntime_createChecker(ref: Handle<Checker>): Pointer<Internal.Request>;
 
   // VoidExecutor
 

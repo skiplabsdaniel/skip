@@ -42,6 +42,7 @@ import {
 
 import {
   SkipClassNameError,
+  SkipError,
   SkipNonUniqueValueError,
   SkipResourceInstanceInUseError,
   SkipUnknownCollectionError,
@@ -49,7 +50,6 @@ import {
 import {
   ResourceBuilder,
   type Notifier,
-  type Checker,
   type VoidExecutor,
   type Handle,
   type FromBinding,
@@ -437,69 +437,9 @@ export class ServiceInstanceFactory {
 }
 
 export type GetResult<T> = {
-  request?: string;
   payload: T;
   errors: Json[];
 };
-
-export type Executor<T> = {
-  resolve: (value: T) => void;
-  reject: (reason: any) => void;
-};
-
-class AllChecker<K extends Json, V extends Json> implements Checker {
-  constructor(
-    private readonly service: ServiceInstance,
-    private readonly executor: Executor<Entry<K, V>[]>,
-    private readonly resource: string,
-    private readonly params: Json,
-  ) {}
-
-  check(request: string): void {
-    try {
-      const result = this.service.getAll<K, V>(
-        this.resource,
-        this.params,
-        request,
-      );
-      if (result.errors.length > 0) {
-        this.executor.reject(new Error(JSON.stringify(result.errors)));
-      } else {
-        this.executor.resolve(result.payload);
-      }
-    } catch (ex: unknown) {
-      this.executor.reject(ex);
-    }
-  }
-}
-
-class OneChecker<K extends Json, V extends Json> implements Checker {
-  constructor(
-    private readonly service: ServiceInstance,
-    private readonly executor: Executor<V[]>,
-    private readonly resource: string,
-    private readonly params: Json,
-    private readonly key: K,
-  ) {}
-
-  check(request: string): void {
-    try {
-      const result = this.service.getArray<K, V>(
-        this.resource,
-        this.key,
-        this.params,
-        request,
-      );
-      if (result.errors.length > 0) {
-        this.executor.reject(new Error(JSON.stringify(result.errors)));
-      } else {
-        this.executor.resolve(result.payload);
-      }
-    } catch (ex: unknown) {
-      this.executor.reject(ex);
-    }
-  }
-}
 
 export type SubscriptionID = Opaque<bigint, "subscription">;
 
@@ -544,33 +484,31 @@ export class ServiceInstance {
    * @param params - the parameters of the resource used to build the resource with the corresponding constructor specified in remotes field of SkipService
    * @returns The current values of the corresponding resource with reactive response token to allow subscription
    */
-  getAll<K extends Json, V extends Json>(
+  async getAll<K extends Json, V extends Json>(
     resource: string,
     params: Json = {},
-    request?: string | Executor<Entry<K, V>[]>,
-  ): GetResult<Entry<K, V>[]> {
-    const get_ = () => {
-      return this.refs.skjson.importJSON(
-        this.refs.binding.SkipRuntime_Runtime__getAll(
-          resource,
-          this.refs.skjson.exportJSON(params),
-          request !== undefined
-            ? typeof request == "string"
-              ? this.refs.binding.SkipRuntime_createIdentifier(request)
-              : this.refs.binding.SkipRuntime_createChecker(
-                  this.refs.handles.register(
-                    new AllChecker(this, request, resource, params),
-                  ),
-                )
-            : null,
-        ),
-        true,
-      );
-    };
-    const result = this.refs.needGC() ? this.refs.runWithGC(get_) : get_();
-    if (typeof result == "number")
-      throw this.refs.handles.deleteHandle(result as Handle<Error>);
-    return result as GetResult<Entry<K, V>[]>;
+  ): Promise<Entry<K, V>[]> {
+    const uuid = crypto.randomUUID();
+    await this.instantiateResource(uuid, resource, params);
+    try {
+      const result = this.refs.runWithGC(() => {
+        return this.refs.skjson.importJSON(
+          this.refs.binding.SkipRuntime_Runtime__getAll(
+            resource,
+            this.refs.skjson.exportJSON(params),
+          ),
+          true,
+        );
+      });
+      if (typeof result == "number")
+        throw this.refs.handles.deleteHandle(result as Handle<Error>);
+      const info = result as GetResult<Entry<K, V>[]>;
+      if (info.errors.length > 0)
+        throw new SkipError(JSON.stringify(info.errors));
+      return info.payload;
+    } finally {
+      this.closeResourceInstance(uuid);
+    }
   }
 
   /**
@@ -580,36 +518,33 @@ export class ServiceInstance {
    * @param params - Resource parameters, passed to the resource constructor specified in this `SkipService`'s `resources` field
    * @returns The current value(s) for this key in the specified resource instance
    */
-  getArray<K extends Json, V extends Json>(
+  async getArray<K extends Json, V extends Json>(
     resource: string,
     key: K,
     params: Json = {},
-    request?: string | Executor<V[]>,
-  ): GetResult<V[]> {
-    const get_ = () => {
-      return this.refs.skjson.importJSON(
-        this.refs.binding.SkipRuntime_Runtime__getForKey(
-          resource,
-          this.refs.skjson.exportJSON(params),
-          this.refs.skjson.exportJSON(key),
-          request !== undefined
-            ? typeof request == "string"
-              ? this.refs.binding.SkipRuntime_createIdentifier(request)
-              : this.refs.binding.SkipRuntime_createChecker(
-                  this.refs.handles.register(
-                    new OneChecker(this, request, resource, params, key),
-                  ),
-                )
-            : null,
-        ),
-        true,
-      );
-    };
-    const needGC = this.refs.needGC();
-    const result = needGC ? this.refs.runWithGC(get_) : get_();
-    if (typeof result == "number")
-      throw this.refs.handles.deleteHandle(result as Handle<Error>);
-    return result as GetResult<V[]>;
+  ): Promise<V[]> {
+    const uuid = crypto.randomUUID();
+    await this.instantiateResource(uuid, resource, params);
+    try {
+      const result = this.refs.runWithGC(() => {
+        return this.refs.skjson.importJSON(
+          this.refs.binding.SkipRuntime_Runtime__getForKey(
+            resource,
+            this.refs.skjson.exportJSON(params),
+            this.refs.skjson.exportJSON(key),
+          ),
+          true,
+        );
+      });
+      if (typeof result == "number")
+        throw this.refs.handles.deleteHandle(result as Handle<Error>);
+      const info = result as GetResult<V[]>;
+      if (info.errors.length > 0)
+        throw new SkipError(JSON.stringify(info.errors));
+      return info.payload;
+    } finally {
+      this.closeResourceInstance(uuid);
+    }
   }
 
   /**
@@ -1056,20 +991,6 @@ export class ToBinding {
 
   SkipRuntime_deleteExternalService(supplier: Handle<ExternalService>): void {
     this.handles.deleteHandle(supplier);
-  }
-
-  // Checker
-
-  SkipRuntime_Checker__check(
-    skchecker: Handle<Checker>,
-    request: string,
-  ): void {
-    const checker = this.handles.get(skchecker);
-    checker.check(request);
-  }
-
-  SkipRuntime_deleteChecker(checker: Handle<Checker>): void {
-    this.handles.deleteHandle(checker);
   }
 
   // VoidExecutor

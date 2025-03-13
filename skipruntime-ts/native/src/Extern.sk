@@ -258,32 +258,6 @@ class ExternResourceBuilder(
   }
 }
 
-/************  Checker ****************/
-
-@cpp_extern("SkipRuntime_Checker__check")
-@debug
-native fun checkOfChecker(executor: UInt32, request: String): void;
-
-@cpp_extern("SkipRuntime_deleteChecker")
-@debug
-native fun deleteChecker(mapper: UInt32): void;
-
-@export("SkipRuntime_createChecker")
-fun createChecker(executor: UInt32): ExternChecker {
-  ExternChecker(SKStore.ExternalPointer::create(executor, deleteChecker))
-}
-
-@export("SkipRuntime_createIdentifier")
-fun createIdentifier(request: String): Identifier {
-  Identifier(request)
-}
-
-class ExternChecker(eptr: SKStore.ExternalPointer) extends Checker {
-  fun check(request: String): void {
-    checkOfChecker(this.eptr.value, request)
-  }
-}
-
 /************  VoidExecutor ****************/
 
 @cpp_extern("SkipRuntime_VoidExecutor__resolve")
@@ -623,25 +597,12 @@ fun createResourceOfRuntime(
 }
 
 @export("SkipRuntime_Runtime__getAll")
-fun getAllOfRuntime(
-  resource: String,
-  params: SKJSON.CJSON,
-  optRequest: ?Request,
-): SKJSON.CJSON {
-  (getContext() match {
-  | Some(context) ->
-    try {
-      Success(getAll(context, resource, params, optRequest))
-    } catch {
-    | ex -> Failure(ex)
-    }
-  | _ ->
-    SKStore.runWithResult(context ~> {
-      res = getAll(context, resource, params, optRequest);
-      /* Ensure all resources closed at right time */
-      updateContext(context);
-      res
-    })
+fun getAllOfRuntime(resource: String, params: SKJSON.CJSON): SKJSON.CJSON {
+  SKStore.runWithResult(context ~> {
+    res = getAll(context, resource, params);
+    /* Ensure all resources closed at right time */
+    updateContext(context);
+    res
   }) match {
   | Success(result) ->
     fields = mutable Vector<(String, SKJSON.CJSON)>[
@@ -655,9 +616,6 @@ fun getAllOfRuntime(
       ),
       ("errors", SKJSON.CJArray(result.errors)),
     ];
-    result.request.each(request ->
-      fields.push(("request", SKJSON.CJString(request)))
-    );
     SKJSON.CJObject(
       SKJSON.CJFields::create(fields.sortedBy(x ~> x.i0).toArray(), x -> x),
     )
@@ -670,31 +628,18 @@ fun getForKeyOfRuntime(
   resource: String,
   params: SKJSON.CJSON,
   key: SKJSON.CJSON,
-  optRequest: ?Request,
 ): SKJSON.CJSON {
-  (getContext() match {
-  | Some(context) ->
-    try {
-      Success(getForKey(context, resource, params, key, optRequest))
-    } catch {
-    | ex -> Failure(ex)
-    }
-  | _ ->
-    SKStore.runWithResult(context ~> {
-      res = getForKey(context, resource, params, key, optRequest);
-      /* Ensure all resources closed at right time */
-      updateContext(context);
-      res
-    })
+  SKStore.runWithResult(context ~> {
+    res = getForKey(context, resource, params, key);
+    /* Ensure all resources closed at right time */
+    updateContext(context);
+    res
   }) match {
   | Success(result) ->
     fields = mutable Vector<(String, SKJSON.CJSON)>[
       ("payload", SKJSON.CJArray(result.values)),
       ("errors", SKJSON.CJArray(result.errors)),
     ];
-    result.request.each(request ->
-      fields.push(("request", SKJSON.CJString(request)))
-    );
     SKJSON.CJObject(
       SKJSON.CJFields::create(fields.sortedBy(x ~> x.i0).toArray(), x -> x),
     )
