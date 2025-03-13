@@ -44,49 +44,42 @@ export class SkipExternalService implements ExternalService {
     return new SkipExternalService(url, control_url);
   }
 
-  subscribe(
+  async subscribe(
     instance: string,
     resource: string,
     params: Json,
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInitial: boolean) => void;
       // FIXME: What is `error()` used for?
-      error: (error: Json) => void;
-      initialized: (error?: Json) => void;
+      error: (error: unknown) => void;
     },
-  ): void {
-    // TODO Manage Status
-    fetch(`${this.control_url}/v1/streams/${resource}`, {
+  ): Promise<void> {
+    const resp = await fetch(`${this.control_url}/v1/streams/${resource}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(params),
-    })
-      .then((resp) => resp.text())
-      .then((uuid) => {
-        const evSource = new EventSource(`${this.url}/v1/streams/${uuid}`);
-        callbacks.initialized();
-        evSource.addEventListener("init", (e: MessageEvent<string>) => {
-          const updates = JSON.parse(e.data) as Entry<Json, Json>[];
-          callbacks.update(updates, true);
-        });
-        evSource.addEventListener("update", (e: MessageEvent<string>) => {
-          const updates = JSON.parse(e.data) as Entry<Json, Json>[];
-          callbacks.update(updates, false);
-        });
-        evSource.onerror = (e) => {
-          console.log(e);
-        };
+    });
+    const uuid = await resp.text();
+    return new Promise<void>((resolve, reject) => {
+      const evSource = new EventSource(`${this.url}/v1/streams/${uuid}`);
+      evSource.addEventListener("open", () => {
         this.resources.set(instance, evSource);
-      })
-      .catch((e: unknown) => {
-        callbacks.initialized(
-          e instanceof Error
-            ? e.message
-            : JSON.stringify(e, Object.getOwnPropertyNames(e)),
-        );
+        resolve();
       });
+      evSource.addEventListener("init", (e: MessageEvent<string>) => {
+        const updates = JSON.parse(e.data) as Entry<Json, Json>[];
+        callbacks.update(updates, true);
+      });
+      evSource.addEventListener("update", (e: MessageEvent<string>) => {
+        const updates = JSON.parse(e.data) as Entry<Json, Json>[];
+        callbacks.update(updates, false);
+      });
+      evSource.addEventListener("error", (e) => {
+        reject(e.data as Error);
+      });
+    });
   }
 
   unsubscribe(instance: string) {

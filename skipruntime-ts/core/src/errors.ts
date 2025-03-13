@@ -26,7 +26,14 @@ export class SkipRESTError extends SkipError {}
  * Exception indicating that a fetch returned an HTTP status outside of the 200-299 range.
  * @hideconstructor
  */
-export class SkipFetchError extends SkipError {}
+export class SkipFetchError extends SkipError {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 /**
  * Exception indicating a non-top-level class being used as a mapper/reducer/etc.

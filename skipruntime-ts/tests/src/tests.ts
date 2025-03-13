@@ -411,34 +411,19 @@ class MockExternal implements ExternalService {
   public initialized: string[] = [];
   public unsubscribed: string[] = [];
 
-  clear() {
-    this.subscribed = [];
-    this.initialized = [];
-    this.unsubscribed = [];
-  }
-
-  subscribe(
+  async subscribe(
     instance: string,
     resource: string,
     params: { v1: number; v2: number },
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
-      error: (error: Json) => void;
-      initialized: (error?: Json) => void;
+      error: (error: unknown) => void;
     },
-  ) {
+  ): Promise<void> {
     this.subscribed.push(instance);
     if (resource == "mock") {
-      this.mock(params, callbacks.update)
-        .then(() => {
-          this.initialized.push(instance);
-          callbacks.initialized();
-        })
-        .catch((e: unknown) => {
-          callbacks.initialized(
-            JSON.stringify(e, Object.getOwnPropertyNames(e)),
-          );
-        });
+      await this.mock(params, callbacks.update);
+      this.initialized.push(instance);
     }
   }
 
@@ -1199,12 +1184,12 @@ export function initTests(
   });
 
   it("testExternal", async () => {
-    const mockExternal = testExternalService.externalServices![
+    const serviceDef = testExternalService();
+    const mockExternal = serviceDef.externalServices![
       "external"
     ] as MockExternal;
-    mockExternal.clear();
     const resource = "external";
-    const service = await initService(testExternalService());
+    const service = await initService(serviceDef);
     service.update("input1", [
       [0, [10]],
       [1, [20]],

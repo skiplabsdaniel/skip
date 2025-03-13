@@ -82,7 +82,7 @@ export class PostgresExternalService implements ExternalService {
    * @param callbacks.initialized - Update initialized.
    * @returns {void}
    */
-  subscribe(
+  async subscribe(
     instance: string,
     resource: string,
     params: Json & {
@@ -96,7 +96,7 @@ export class PostgresExternalService implements ExternalService {
       error: (error: Json) => void;
       initialized: (error?: Json) => void;
     },
-  ): void {
+  ): Promise<void> {
     const table = resource;
     const key = validateKeyParam(params);
 
@@ -154,36 +154,25 @@ FOR EACH ROW EXECUTE FUNCTION %I();`,
       }
     };
 
-    const setup = async () => {
-      await initData();
+    await initData();
 
-      this.client.on("notification", (msg) => {
-        if (
-          msg.channel == instance &&
-          msg.payload !== undefined &&
-          this.open_instances.has(instance)
-        ) {
-          const query = key.select(table, msg.payload);
-          this.client.query(query).then(
-            (changes) => {
-              const k = key.type == "TEXT" ? msg.payload! : Number(msg.payload);
-              callbacks.update([[k, changes.rows as Json[]]], false);
-            },
-            error(`Error executing Postgres query "${query}":`),
-          );
-        }
-      });
-      await setupPgNotify();
-    };
-
-    setup()
-      .then(() => callbacks.initialized())
-      .catch((e: unknown) => {
-        callbacks.initialized(JSON.stringify(e, Object.getOwnPropertyNames(e)));
-        error(
-          `Uncaught error during async Skip update of Postgres table ${table}`,
+    this.client.on("notification", (msg) => {
+      if (
+        msg.channel == instance &&
+        msg.payload !== undefined &&
+        this.open_instances.has(instance)
+      ) {
+        const query = key.select(table, msg.payload);
+        this.client.query(query).then(
+          (changes) => {
+            const k = key.type == "TEXT" ? msg.payload! : Number(msg.payload);
+            callbacks.update([[k, changes.rows as Json[]]], false);
+          },
+          error(`Error executing Postgres query "${query}":`),
         );
-      });
+      }
+    });
+    await setupPgNotify();
   }
 
   unsubscribe(instance: string): void {

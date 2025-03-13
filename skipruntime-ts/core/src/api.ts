@@ -416,8 +416,7 @@ export interface ExternalService {
    * @param resource - Name of the external resource.
    * @param params - Parameters of the external resource.
    * @param callbacks - Callbacks to react on initialized/error/update.
-   * @param callbacks.initialized - Initialized callback.
-   * @param callbacks.error - Error callback.
+   * @param callbacks.error - Error callback to log the error that prevent an idermetiate update.
    * @param callbacks.update - Update callback.
    * @returns {void}
    */
@@ -428,9 +427,8 @@ export interface ExternalService {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      initialized: (error?: Json) => void;
     },
-  ): void;
+  ): Promise<void>;
 
   /**
    * Unsubscribe from a resource provided by the external service.
