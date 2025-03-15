@@ -10,7 +10,8 @@ namespace skipruntime {
 
 extern "C" {
 double SkipRuntime_CollectionWriter__update(char* collection, CJArray values,
-                                            int32_t isInit);
+                                            int32_t isInit,
+                                            SKVoidExecutor executor);
 double SkipRuntime_CollectionWriter__initialized(char* collection, CJSON error);
 double SkipRuntime_CollectionWriter__error(char* collection, CJSON error);
 
@@ -71,7 +72,8 @@ double SkipRuntime_Runtime__unsubscribe(int64_t id);
 CJSON SkipRuntime_Runtime__getAll(char* resource, CJObject jsonParams);
 CJSON SkipRuntime_Runtime__getForKey(char* resource, CJObject jsonParams,
                                      CJSON key);
-double SkipRuntime_Runtime__update(char* input, CJSON values);
+double SkipRuntime_Runtime__update(char* input, CJSON values,
+                                   SKVoidExecutor executor);
 }
 
 using skbinding::AddFunction;
@@ -95,7 +97,7 @@ using v8::Value;
 
 void UpdateOfCollectionWriter(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
-  if (args.Length() != 3) {
+  if (args.Length() != 4) {
     // Throw an Error that is passed back to JavaScript
     isolate->ThrowException(
         Exception::TypeError(FromUtf8(isolate, "Must have three parameters.")));
@@ -119,12 +121,19 @@ void UpdateOfCollectionWriter(const FunctionCallbackInfo<Value>& args) {
         FromUtf8(isolate, "The third parameter must be a boolean.")));
     return;
   }
+  if (!args[3]->IsExternal()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The fourth parameter must be a pointer.")));
+    return;
+  }
   NatTryCatch(isolate, [&args](Isolate* isolate) {
     char* skcollection = ToSKString(isolate, args[0].As<String>());
     CJArray skvalues = args[1].As<External>()->Value();
-    int32_t skisinit = args[1].As<Boolean>()->Value() ? 1 : 0;
-    double skerror =
-        SkipRuntime_CollectionWriter__update(skcollection, skvalues, skisinit);
+    int32_t skisinit = args[2].As<Boolean>()->Value() ? 1 : 0;
+    SKVoidExecutor skexecutor = args[3].As<External>()->Value();
+    double skerror = SkipRuntime_CollectionWriter__update(
+        skcollection, skvalues, skisinit, skexecutor);
     args.GetReturnValue().Set(Number::New(isolate, skerror));
   });
 }
@@ -1118,10 +1127,17 @@ void UpdateOfRuntime(const FunctionCallbackInfo<Value>& args) {
         FromUtf8(isolate, "The second parameter must be a pointer.")));
     return;
   }
+  if (!args[2]->IsExternal()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The third parameter must be a pointer.")));
+    return;
+  }
   NatTryCatch(isolate, [&args](Isolate* isolate) {
     char* skinput = ToSKString(isolate, args[0].As<String>());
     CJSON skvalues = args[1].As<External>()->Value();
-    double skerror = SkipRuntime_Runtime__update(skinput, skvalues);
+    SKVoidExecutor skexecutor = args[2].As<External>()->Value();
+    double skerror = SkipRuntime_Runtime__update(skinput, skvalues, skexecutor);
     args.GetReturnValue().Set(Number::New(isolate, skerror));
   });
 }

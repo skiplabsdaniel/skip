@@ -164,6 +164,7 @@ fun updateOfCollectionWriter(
   collection: String,
   values: SKJSON.CJArray,
   isInit: Int32,
+  executor: VoidExecutor,
 ): Float {
   writer = CollectionWriter(SKStore.DirName::create(collection));
   writer.update(
@@ -175,6 +176,7 @@ fun updateOfCollectionWriter(
       })
     },
     isInit != 0,
+    executor,
   ) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
@@ -187,7 +189,7 @@ fun initializedOfCollectionWriter(
   error: SKJSON.CJSON,
 ): Float {
   writer = CollectionWriter(SKStore.DirName::create(collection));
-  writer.initiliazed(error) match {
+  writer.initialized(error) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -682,7 +684,11 @@ fun unsubscribeOfRuntime(session: Int): Float {
 }
 
 @export("SkipRuntime_Runtime__update")
-fun updateOfRuntime(input: String, values: SKJSON.CJArray): Float {
+fun updateOfRuntime(
+  input: String,
+  values: SKJSON.CJArray,
+  executor: VoidExecutor,
+): Float {
   SKStore.runWithResult(context ~> {
     update(
       context,
@@ -694,6 +700,7 @@ fun updateOfRuntime(input: String, values: SKJSON.CJArray): Float {
           (e[0], SKJSON.expectArray(e[1]))
         })
       },
+      executor,
     )
   }) match {
   | Success _ -> 0.0

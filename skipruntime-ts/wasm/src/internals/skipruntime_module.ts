@@ -76,6 +76,7 @@ export interface FromWasm {
     name: ptr<Internal.String>,
     values: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
     isInit: boolean,
+    executor: ptr<Internal.VoidExecutor>,
   ): Handle<Error>;
 
   SkipRuntime_CollectionWriter__error(
@@ -231,6 +232,7 @@ export interface FromWasm {
   SkipRuntime_Runtime__update(
     input: ptr<Internal.String>,
     values: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
+    executor: ptr<Internal.VoidExecutor>,
   ): Handle<Error>;
 
   // Reducer
@@ -445,11 +447,13 @@ export class WasmFromBinding implements FromBinding {
     name: string,
     values: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
     isInit: boolean,
+    executor: Pointer<Internal.VoidExecutor>,
   ): Handle<Error> {
     return this.fromWasm.SkipRuntime_CollectionWriter__update(
       this.utils.exportString(name),
       toPtr(values),
       isInit,
+      toPtr(executor),
     );
   }
 
@@ -743,10 +747,12 @@ export class WasmFromBinding implements FromBinding {
   SkipRuntime_Runtime__update(
     input: string,
     values: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
+    executor: Pointer<Internal.VoidExecutor>,
   ): Handle<Error> {
     return this.fromWasm.SkipRuntime_Runtime__update(
       this.utils.exportString(input),
       toPtr(values),
+      toPtr(executor),
     );
   }
 

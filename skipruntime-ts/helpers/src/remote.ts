@@ -49,8 +49,10 @@ export class SkipExternalService implements ExternalService {
     resource: string,
     params: Json,
     callbacks: {
-      update: (updates: Entry<Json, Json>[], isInitial: boolean) => void;
-      // FIXME: What is `error()` used for?
+      update: (
+        updates: Entry<Json, Json>[],
+        isInitial: boolean,
+      ) => Promise<void>;
       error: (error: unknown) => void;
     },
   ): Promise<void> {
@@ -70,11 +72,11 @@ export class SkipExternalService implements ExternalService {
       });
       evSource.addEventListener("init", (e: MessageEvent<string>) => {
         const updates = JSON.parse(e.data) as Entry<Json, Json>[];
-        callbacks.update(updates, true);
+        callbacks.update(updates, true).catch(callbacks.error);
       });
       evSource.addEventListener("update", (e: MessageEvent<string>) => {
         const updates = JSON.parse(e.data) as Entry<Json, Json>[];
-        callbacks.update(updates, false);
+        callbacks.update(updates, false).catch(callbacks.error);
       });
       evSource.addEventListener("error", (e) => {
         reject(e.data as Error);

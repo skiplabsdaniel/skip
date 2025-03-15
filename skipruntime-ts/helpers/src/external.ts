@@ -77,7 +77,6 @@ export class TimerResource implements ExternalResource {
     callbacks: {
       update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
       error: (error: Json) => void;
-      initialized: (error?: Json) => void;
     },
   ): Promise<void> {
     const time = new Date().getTime();

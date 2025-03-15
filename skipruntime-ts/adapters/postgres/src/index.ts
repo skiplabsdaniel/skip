@@ -84,7 +84,6 @@ export class PostgresExternalService implements ExternalService {
    * @param callbacks - Callbacks to react on error/loading/update.
    * @param callbacks.error - Error callback.
    * @param callbacks.update - Update callback.
-   * @param callbacks.initialized - Update initialized.
    * @returns {void}
    */
   async subscribe(
@@ -98,9 +97,8 @@ export class PostgresExternalService implements ExternalService {
       syncHistoricData?: boolean;
     },
     callbacks: {
-      update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
+      update: (updates: Entry<Json, Json>[], isInit: boolean) => Promise<void>;
       error: (error: Json) => void;
-      initialized: (error?: Json) => void;
     },
   ): Promise<void> {
     const table = resource;
@@ -113,7 +111,7 @@ export class PostgresExternalService implements ExternalService {
 
     const initData = async () => {
       if (!(params.syncHistoricData ?? true)) {
-        callbacks.update([], true);
+        await callbacks.update([], true);
       } else {
         const init = await this.client.query(
           format("SELECT * FROM %I;", table),
@@ -124,7 +122,7 @@ export class PostgresExternalService implements ExternalService {
           if (entries.has(k)) entries.get(k)!.push(row);
           else entries.set(k, [row]);
         }
-        callbacks.update(Array.from(entries), true);
+        await callbacks.update(Array.from(entries), true);
       }
     };
 
@@ -178,9 +176,9 @@ FOR EACH ROW EXECUTE FUNCTION %I();`,
         this.client.query(query).then(
           (changes) => {
             const k = key.type == "TEXT" ? msg.payload! : Number(msg.payload);
-            callbacks.update([[k, changes.rows as Json[]]], false);
+            return callbacks.update([[k, changes.rows as Json[]]], false);
           },
-          error(`Error executing Postgres query "${query}":`),
+          () => error(`Error executing Postgres query "${query}":`),
         );
       }
     });

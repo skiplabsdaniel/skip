@@ -71,6 +71,7 @@ export interface FromBinding {
     name: string,
     values: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
     isInit: boolean,
+    executor: Pointer<Internal.VoidExecutor>,
   ): Handle<Error>;
 
   SkipRuntime_CollectionWriter__error(
@@ -221,6 +222,7 @@ export interface FromBinding {
   SkipRuntime_Runtime__update(
     input: string,
     values: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
+    executor: Pointer<Internal.VoidExecutor>,
   ): Handle<Error>;
 
   // Reducer

@@ -82,17 +82,18 @@ export function controlService(service: ServiceInstance): express.Express {
       res.status(400).json(`Bad request body ${JSON.stringify(req.body)}`);
       return;
     }
-    try {
-      service.update(req.params.collection, req.body as Entry<Json, Json>[]);
-      res.sendStatus(200);
-    } catch (e: unknown) {
-      if (e instanceof SkipUnknownCollectionError) {
-        res.sendStatus(404);
-      } else {
-        console.log(e);
-        res.status(500).json(e instanceof Error ? e.message : e);
-      }
-    }
+
+    service
+      .update(req.params.collection, req.body as Entry<Json, Json>[])
+      .then(() => res.sendStatus(200))
+      .catch((e: unknown) => {
+        if (e instanceof SkipUnknownCollectionError) {
+          res.sendStatus(404);
+        } else {
+          console.error(e);
+          res.status(500).json(e instanceof Error ? e.message : e);
+        }
+      });
   });
 
   app.get("/v1/healthcheck", (_, res) => {

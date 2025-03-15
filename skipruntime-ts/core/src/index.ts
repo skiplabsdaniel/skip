@@ -333,44 +333,50 @@ class CollectionWriter<K extends Json, V extends Json> {
     private readonly refs: Refs,
   ) {}
 
-  update(values: Entry<K, V>[], isInit: boolean): void {
-    const update_ = () => {
-      return this.refs.binding.SkipRuntime_CollectionWriter__update(
-        this.collection,
-        this.refs.skjson.exportJSON(values),
-        isInit,
-      );
-    };
-    const errorHdl = this.refs.needGC()
-      ? this.refs.runWithGC(update_)
-      : update_();
+  async update(values: Entry<K, V>[], isInit: boolean): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      if (!this.refs.needGC()) {
+        reject(new SkipError("CollectionWriter.update cannot be performed."));
+      }
+      const errorHdl = this.refs.runWithGC(() => {
+        const exHdl = this.refs.handles.register({
+          resolve,
+          reject: (ex: Error) => reject(ex),
+        });
+        return this.refs.binding.SkipRuntime_CollectionWriter__update(
+          this.collection,
+          this.refs.skjson.exportJSON(values),
+          isInit,
+          this.refs.binding.SkipRuntime_createVoidExecutor(exHdl),
+        );
+      });
+      if (errorHdl) reject(this.refs.handles.deleteHandle(errorHdl));
+    });
+  }
 
+  error(error: unknown): void {
+    if (!this.refs.needGC()) {
+      throw new SkipError("CollectionWriter.update cannot be performed.");
+    }
+    const errorHdl = this.refs.runWithGC(() =>
+      this.refs.binding.SkipRuntime_CollectionWriter__error(
+        this.collection,
+        this.refs.skjson.exportJSON(this.toJSONError(error)),
+      ),
+    );
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
 
   initialized(error?: unknown): void {
-    const loading_ = () => {
-      return this.refs.binding.SkipRuntime_CollectionWriter__initialized(
+    if (!this.refs.needGC()) {
+      throw new SkipError("CollectionWriter.update cannot be performed.");
+    }
+    const errorHdl = this.refs.runWithGC(() =>
+      this.refs.binding.SkipRuntime_CollectionWriter__initialized(
         this.collection,
         this.refs.skjson.exportJSON(error ? this.toJSONError(error) : null),
-      );
-    };
-    const errorHdl = this.refs.needGC()
-      ? this.refs.runWithGC(loading_)
-      : loading_();
-    if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
-  }
-
-  error(error: unknown): void {
-    const error_ = () => {
-      return this.refs.binding.SkipRuntime_CollectionWriter__error(
-        this.collection,
-        this.refs.skjson.exportJSON(this.toJSONError(error)),
-      );
-    };
-    const errorHdl = this.refs.needGC()
-      ? this.refs.runWithGC(error_)
-      : error_();
+      ),
+    );
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
 
@@ -628,16 +634,21 @@ export class ServiceInstance {
   update<K extends Json, V extends Json>(
     collection: string,
     entries: Entry<K, V>[],
-  ): void {
-    const errorHdl = this.refs.runWithGC(() => {
-      return this.refs.binding.SkipRuntime_Runtime__update(
-        collection,
-        this.refs.skjson.exportJSON(entries),
-      );
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const errorHdl = this.refs.runWithGC(() => {
+        const exHdl = this.refs.handles.register({
+          resolve,
+          reject: (ex: Error) => reject(ex),
+        });
+        return this.refs.binding.SkipRuntime_Runtime__update(
+          collection,
+          this.refs.skjson.exportJSON(entries),
+          this.refs.binding.SkipRuntime_createVoidExecutor(exHdl),
+        );
+      });
+      if (errorHdl) reject(this.refs.handles.deleteHandle(errorHdl));
     });
-    if (errorHdl) {
-      throw this.refs.handles.deleteHandle(errorHdl);
-    }
   }
 
   /**
@@ -973,19 +984,22 @@ export class ToBinding {
     const supplier = this.handles.get(sksupplier);
     const writer = new CollectionWriter(writerId, this.refs());
     const params = skjson.importJSON(skparams, true) as Json;
-    supplier
-      .subscribe(instance, resource, params, {
-        update: writer.update.bind(writer),
-        error: writer.error.bind(writer),
-      })
-      .then(() => writer.initialized())
-      .catch((e: unknown) =>
-        writer.initialized(
-          e instanceof Error
-            ? e.message
-            : JSON.stringify(e, Object.getOwnPropertyNames(e)),
-        ),
-      );
+    // Ensure to notification is made outside the curent context update
+    setTimeout(() => {
+      supplier
+        .subscribe(instance, resource, params, {
+          update: writer.update.bind(writer),
+          error: writer.error.bind(writer),
+        })
+        .then(() => writer.initialized())
+        .catch((e: unknown) =>
+          writer.initialized(
+            e instanceof Error
+              ? e.message
+              : JSON.stringify(e, Object.getOwnPropertyNames(e)),
+          ),
+        );
+    }, 0);
   }
 
   SkipRuntime_ExternalService__unsubscribe(

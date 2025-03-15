@@ -254,7 +254,12 @@ export class Utils {
     kind = kind ? kind : Stream.OUT;
     str += newLine ? "\n" : "";
     if (kind == Stream.DEBUG) {
-      this.stddebug.push(str);
+      const lines = str.split("\n");
+      for (let i = 0; i < lines.length - 1; i++) {
+        this.stddebug.push(lines[i]!);
+        this.stddebug = [];
+      }
+      this.stddebug.push(lines[lines.length - 1]!);
     } else if (kind == Stream.ERR) {
       this.stderr.push(str);
     } else {
