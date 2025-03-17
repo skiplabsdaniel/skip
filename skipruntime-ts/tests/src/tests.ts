@@ -15,6 +15,7 @@ import type {
   ExternalService,
   ServiceInstance,
   Nullable,
+  SubscriptionID,
 } from "@skipruntime/core";
 import { SkipNonUniqueValueError } from "@skipruntime/core";
 import {
@@ -32,6 +33,7 @@ import { PostgresExternalService } from "@skip-adapter/postgres";
 import { Kafka, logLevel as kafkaLogLevel } from "kafkajs";
 import { KafkaExternalService } from "@skip-adapter/kafka";
 
+/*
 async function withAlternateConsoleError(
   altConsoleError: (...messages: any[]) => void,
   f: () => Promise<void>,
@@ -61,6 +63,8 @@ async function withRetries(
     }
   }
 }
+
+*/
 
 //// testMap1
 
@@ -453,7 +457,6 @@ class MockExternal implements ExternalService {
       error: (error: unknown) => void;
     },
   ): Promise<void> {
-    console.log("subscribe", instance, resource, params);
     this.subscribed.push(instance);
     if (resource == "mock") {
       await this.mock(params, callbacks.update);
@@ -462,7 +465,6 @@ class MockExternal implements ExternalService {
   }
 
   unsubscribe(instance: string) {
-    console.log("unsubscribe", instance);
     this.unsubscribed.push(instance);
   }
 
@@ -1328,17 +1330,7 @@ export function initTests(
         [0, [6]],
         [1, [11]],
       ]);
-      expect(mockExternal.subscribed.length).toEqual(2);
-      expect(mockExternal.initialized.length).toEqual(1);
-      // New params => No value registered in external mock resource
-      expect(await service.getAll(resource)).toEqual([
-        [0, [[10]]],
-        [1, [[20]]],
-      ]);
-      await timeout(6);
       expect(mockExternal.initialized).toEqual(mockExternal.subscribed);
-
-      // After 5ms values are added to external mock resource
       expect(await service.getAll(resource)).toEqual([
         [0, [[10, 16]]],
         [1, [[20, 31]]],
@@ -1521,25 +1513,34 @@ export function initTests(
       this.skip();
     }
     try {
-      service.instantiateResource(resourceId, "resource", {});
-      expect(service.getAll("resource").payload).toEqual([]);
-
       const messages = Array.from({ length: 5 }, () => {
         const noise = Math.floor(Math.random() * 1_000_000_000);
         return { key: String(noise), value: String(1 + (noise % 5)) };
       });
       await producer.send({ topic: "skip-test-topic", messages });
-
-      await withRetries(
-        () =>
-          messages.forEach(({ key, value }) => {
-            const expected = 10 * Number(value) ** 2;
-            expect(service.getArray("resource", key).payload).toEqual([
-              expected,
-            ]);
-          }),
-        10,
-      );
+      await service.instantiateResource(resourceId, "resource", {});
+      expect(await service.getAll("resource")).toEqual([]);
+      let sid: Nullable<SubscriptionID> = null;
+      await new Promise<void>((resolve, reject) => {
+        try {
+          sid = service.subscribe(resourceId, {
+            subscribed: () => {},
+            notify: (update) => {
+              if (update.values.length > 0) resolve();
+            },
+            close: () => {},
+          });
+        } catch (e: unknown) {
+          reject(e as Error);
+        }
+      });
+      if (sid) service.unsubscribe(sid);
+      for (const message of messages) {
+        const expected = 10 * Number(message.value) ** 2;
+        expect(await service.getArray("resource", message.key)).toEqual([
+          expected,
+        ]);
+      }
     } finally {
       await producer.disconnect();
       service.closeResourceInstance(resourceId);
@@ -1554,16 +1555,20 @@ export function initTests(
       "lazy",
       {},
     );
-    const update = () =>
-      service.update("input", [
+    try {
+      await service.update("input", [
         [0, [10]],
         [1, [20]],
       ]);
-    expect(update).toThrow(
-      new RegExp(
-        /^(?:Error: )?useExternalResource is not allowed in a lazy computation graph.$/,
-      ),
-    );
+      throw new Error("Error was not thrown");
+    } catch (e: unknown) {
+      expect(e instanceof Error).toEqual(true);
+      expect((e as Error).message).toMatchRegex(
+        new RegExp(
+          /^(?:Error: )?useExternalResource is not allowed in a lazy computation graph.$/,
+        ),
+      );
+    }
   });
 
   it("testMapWithException", async () => {

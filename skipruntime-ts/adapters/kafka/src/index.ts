@@ -60,54 +60,43 @@ export class KafkaExternalService implements ExternalService {
    * @param instance - Instance identifier of the external resource.
    * @param topic - Name of the Kafka topic to expose as a resource.
    * @param params - Parameters of the external resource. `params.fromBeginning` controls whether to consume all Kafka messages from the cluster, or only from the creation of this external resource.
-   * @param callbacks - Callbacks to react on error/loading/update.
+   * @param callbacks - Callbacks to react on error/update.
    * @param callbacks.error - Error callback.
-   * @param callbacks.loading - Loading callback.
    * @param callbacks.update - Update callback.
    * @returns {void}
    */
-  subscribe(
+  async subscribe(
     instance: string,
     topic: string,
     params: Json & { fromBeginning?: boolean },
     callbacks: {
-      update: (updates: Entry<Json, Json>[], isInit: boolean) => void;
+      update: (updates: Entry<Json, Json>[], isInit: boolean) => Promise<void>;
       error: (error: Json) => void;
-      loading: () => void;
     },
-  ): void {
-    callbacks.update([], true);
+  ): Promise<void> {
     const consumer = this.client.consumer({
       ...this.consumerOptions,
       groupId: instance,
     });
     const fromBeginning = params.fromBeginning ?? true;
-    const setup = async () => {
-      await consumer.connect();
-      this.consumers.set(instance, consumer);
-      await consumer.subscribe({ topic, fromBeginning });
-      await consumer.run({
-        eachBatch: ({ batch }) => {
-          const entries: Map<Json, Json[]> = new Map<Json, Json[]>();
-          batch.messages.forEach((msg) => {
-            for (const [k, v] of this.messageProcessor({
-              key: String(msg.key),
-              value: String(msg.value),
-              topic,
-            })) {
-              if (entries.has(k)) entries.get(k)!.push(v);
-              else entries.set(k, [v]);
-            }
-          });
-          callbacks.update(Array.from(entries), false);
-          return Promise.resolve(undefined);
-        },
-      });
-    };
-    setup().catch((e: unknown) => {
-      const message = `Error subscribing to Kafka external service: ${e}`;
-      console.error(message);
-      callbacks.error(message);
+    await consumer.connect();
+    this.consumers.set(instance, consumer);
+    await consumer.subscribe({ topic, fromBeginning });
+    await consumer.run({
+      eachBatch: ({ batch }) => {
+        const entries: Map<Json, Json[]> = new Map<Json, Json[]>();
+        batch.messages.forEach((msg) => {
+          for (const [k, v] of this.messageProcessor({
+            key: String(msg.key),
+            value: String(msg.value),
+            topic,
+          })) {
+            if (entries.has(k)) entries.get(k)!.push(v);
+            else entries.set(k, [v]);
+          }
+        });
+        return callbacks.update(Array.from(entries), false);
+      },
     });
   }
 
@@ -124,6 +113,10 @@ export class KafkaExternalService implements ExternalService {
   async shutdown(): Promise<void> {
     const consumers = Array.from(this.consumers.values());
     this.consumers.clear();
-    await Promise.all(Array.from(consumers, (c: Consumer) => c.disconnect()));
+    await Promise.all(
+      Array.from(consumers, (c: Consumer) => c.disconnect()).concat([
+        Promise.resolve(),
+      ]),
+    );
   }
 }
