@@ -1,4 +1,4 @@
-import { expect } from "earl";
+import { expect, isEqual } from "earl";
 import type {
   Context,
   Json,
@@ -16,6 +16,7 @@ import type {
   ServiceInstance,
   Nullable,
   SubscriptionID,
+  CollectionUpdate,
 } from "@skipruntime/core";
 import { SkipNonUniqueValueError } from "@skipruntime/core";
 import {
@@ -33,7 +34,6 @@ import { PostgresExternalService } from "@skip-adapter/postgres";
 import { Kafka, logLevel as kafkaLogLevel } from "kafkajs";
 import { KafkaExternalService } from "@skip-adapter/kafka";
 
-/*
 async function withAlternateConsoleError(
   altConsoleError: (...messages: any[]) => void,
   f: () => Promise<void>,
@@ -43,6 +43,8 @@ async function withAlternateConsoleError(
   await f();
   console.error = systemConsoleError;
 }
+
+/*
 
 async function withRetries(
   f: () => void,
@@ -1434,47 +1436,36 @@ export function initTests(
         "resource",
         {},
       );
-      let retries = 0;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      while (true) {
-        try {
-          await timeout(5 + 100 * 2 ** retries);
-          expect(await service.getAll("resource")).toEqual([
-            [1, [111]],
-            [2, [222]],
-            [3, [333]],
-          ]);
-          break;
-        } catch (e: unknown) {
-          if (retries < 2) retries++;
-          else throw e;
-        }
-      }
+      let expected: Entry<Json, Json>[] = [
+        [1, [111]],
+        [2, [222]],
+        [3, [333]],
+      ];
+      await waitForValuesInInstance(
+        service,
+        "unsafe.fixed.resource.ident.1",
+        expected,
+      );
+      expect(await service.getAll("resource")).toEqual(expected);
       await pgClient.query("UPDATE skip_test SET x = 1000 WHERE id = 1;");
       await pgClient.query("DELETE FROM skip_test WHERE id = 2;");
-      retries = 0;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      while (true) {
-        try {
-          await timeout(5 + 100 * 2 ** retries);
-          expect(await service.getAll("resource")).toEqual([
-            [1, [1110]],
-            [2, [220]],
-            [3, [333]],
-          ]);
-          break;
-        } catch (e: unknown) {
-          if (retries < 2) retries++;
-          else throw e;
-        }
-      }
+      expected = [
+        [1, [1110]],
+        [2, [220]],
+        [3, [333]],
+      ];
+      await waitForValuesInInstance(
+        service,
+        "unsafe.fixed.resource.ident.1",
+        expected,
+      );
+      expect(await service.getAll("resource")).toEqual(expected);
       await service.instantiateResource(
         "unsafe.fixed.resource.ident.2",
         "resourceWithException",
         {},
       );
       await pgClient.query("INSERT INTO skip_test (id, x) VALUES (42, 42);");
-
       await pgClient.query("DELETE FROM skip_test WHERE id = 1;");
       await pgClient.query("DELETE FROM skip_test WHERE id = 42;");
       await pgClient.query("INSERT INTO skip_test (id, x) VALUES (1,1),(2,2);");
@@ -1520,21 +1511,13 @@ export function initTests(
       await producer.send({ topic: "skip-test-topic", messages });
       await service.instantiateResource(resourceId, "resource", {});
       expect(await service.getAll("resource")).toEqual([]);
-      let sid: Nullable<SubscriptionID> = null;
-      await new Promise<void>((resolve, reject) => {
-        try {
-          sid = service.subscribe(resourceId, {
-            subscribed: () => {},
-            notify: (update) => {
-              if (update.values.length > 0) resolve();
-            },
-            close: () => {},
-          });
-        } catch (e: unknown) {
-          reject(e as Error);
-        }
-      });
-      if (sid) service.unsubscribe(sid);
+      await waitForInInstance(
+        service,
+        resourceId,
+        (updates) =>
+          updates.length > 0 &&
+          (updates[updates.length - 1]?.values?.length ?? 0) > 0,
+      );
       for (const message of messages) {
         const expected = 10 * Number(message.value) ** 2;
         expect(await service.getArray("resource", message.key)).toEqual([
