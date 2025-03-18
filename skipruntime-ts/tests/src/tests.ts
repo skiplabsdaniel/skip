@@ -39,7 +39,9 @@ async function withAlternateConsoleError(
   f: () => Promise<void>,
 ): Promise<void> {
   const systemConsoleError = console.error;
-  console.error = altConsoleError;
+  console.error = (...messages: any[]) => {
+    altConsoleError(messages);
+  };
   await f();
   console.error = systemConsoleError;
 }
@@ -802,9 +804,7 @@ function kafkaService(): SkipService<Input_NN, Input_NN> {
 // Wrap service instantiation in a function so that the WASM and Native tests get ahold
 // of separate DB clients and manage their lifecycle properly; normally you'd just
 // construct a service object like the other tests in this file.
-const postgresService: () => Promise<
-  SkipService<Input_NN, Input_NN>
-> = async () => {
+async function postgresService(): Promise<SkipService<Input_NN, Input_NN>> {
   const postgres = new PostgresExternalService(pg_config);
   await withAlternateConsoleError(
     () => {},
@@ -836,7 +836,7 @@ const postgresService: () => Promise<
       return inputs;
     },
   };
-};
+}
 
 //// testLazyWithUseExternalService
 
@@ -906,7 +906,9 @@ const mapWithExceptionService: SkipService<Input_SN, Input_SN> = {
 class NMapWithException implements Mapper<number, number, number, number> {
   mapEntry(k: number, values: Values<number>): Iterable<[number, number]> {
     for (const v of values) {
-      if (v == 42) throw new Error("Something goes wrong.");
+      if (v == 42) {
+        throw new Error("Something goes wrong.");
+      }
     }
     return values.toArray().map((v) => [k, v]);
   }
@@ -1503,11 +1505,43 @@ export function initTests(
         "resourceWithException",
         {},
       );
-      await pgClient.query("INSERT INTO skip_test (id, x) VALUES (42, 42);");
+
+      const errorMessages: any[] = [];
+      await withAlternateConsoleError(
+        errorMessages.push.bind(errorMessages),
+        async () => {
+          await pgClient.query(
+            "INSERT INTO skip_test (id, x) VALUES (42, 42);",
+          );
+          await new Promise<void>((resolve, reject) => {
+            let retries = 0;
+            const delay = 10;
+            const run = () => {
+              if (errorMessages.length == 1) resolve();
+              if (retries < 5) {
+                retries++;
+                setTimeout(run, delay);
+              } else {
+                reject(new Error("Timeout"));
+              }
+            };
+            setTimeout(run, delay);
+          });
+        },
+      );
+      expect(errorMessages).toHaveLength(1);
+      expect(errorMessages[0]).toHaveLength(2);
+      expect(errorMessages[0][0]).toEqual(
+        'Error executing Postgres query "SELECT * FROM skip_test WHERE id = 42;":',
+      );
+      expect(errorMessages[0][1]).toBeA(Error);
+      expect((errorMessages[0][1] as Error).message).toMatchRegex(
+        /^(?:Error: )?Something goes wrong.$/,
+      );
+    } finally {
       await pgClient.query("DELETE FROM skip_test WHERE id = 1;");
       await pgClient.query("DELETE FROM skip_test WHERE id = 42;");
       await pgClient.query("INSERT INTO skip_test (id, x) VALUES (1,1),(2,2);");
-    } finally {
       await service.close();
       await pgClient.end();
     }
@@ -1583,7 +1617,7 @@ export function initTests(
       ]);
       throw new Error("Error was not thrown");
     } catch (e: unknown) {
-      expect(e instanceof Error).toEqual(true);
+      expect(e).toBeA(Error);
       expect((e as Error).message).toMatchRegex(
         new RegExp(
           /^(?:Error: )?useExternalResource is not allowed in a lazy computation graph.$/,
@@ -1607,7 +1641,7 @@ export function initTests(
       service = await initService(initServiceWithExternalServiceFailure());
       throw new Error("Error was not thrown");
     } catch (e: unknown) {
-      expect(e instanceof Error).toEqual(true);
+      expect(e).toBeA(Error);
       expect((e as Error).message).toMatchRegex(
         new RegExp(
           /^(?:SkipRuntime\.ServiceInstanceInitFailed: )?Service instance cannot be initialized:/,
@@ -1628,7 +1662,7 @@ export function initTests(
       );
       throw new Error("Error was not thrown");
     } catch (e: unknown) {
-      expect(e instanceof Error).toEqual(true);
+      expect(e).toBeA(Error);
       expect((e as Error).message).toMatchRegex(
         new RegExp(
           /^(?:SkipRuntime\.ResourceInstanceInitFailed: )?Resource instance cannot be initialized:/,

@@ -104,7 +104,7 @@ export class PostgresExternalService implements ExternalService {
     const table = resource;
     const key = validateKeyParam(params);
 
-    const error = (message: string) => (error: unknown) => {
+    const error = (message: string) => (error?: unknown) => {
       callbacks.error(message);
       console.error(message, error);
     };
@@ -173,13 +173,14 @@ FOR EACH ROW EXECUTE FUNCTION %I();`,
         this.open_instances.has(instance)
       ) {
         const query = key.select(table, msg.payload);
-        this.client.query(query).then(
-          (changes) => {
-            const k = key.type == "TEXT" ? msg.payload! : Number(msg.payload);
-            return callbacks.update([[k, changes.rows as Json[]]], false);
-          },
-          () => error(`Error executing Postgres query "${query}":`),
-        );
+        const run = async () => {
+          const changes = await this.client.query(query);
+          const k = key.type == "TEXT" ? msg.payload! : Number(msg.payload);
+          await callbacks.update([[k, changes.rows as Json[]]], false);
+        };
+        run().catch((e: unknown) => {
+          error(`Error executing Postgres query "${query}":`)(e);
+        });
       }
     });
     await setupPgNotify();
@@ -200,16 +201,17 @@ FOR EACH ROW EXECUTE FUNCTION %I();`,
         );
   }
 
-  shutdown(): Promise<void> {
-    if (this.open_instances.size == 0) return this.client.end();
-
-    const query =
-      "DROP FUNCTION IF EXISTS " +
-      Array.from(this.open_instances)
-        .map((x) => format("%I", x))
-        .join(", ") +
-      " CASCADE;";
-    this.open_instances.clear();
-    return this.client.query(query).then(() => this.client.end());
+  async shutdown(): Promise<void> {
+    if (this.open_instances.size > 0) {
+      const query =
+        "DROP FUNCTION IF EXISTS " +
+        Array.from(this.open_instances)
+          .map((x) => format("%I", x))
+          .join(", ") +
+        " CASCADE;";
+      this.open_instances.clear();
+      await this.client.query(query);
+    }
+    await this.client.end();
   }
 }
