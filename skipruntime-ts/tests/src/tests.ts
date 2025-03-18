@@ -1319,6 +1319,14 @@ export function initTests(
     ]);
     const constantResourceId1 = "unsafe.identifier.1";
     await service.instantiateResource(constantResourceId1, resource, {});
+    const updates: CollectionUpdate<Json, Json>[] = [];
+    const sid = service.subscribe(constantResourceId1, {
+      subscribed: () => {},
+      notify: (update) => {
+        updates.push(update);
+      },
+      close: () => {},
+    });
     const constantResourceId2 = "unsafe.identifier.2";
     await service.instantiateResource(constantResourceId2, resource, {});
     try {
@@ -1337,7 +1345,18 @@ export function initTests(
         [0, [[10, 16]]],
         [1, [[20, 31]]],
       ]);
+      expect(updates.map((update) => update.values)).toEqual([
+        [
+          [0, [[10, 15]]],
+          [1, [[20, 30]]],
+        ],
+        [
+          [0, [[10, 16]]],
+          [1, [[20, 31]]],
+        ],
+      ]);
     } finally {
+      service.unsubscribe(sid);
       service.closeResourceInstance(constantResourceId1);
       service.closeResourceInstance(constantResourceId2);
       await service.close();
@@ -1356,6 +1375,14 @@ export function initTests(
     ]);
     const constantResourceId = "unsafe.identifier";
     await service.instantiateResource(constantResourceId, resource, {});
+    const updates: CollectionUpdate<Json, Json>[] = [];
+    const sid = service.subscribe(constantResourceId, {
+      subscribed: () => {},
+      notify: (update) => {
+        updates.push(update);
+      },
+      close: () => {},
+    });
     try {
       expect(await service.getAll(resource)).toEqual([
         [0, [[10, 15]]],
@@ -1369,7 +1396,18 @@ export function initTests(
         [0, [[20, 15]]],
         [1, [[30, 30]]],
       ]);
+      expect(updates.map((update) => update.values)).toEqual([
+        [
+          [0, [[10, 15]]],
+          [1, [[20, 30]]],
+        ],
+        [
+          [0, [[20, 15]]],
+          [1, [[30, 30]]],
+        ],
+      ]);
     } finally {
+      service.unsubscribe(sid);
       service.closeResourceInstance(constantResourceId);
       await service.close();
     }
