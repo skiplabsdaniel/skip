@@ -11,7 +11,7 @@ namespace skipruntime {
 extern "C" {
 double SkipRuntime_CollectionWriter__update(char* collection, CJArray values,
                                             int32_t isInit,
-                                            SKVoidExecutor executor);
+                                            SKExecutor executor);
 double SkipRuntime_CollectionWriter__initialized(char* collection, CJSON error);
 double SkipRuntime_CollectionWriter__error(char* collection, CJSON error);
 
@@ -33,14 +33,14 @@ SKLazyCompute SkipRuntime_createLazyCompute(int32_t ref);
 SKExternalService SkipRuntime_createExternalService(int32_t ref);
 SKResource SkipRuntime_createResource(int32_t ref);
 SKResourceBuilder SkipRuntime_createResourceBuilder(int32_t ref);
-SKVoidExecutor SkipRuntime_createVoidExecutor(int32_t ref);
+SKExecutor SkipRuntime_createExecutor(int32_t ref);
 SKService SkipRuntime_createService(int32_t ref, CJObject inputs,
                                     SKResourceBuilderMap resources,
                                     SKExternalServiceMap exservices);
 SKNotifier SkipRuntime_createNotifier(int32_t ref);
 SKReducer SkipRuntime_createReducer(int32_t ref, CJSON json);
 
-double SkipRuntime_initService(SKService service, SKVoidExecutor executor);
+double SkipRuntime_initService(SKService service, SKExecutor executor);
 CJSON SkipRuntime_closeService();
 
 CJArray SkipRuntime_Collection__getArray(char* collection, CJSON key);
@@ -64,7 +64,7 @@ CJSON SkipRuntime_LazyCollection__getUnique(char* handle, CJSON key);
 
 double SkipRuntime_Runtime__createResource(char* identifier, char* resource,
                                            CJObject jsonParams,
-                                           SKVoidExecutor executor);
+                                           SKExecutor executor);
 double SkipRuntime_Runtime__closeResource(char* identifier);
 int64_t SkipRuntime_Runtime__subscribe(char* reactiveId, SKNotifier notifier,
                                        char* watermark);
@@ -73,7 +73,7 @@ CJSON SkipRuntime_Runtime__getAll(char* resource, CJObject jsonParams);
 CJSON SkipRuntime_Runtime__getForKey(char* resource, CJObject jsonParams,
                                      CJSON key);
 double SkipRuntime_Runtime__update(char* input, CJSON values,
-                                   SKVoidExecutor executor);
+                                   SKExecutor executor);
 }
 
 using skbinding::AddFunction;
@@ -131,7 +131,7 @@ void UpdateOfCollectionWriter(const FunctionCallbackInfo<Value>& args) {
     char* skcollection = ToSKString(isolate, args[0].As<String>());
     CJArray skvalues = args[1].As<External>()->Value();
     int32_t skisinit = args[2].As<Boolean>()->Value() ? 1 : 0;
-    SKVoidExecutor skexecutor = args[3].As<External>()->Value();
+    SKExecutor skexecutor = args[3].As<External>()->Value();
     double skerror = SkipRuntime_CollectionWriter__update(
         skcollection, skvalues, skisinit, skexecutor);
     args.GetReturnValue().Set(Number::New(isolate, skerror));
@@ -454,7 +454,7 @@ void CreateResourceBuilder(const FunctionCallbackInfo<Value>& args) {
   });
 }
 
-void CreateVoidExecutor(const FunctionCallbackInfo<Value>& args) {
+void CreateExecutor(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   if (args.Length() != 1) {
     // Throw an Error that is passed back to JavaScript
@@ -469,9 +469,9 @@ void CreateVoidExecutor(const FunctionCallbackInfo<Value>& args) {
     return;
   }
   NatTryCatch(isolate, [&args](Isolate* isolate) {
-    SKVoidExecutor skVoidExecutor =
-        SkipRuntime_createVoidExecutor(args[0].As<Int32>()->Value());
-    args.GetReturnValue().Set(External::New(isolate, skVoidExecutor));
+    SKExecutor skExecutor =
+        SkipRuntime_createExecutor(args[0].As<Int32>()->Value());
+    args.GetReturnValue().Set(External::New(isolate, skExecutor));
   });
 }
 
@@ -1136,7 +1136,7 @@ void UpdateOfRuntime(const FunctionCallbackInfo<Value>& args) {
   NatTryCatch(isolate, [&args](Isolate* isolate) {
     char* skinput = ToSKString(isolate, args[0].As<String>());
     CJSON skvalues = args[1].As<External>()->Value();
-    SKVoidExecutor skexecutor = args[2].As<External>()->Value();
+    SKExecutor skexecutor = args[2].As<External>()->Value();
     double skerror = SkipRuntime_Runtime__update(skinput, skvalues, skexecutor);
     args.GetReturnValue().Set(Number::New(isolate, skerror));
   });
@@ -1177,8 +1177,7 @@ void GetToJSBinding(const FunctionCallbackInfo<Value>& args) {
   AddFunction(isolate, binding, "SkipRuntime_createResource", CreateResource);
   AddFunction(isolate, binding, "SkipRuntime_createResourceBuilder",
               CreateResourceBuilder);
-  AddFunction(isolate, binding, "SkipRuntime_createVoidExecutor",
-              CreateVoidExecutor);
+  AddFunction(isolate, binding, "SkipRuntime_createExecutor", CreateExecutor);
   AddFunction(isolate, binding, "SkipRuntime_createService", CreateService);
   AddFunction(isolate, binding, "SkipRuntime_createNotifier", CreateNotifier);
   AddFunction(isolate, binding, "SkipRuntime_createReducer", CreateReducer);

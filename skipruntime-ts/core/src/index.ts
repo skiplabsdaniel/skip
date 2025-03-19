@@ -45,7 +45,7 @@ import {
 import {
   ResourceBuilder,
   type Notifier,
-  type VoidExecutor,
+  type Executor,
   type Handle,
   type FromBinding,
 } from "./binding.js";
@@ -347,7 +347,7 @@ class CollectionWriter<K extends Json, V extends Json> {
           this.collection,
           this.refs.skjson.exportJSON(values),
           isInit,
-          this.refs.binding.SkipRuntime_createVoidExecutor(exHdl),
+          this.refs.binding.SkipRuntime_createExecutor(exHdl),
         );
       });
       if (errorHdl) reject(this.refs.handles.deleteHandle(errorHdl));
@@ -481,7 +481,7 @@ export class ServiceInstance {
           identifier,
           resource,
           this.refs.skjson.exportJSON(params),
-          this.refs.binding.SkipRuntime_createVoidExecutor(exHdl),
+          this.refs.binding.SkipRuntime_createExecutor(exHdl),
         );
       });
       if (errorHdl) reject(this.refs.handles.deleteHandle(errorHdl));
@@ -644,7 +644,7 @@ export class ServiceInstance {
         return this.refs.binding.SkipRuntime_Runtime__update(
           collection,
           this.refs.skjson.exportJSON(entries),
-          this.refs.binding.SkipRuntime_createVoidExecutor(exHdl),
+          this.refs.binding.SkipRuntime_createExecutor(exHdl),
         );
       });
       if (errorHdl) reject(this.refs.handles.deleteHandle(errorHdl));
@@ -1021,22 +1021,22 @@ export class ToBinding {
     this.handles.deleteHandle(supplier);
   }
 
-  // VoidExecutor
+  // Executor
 
-  SkipRuntime_VoidExecutor__resolve(skexecutor: Handle<VoidExecutor>): void {
+  SkipRuntime_Executor__resolve(skexecutor: Handle<Executor>): void {
     const checker = this.handles.get(skexecutor);
     checker.resolve();
   }
 
-  SkipRuntime_VoidExecutor__reject(
-    skexecutor: Handle<VoidExecutor>,
+  SkipRuntime_Executor__reject(
+    skexecutor: Handle<Executor>,
     error: Handle<Error>,
   ): void {
     const checker = this.handles.get(skexecutor);
     checker.reject(this.handles.deleteHandle(error));
   }
 
-  SkipRuntime_deleteVoidExecutor(executor: Handle<VoidExecutor>): void {
+  SkipRuntime_deleteExecutor(executor: Handle<Executor>): void {
     this.handles.deleteHandle(executor);
   }
 
@@ -1086,7 +1086,7 @@ export class ToBinding {
         });
         return refs.binding.SkipRuntime_initService(
           skservice,
-          refs.binding.SkipRuntime_createVoidExecutor(exHdl),
+          refs.binding.SkipRuntime_createExecutor(exHdl),
         );
       });
       if (errorHdl) reject(refs.handles.deleteHandle(errorHdl));

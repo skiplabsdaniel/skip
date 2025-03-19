@@ -32,7 +32,7 @@ export interface Checker {
   check(request: string): void;
 }
 
-export type VoidExecutor = {
+export type Executor = {
   resolve: () => void;
   reject: (reason: Error) => void;
 };
@@ -71,7 +71,7 @@ export interface FromBinding {
     name: string,
     values: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
     isInit: boolean,
-    executor: Pointer<Internal.VoidExecutor>,
+    executor: Pointer<Internal.Executor>,
   ): Handle<Error>;
 
   SkipRuntime_CollectionWriter__error(
@@ -195,7 +195,7 @@ export interface FromBinding {
     identifier: string,
     resource: string,
     jsonParams: Pointer<Internal.CJObject>,
-    executor: Pointer<Internal.VoidExecutor>,
+    executor: Pointer<Internal.Executor>,
   ): Handle<Error>;
 
   SkipRuntime_Runtime__getAll(
@@ -222,7 +222,7 @@ export interface FromBinding {
   SkipRuntime_Runtime__update(
     input: string,
     values: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
-    executor: Pointer<Internal.VoidExecutor>,
+    executor: Pointer<Internal.Executor>,
   ): Handle<Error>;
 
   // Reducer
@@ -235,7 +235,7 @@ export interface FromBinding {
   // initService
   SkipRuntime_initService(
     service: Pointer<Internal.Service>,
-    executor: Pointer<Internal.VoidExecutor>,
+    executor: Pointer<Internal.Executor>,
   ): Handle<Error>;
 
   // closeClose
@@ -258,9 +258,7 @@ export interface FromBinding {
     params: Pointer<Internal.CJObject>,
   ): string;
 
-  // VoidExecutor
+  // Executor
 
-  SkipRuntime_createVoidExecutor(
-    ref: Handle<VoidExecutor>,
-  ): Pointer<Internal.VoidExecutor>;
+  SkipRuntime_createExecutor(ref: Handle<Executor>): Pointer<Internal.Executor>;
 }

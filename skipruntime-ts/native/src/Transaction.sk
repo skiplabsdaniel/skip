@@ -35,7 +35,7 @@ class ExternalServiceDef(
 base class Transaction(
   toCommit: (mutable SKStore.Context) ~> void,
   toCheck: SortedSet<SKStore.DirName>,
-  executor: VoidExecutor,
+  executor: Executor,
 ) {
   children =
   | TMain(context: SKStore.Context)
@@ -235,7 +235,7 @@ private fun finaliseTransaction(
   main: mutable SKStore.Context,
   def: mutable TransactionDef,
   commit: (mutable SKStore.Context) ~> void,
-  executor: VoidExecutor,
+  executor: Executor,
 ): void {
   allStatuses = SKStore.EHandle(
     SKStore.IID::keyType,
@@ -247,7 +247,7 @@ private fun finaliseTransaction(
   | Some(createdHdl) ->
     dir = def.context.unsafeGetEagerDir(createdHdl.value.dirName);
     created = dir.getChangesAfter(def.tick);
-    created.i1.map(SKStore.DirName::keyType);
+    created.i1.map(SKStore.DirName::keyType)
   | _ -> SortedSet[]
   };
   if (services.isEmpty()) {

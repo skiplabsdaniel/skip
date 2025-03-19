@@ -77,7 +77,7 @@ value class Values(
   watermark: String,
 )
 
-base class VoidExecutor {
+base class Executor {
   fun resolve(): void;
   fun reject(exc: .Exception): void;
 }

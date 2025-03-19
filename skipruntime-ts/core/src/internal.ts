@@ -52,4 +52,4 @@ declare const notifier: unique symbol;
 export type Notifier = T<typeof notifier>;
 
 declare const voidexecutor: unique symbol;
-export type VoidExecutor = T<typeof voidexecutor>;
+export type Executor = T<typeof voidexecutor>;

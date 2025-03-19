@@ -38,7 +38,7 @@ class ResourceCollections(
 class ServiceDefinition(
   runId: String,
   service: Service,
-  executor: VoidExecutor,
+  executor: Executor,
 ) extends SKStore.File
 
 class Handle(value: SKStore.EHandle<JSONID, JSONFile>) extends SKStore.File
@@ -68,7 +68,7 @@ class ResourceCollection(value: Collection) extends SKStore.File
 class ResourceDef(
   name: String,
   params: SKJSON.CJSON,
-  executor: ?VoidExecutor,
+  executor: ?Executor,
   tick: SKStore.Tick,
 ) extends SKStore.File {
   fun toID(): ResourceID {
@@ -394,7 +394,7 @@ fun buildResourcesGraph(
 
 fun initService(
   service: Service,
-  executor: VoidExecutor,
+  executor: Executor,
 ): Result<void, .Exception> {
   if (SKStore.gHasContext() == 0) {
     SKStore.gContextInit(initCtx());
@@ -1345,7 +1345,7 @@ class CollectionWriter(dirName: SKStore.DirName) {
   fun update(
     values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
     isInit: Bool,
-    executor: VoidExecutor,
+    executor: Executor,
   ): Result<void, .Exception> {
     performOnTransaction(this.dirName, (root, context) ~>
       this.update_(root, context, values, isInit, executor)
@@ -1413,7 +1413,7 @@ class CollectionWriter(dirName: SKStore.DirName) {
     context: mutable SKStore.Context,
     values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
     isInit: Bool,
-    executor: VoidExecutor,
+    executor: Executor,
   ): void {
     context.maybeGetEagerDir(this.dirName) match {
     | None() -> return void
@@ -1614,7 +1614,7 @@ private fun writeInCollection(
   main: mutable SKStore.Context,
   dirName: SKStore.DirName,
   values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
-  executor: VoidExecutor,
+  executor: Executor,
   isInit: Bool = false,
 ): void {
   chdl = SKStore.EHandle(JSONID::keyType, JSONFile::type, dirName);
@@ -1650,7 +1650,7 @@ fun update(
   context: mutable SKStore.Context,
   collection: String,
   values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
-  executor: VoidExecutor,
+  executor: Executor,
 ): void {
   writeInCollection(
     context,
@@ -1680,7 +1680,7 @@ fun createReactiveResource(
   identifier: String,
   resource: String,
   params: SKJSON.CJSON,
-  executor: ?VoidExecutor,
+  executor: ?Executor,
 ): ResourceInfo {
   tick = context.tick;
   resourceHdl = SKStore.EHandle(
