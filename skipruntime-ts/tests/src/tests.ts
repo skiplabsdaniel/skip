@@ -46,29 +46,61 @@ async function withAlternateConsoleError(
   console.error = systemConsoleError;
 }
 
-/*
-
-async function withRetries(
-  f: () => void,
-  maxRetries: number = 5,
-  init: number = 100,
-  exponent: number = 1.5,
+async function waitForInInstance(
+  service: ServiceInstance,
+  instance: string,
+  predicate: (updates: CollectionUpdate<Json, Json>[]) => boolean,
 ): Promise<void> {
-  let retries = 0;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  while (true) {
+  const updates: CollectionUpdate<Json, Json>[] = [];
+  let sid: Nullable<SubscriptionID> = null;
+  await new Promise<void>((resolve, reject) => {
     try {
-      await timeout(init * exponent ** retries);
-      f();
-      break;
+      let rejected = false;
+      const timeout = setTimeout(() => {
+        rejected = true;
+        reject(new Error("Timeout"));
+      }, 1000);
+      sid = service.subscribe(instance, {
+        subscribed: () => {},
+        notify: (update) => {
+          if (rejected) return;
+          updates.push(update);
+          if (predicate(updates)) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        },
+        close: () => {},
+      });
     } catch (e: unknown) {
-      if (retries < maxRetries) retries++;
-      else throw e;
+      reject(e as Error);
     }
-  }
+  });
+  service.unsubscribe(sid!);
 }
 
-*/
+function mergeEntries(values: Entry<Json, Json>[][]) {
+  const merged: { [key: string]: Json } = {};
+  for (const value of values) {
+    for (const entry of value) {
+      merged[JSON.stringify(entry[0])] = entry[1];
+    }
+  }
+  return merged;
+}
+
+async function waitForValuesInInstance(
+  service: ServiceInstance,
+  instance: string,
+  values: Entry<Json, Json>[],
+): Promise<void> {
+  await waitForInInstance(service, instance, (updates) => {
+    return isEqual(
+      mergeEntries(updates.map((u) => u.values)),
+      mergeEntries([values]),
+    );
+  });
+}
 
 //// testMap1
 
@@ -1500,6 +1532,39 @@ export function initTests(
         expected,
       );
       expect(await service.getAll("resource")).toEqual(expected);
+
+      await service.instantiateResource(
+        "unsafe.fixed.resource.ident.3",
+        "streamingResource",
+        {},
+      );
+
+      await waitForInInstance(
+        service,
+        "unsafe.fixed.resource.ident.3",
+        (updates) => {
+          return (
+            updates.length > 0 &&
+            updates[0]!.values.length == 0 &&
+            updates[0]!.isInitial!
+          );
+        },
+      );
+
+      await pgClient.query("INSERT INTO skip_test (id, x) VALUES (5, 5);");
+
+      await waitForInInstance(
+        service,
+        "unsafe.fixed.resource.ident.3",
+        (updates) => {
+          return (
+            updates.length == 2 &&
+            isEqual(updates[1]!.values, [[5, [5]]]) &&
+            !updates[1]!.isInitial
+          );
+        },
+      );
+
       await service.instantiateResource(
         "unsafe.fixed.resource.ident.2",
         "resourceWithException",
@@ -1539,9 +1604,10 @@ export function initTests(
         /^(?:Error: )?Something goes wrong.$/,
       );
     } finally {
-      await pgClient.query("DELETE FROM skip_test WHERE id = 1;");
-      await pgClient.query("DELETE FROM skip_test WHERE id = 42;");
-      await pgClient.query("INSERT INTO skip_test (id, x) VALUES (1,1),(2,2);");
+      await pgClient.query(`
+DROP TABLE IF EXISTS skip_test;
+CREATE TABLE skip_test (id INTEGER PRIMARY KEY, x INTEGER, "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
       await service.close();
       await pgClient.end();
     }
