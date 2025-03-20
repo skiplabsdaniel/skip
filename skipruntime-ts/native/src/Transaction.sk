@@ -9,6 +9,8 @@ class TransactionException(message: String) extends .Exception {
 const kTransactionIdKey: String = "transaction";
 const kTransactionExternalKey: String = "transaction.externals";
 const kTransactionClosedKey: String = "transaction.closed";
+const kInitializationsKey: String = "externals.initializations";
+const kSubscriptionsKey: String = "externals.subscriptions";
 
 fun transactionKey(uuid: String): String {
   `transaction.${uuid}`
@@ -32,6 +34,61 @@ class ExternalServiceDef(
   params: SKJSON.CJSON,
 ) uses Orderable
 
+private fun isInitialized(
+  context: readonly SKStore.Context,
+  dirName: SKStore.DirName,
+): Bool {
+  context.unsafeMaybeGetEagerDir(dirName) match {
+  | Some(dir) ->
+    dirname = sessionId(context, dir) match {
+    | Some(sId) -> kResourceSessionDir.sub(sId).sub("status")
+    | _ -> kSessionDir.sub("status")
+    };
+    shdl = SKStore.EHandle(SKStore.DirName::keyType, StatusFile::type, dirname);
+    shdl.unsafeGet(context, dirName).status.initialiazed.isSome()
+  | _ -> true
+  };
+}
+
+private fun initialized(
+  context: mutable SKStore.Context,
+  toCheck: SortedSet<SKStore.DirName>,
+): Bool {
+  toCheck.map(d -> isInitialized(context, d)).reduce((acc, v) ~> acc && v, true)
+}
+
+private fun initStatus(
+  context: readonly SKStore.Context,
+  dirName: SKStore.DirName,
+): ?SKJSON.CJSON {
+  context.unsafeMaybeGetEagerDir(dirName) match {
+  | Some(dir) ->
+    dirname = sessionId(context, dir) match {
+    | Some(sId) -> kResourceSessionDir.sub(sId).sub("status")
+    | _ -> kSessionDir.sub("status")
+    };
+    shdl = SKStore.EHandle(SKStore.DirName::keyType, StatusFile::type, dirname);
+    shdl.unsafeGet(context, dirName).status.initialiazed
+  | _ -> Some(SKJSON.CJNull())
+  };
+}
+
+private fun fatals(
+  context: mutable SKStore.Context,
+  toCheck: SortedSet<SKStore.DirName>,
+): ?Array<SKJSON.CJSON> {
+  if (toCheck.isEmpty()) return None();
+  errors = mutable Vector[];
+  for (dirName in toCheck) {
+    initStatus(context, dirName) match {
+    | Some(SKJSON.CJNull()) -> void
+    | Some(error) -> errors.push(error)
+    | _ -> return None()
+    }
+  };
+  Some(errors.toArray())
+}
+
 base class Transaction(
   toCommit: (mutable SKStore.Context) ~> void,
   toCheck: SortedSet<SKStore.DirName>,
@@ -42,30 +99,7 @@ base class Transaction(
   | TIntermediate(alias: String)
 
   fun initialized(context: mutable SKStore.Context): Bool {
-    this.toCheck.map(d -> this.isInitialized(context, d)).reduce(
-      (acc, v) ~> acc && v,
-      true,
-    )
-  }
-
-  private fun isInitialized(
-    context: readonly SKStore.Context,
-    dirName: SKStore.DirName,
-  ): Bool {
-    context.unsafeMaybeGetEagerDir(dirName) match {
-    | Some(dir) ->
-      dirname = sessionId(context, dir) match {
-      | Some(sId) -> kResourceSessionDir.sub(sId).sub("status")
-      | _ -> kSessionDir.sub("status")
-      };
-      shdl = SKStore.EHandle(
-        SKStore.DirName::keyType,
-        StatusFile::type,
-        dirname,
-      );
-      shdl.unsafeGet(context, dirName).status.initialiazed.isSome()
-    | _ -> true
-    };
+    initialized(context, this.toCheck)
   }
 
   fun collectCommit(
@@ -133,6 +167,14 @@ class AliasesFile(value: List<String>) extends SKStore.File
 class ClosedServicesFile(
   value: SortedSet<ExternalServiceDef>,
 ) extends SKStore.File
+class SubscriptionsFile(value: SortedSet<SKStore.DirName>) extends SKStore.File
+
+class InitializationFile(
+  identifier: ?String,
+  services: SortedSet<SKStore.DirName>,
+  executor: Executor,
+  transactions: List<String> = List.Nil(),
+) extends SKStore.File
 
 class ExternalsFile(
   value: Map<
@@ -184,6 +226,32 @@ private fun getAliases(
   aliases
 }
 
+private fun addTransactionToInit(
+  context: mutable SKStore.Context,
+  uuid: String,
+): Bool {
+  context
+    .getPersistent(kInitializationsKey)
+    .map(InitializationFile::type) match {
+  | Some(instance) ->
+    !instance.transactions = List.Cons(uuid, instance.transactions);
+    context.setPersistent(kInitializationsKey, instance);
+    true
+  | _ -> false
+  }
+}
+
+private fun getInitTransactions(
+  context: mutable SKStore.Context,
+): List<String> {
+  context
+    .getPersistent(kInitializationsKey)
+    .map(InitializationFile::type) match {
+  | Some(instance) -> instance.transactions
+  | _ -> List.Nil<String>()
+  };
+}
+
 private fun addClosed(
   context: mutable SKStore.Context,
   service: ExternalServiceDef,
@@ -212,12 +280,99 @@ private fun isClosed(
   };
 }
 
+private fun addSubscription(
+  context: mutable SKStore.Context,
+  dirName: SKStore.DirName,
+): void {
+  subscriptions = context
+    .getPersistent(kSubscriptionsKey)
+    .map(SubscriptionsFile::type) match {
+  | Some(subscriptions) -> subscriptions.value
+  | _ -> SortedSet<SKStore.DirName>[]
+  };
+  context.setPersistent(
+    kSubscriptionsKey,
+    SubscriptionsFile(subscriptions.set(dirName)),
+  )
+}
+
+private fun checkSubcriptions(
+  context: mutable SKStore.Context,
+  executor: Executor,
+  identifier: ?String,
+): void {
+  subcriptions = getSubscriptions(context);
+  if (subcriptions.isEmpty()) {
+    executor.resolve()
+  } else {
+    context.setPersistent(
+      kInitializationsKey,
+      InitializationFile(identifier, subcriptions, executor),
+    )
+  };
+}
+
+private fun getSubscriptions(
+  context: mutable SKStore.Context,
+): SortedSet<SKStore.DirName> {
+  subcriptions = context
+    .getPersistent(kSubscriptionsKey)
+    .map(SubscriptionsFile::type) match {
+  | Some(subscriptions) -> subscriptions.value
+  | _ -> SortedSet<SKStore.DirName>[]
+  };
+  context.removePersistent(kSubscriptionsKey);
+  subcriptions
+}
+
 mutable class TransactionDef(
   parent: ?SKStore.StringFile,
   id: SKStore.StringFile,
   context: mutable SKStore.Context,
   tick: SKStore.Tick,
 )
+
+private fun checkInitializations(context: mutable SKStore.Context): void {
+  if (context.getPersistent(kInitializationsKey).isSome()) {
+    invariant_violation(
+      "A previews resource instance steel to be initialized.",
+    );
+  };
+}
+
+private fun checkInitialization(context: mutable SKStore.Context): void {
+  context
+    .getPersistent(kInitializationsKey)
+    .map(InitializationFile::type) match {
+  | Some(instance) ->
+    fatals(context, instance.services) match {
+    | Some(errors) ->
+      if (errors.isEmpty()) instance.executor.resolve() else {
+        instance.executor.reject(
+          instance.identifier match {
+          | Some _ -> ResourceInstanceInitFailed(errors)
+          | None _ -> ServiceInstanceInitFailed(errors)
+          },
+        );
+        instance.identifier match {
+        | Some(id) -> destroyReactiveResource(context, SKStore.SID(id))
+        | _ ->
+          context.getPersistent(kTransactionIdKey).map(f ->
+            SKStore.StringFile::type(f).value
+          ) match {
+          | None() -> _ = closeService_(context, false)
+          | _ -> void
+          }
+        }
+      };
+      context.removePersistent(kInitializationsKey)
+    | _ -> void
+    }
+  | _ ->
+    // Not created durring resource creation
+    void
+  }
+}
 
 private fun checkTransaction(
   main: mutable SKStore.Context,
@@ -230,26 +385,14 @@ private fun checkTransaction(
   mutable TransactionDef(parent, transactionId, context, context.tick)
 }
 
-private fun finaliseTransaction(
+private fun finalizeTransaction(
   root: mutable SKStore.Context,
   main: mutable SKStore.Context,
   def: mutable TransactionDef,
   commit: (mutable SKStore.Context) ~> void,
   executor: Executor,
 ): void {
-  allStatuses = SKStore.EHandle(
-    SKStore.IID::keyType,
-    StatusHandle::type,
-    kSessionDir.sub("all_statuses"),
-  );
-  // Check if external services was created durring the update
-  services = allStatuses.maybeGet(def.context, SKStore.IID(0)) match {
-  | Some(createdHdl) ->
-    dir = def.context.unsafeGetEagerDir(createdHdl.value.dirName);
-    created = dir.getChangesAfter(def.tick);
-    created.i1.map(SKStore.DirName::keyType)
-  | _ -> SortedSet[]
-  };
+  services = getSubscriptions(def.context);
   if (services.isEmpty()) {
     def.parent match {
     | Some(current) -> main.setPersistent(kTransactionIdKey, current)

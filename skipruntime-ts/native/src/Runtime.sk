@@ -68,15 +68,7 @@ class ResourceCollection(value: Collection) extends SKStore.File
 class ResourceDef(
   name: String,
   params: SKJSON.CJSON,
-  executor: ?Executor,
-  tick: SKStore.Tick,
-) extends SKStore.File {
-  fun toID(): ResourceID {
-    ResourceID(this.name, this.params)
-  }
-}
-
-class ResourceID(name: String, params: SKJSON.CJSON) extends SKStore.Key {
+) extends SKStore.File, SKStore.Key {
   //
   fun toString(): String {
     `${this.name}:${this.params.prettyPrint()}`
@@ -160,40 +152,6 @@ class RequestStatuses(
     }
   }
 
-  fun isInitialized(): Bool {
-    for (resourceStatus in this.statuses) {
-      if (resourceStatus.status.initialiazed.isNone()) break false
-    } else {
-      true
-    }
-  }
-
-  fun isWithFatal(): Bool {
-    for (resourceStatus in this.statuses) {
-      resourceStatus.status.initialiazed match {
-      | None()
-      | Some(SKJSON.CJNull()) ->
-        void
-      | _ -> break true
-      }
-    } else {
-      false
-    }
-  }
-
-  fun getFatals(): Array<SKJSON.CJSON> {
-    errors = mutable Vector[];
-    for (status in this.statuses) {
-      status.status.initialiazed.each(init ->
-        init match {
-        | SKJSON.CJNull() -> void
-        | error -> errors.push(error)
-        }
-      )
-    };
-    errors.toArray()
-  }
-
   fun getErrors(): Array<SKJSON.CJSON> {
     errors = mutable Vector[];
     for (resourceStatus in this.statuses) {
@@ -241,7 +199,7 @@ fun buildResourcesGraph(
   definitionHdl: SKStore.EHandle<SKStore.IID, ServiceDefinition>,
   statusHdl: SKStore.EHandle<SKStore.IID, ExternalServiceStatus>,
   servicesHdl: SKStore.EHandle<SKStore.SID, ServiceFile>,
-): SKStore.EHandle<ResourceID, ResourceInfo> {
+): SKStore.EHandle<ResourceDef, ResourceInfo> {
   dirname = kResourceSessionDir;
   dDirname = dirname.sub("data");
   resourcesHdl = context.mkdir(
@@ -257,16 +215,16 @@ fun buildResourcesGraph(
     Array[],
   );
   idbyresourceHdl = resourcesHdl.map(
-    ResourceID::keyType,
+    ResourceDef::keyType,
     SKStore.StringFile::type,
     context,
     dirname.sub("idbyresource"),
     (_c, writer, key, it) ~> {
-      writer.set(it.assertUnique().toID(), SKStore.StringFile(key.value));
+      writer.set(it.assertUnique(), SKStore.StringFile(key.value));
     },
   );
   availablesHdl = idbyresourceHdl.map(
-    ResourceID::keyType,
+    ResourceDef::keyType,
     SKStore.IntFile::type,
     context,
     dirname.sub("availables"),
@@ -277,7 +235,7 @@ fun buildResourcesGraph(
     },
   );
   availablesHdl.map(
-    ResourceID::keyType,
+    ResourceDef::keyType,
     ResourceInfo::type,
     context,
     kResourceCollectionsDir,
@@ -322,32 +280,6 @@ fun buildResourcesGraph(
             );
           },
         );
-        _ = sStatusHdl
-          .map(
-            SKStore.IID::keyType,
-            SKStore.BoolFile::type,
-            context,
-            statusRef.sub("initialized"),
-            (_ctx, writer, key, it) ~> {
-              requestStatuses = RequestStatuses(it.toArray());
-              isInitializedOrWithFatal =
-                requestStatuses.isInitialized() ||
-                requestStatuses.isWithFatal();
-              writer.set(key, SKStore.BoolFile(isInitializedOrWithFatal));
-            },
-          )
-          .map(
-            SKStore.IID::keyType,
-            SKStore.BoolFile::type,
-            context,
-            statusRef.sub("initchecker"),
-            (ctx, writer, lkey, it) ~> {
-              if (it.first.value) {
-                ctx.postpone(CheckInitialisation(key))
-              };
-              writer.set(lkey, it.first)
-            },
-          );
         _ = sStatusHdl.map(
           SKStore.IID::keyType,
           RequestStatuses::type,
@@ -466,32 +398,6 @@ fun initService(
           );
         },
       );
-      _ = statusHdl
-        .map(
-          SKStore.IID::keyType,
-          SKStore.BoolFile::type,
-          context,
-          kSessionDir.sub("initialized"),
-          (_ctx, writer, key, it) ~> {
-            requestStatuses = RequestStatuses(it.toArray());
-            isInitializedOrWithFatal =
-              requestStatuses.isInitialized() ||
-              requestStatuses.isWithFatal();
-            writer.set(key, SKStore.BoolFile(isInitializedOrWithFatal));
-          },
-        )
-        .map(
-          SKStore.IID::keyType,
-          SKStore.BoolFile::type,
-          context,
-          kSessionDir.sub("initchecker"),
-          (ctx, writer, key, it) ~> {
-            if (it.first.value) {
-              ctx.postpone(CheckInitService())
-            };
-            writer.set(key, it.first)
-          },
-        );
       resourcesHdl = buildResourcesGraph(
         context,
         sessionHdl,
@@ -547,7 +453,9 @@ fun initService(
             );
             writer.set(key, StatusHandle(hdl))
           },
-        )
+        );
+      // Manage subcription
+      context.update();
     } else {
       // Can be done because it's only used on test, we can add a environment variable or some way to protect that usage
       _ = closeService_(context);
@@ -574,17 +482,9 @@ fun initService(
         SKStore.IID(0),
         Array[ServiceDefinition(runId, service, executor)],
       );
+      updateContext(context);
     };
-    updateContext(context);
-    statuses = SKStore.EHandle(
-      SKStore.IID::keyType,
-      ExternalServiceStatus::type,
-      kSessionDir.sub("statuses"),
-    );
-    ss = statuses.maybeGet(context, SKStore.IID(0));
-    if (ss.isNone()) {
-      executor.resolve()
-    };
+    checkSubcriptions(context, executor, None());
   })
 }
 
@@ -623,78 +523,6 @@ fun closeService(): Result<Array<Float>, .Exception> {
   SKStore.runWithResult(ctx ~> closeService_(ctx))
 }
 
-class CheckInitService() extends SKStore.Postponable {
-  //
-  fun perform(context: mutable SKStore.Context): void {
-    transaction = context.getPersistent(kTransactionIdKey).map(f ->
-      SKStore.StringFile::type(f).value
-    );
-    sessionHdl = SKStore.EHandle(
-      SKStore.IID::keyType,
-      ServiceDefinition::type,
-      kSessionDir,
-    );
-    service = sessionHdl.get(context, SKStore.IID(0));
-    statuses = SKStore.EHandle(
-      SKStore.IID::keyType,
-      ExternalServiceStatus::type,
-      kSessionDir.sub("statuses"),
-    );
-    fatals = RequestStatuses(
-      statuses.getArray(context, SKStore.IID(0)),
-    ).getFatals();
-    if (fatals.isEmpty()) {
-      service.executor.resolve()
-    } else {
-      service.executor.reject(ServiceInstanceInitFailed(fatals));
-      if (transaction.isNone()) {
-        _ = closeService_(context, false)
-      };
-    }
-  }
-}
-
-class CheckInitialisation(resourceId: ResourceID) extends SKStore.Postponable {
-  //
-  fun perform(context: mutable SKStore.Context): void {
-    resourceHdl = SKStore.EHandle(
-      SKStore.SID::keyType,
-      ResourceDef::type,
-      kResourceSessionDir,
-    );
-    graphHdl = SKStore.EHandle(
-      ResourceID::keyType,
-      ResourceInfo::type,
-      kResourceCollectionsDir,
-    );
-    idbyresourceHdl = SKStore.EHandle(
-      ResourceID::keyType,
-      SKStore.StringFile::type,
-      kResourceSessionDir.sub("idbyresource"),
-    );
-    info = graphHdl.get(context, this.resourceId);
-    statuses = SKStore.EHandle(
-      SKStore.IID::keyType,
-      ExternalServiceStatus::type,
-      info.statusRef.sub("statuses"),
-    );
-    fatals = RequestStatuses(
-      statuses.getArray(context, SKStore.IID(0)),
-    ).getFatals();
-    instances = idbyresourceHdl.getArray(context, this.resourceId);
-    exc = ResourceInstanceInitFailed(fatals);
-    instances.each(instance -> {
-      def = resourceHdl.get(context, SKStore.SID(instance.value));
-      def.executor.each(e ->
-        if (fatals.isEmpty()) e.resolve() else e.reject(exc)
-      );
-      if (!fatals.isEmpty()) {
-        destroyReactiveResource(context, SKStore.SID(instance.value))
-      }
-    })
-  }
-}
-
 class LinkToResource(
   supplier: ExternalService,
   instance: String,
@@ -708,6 +536,7 @@ class LinkToResource(
     pushContext(context);
     this.supplier.subscribe(this.instance, this.writer, this.name, this.params);
     popContext();
+    addSubscription(context, this.writer.dirName);
   }
 }
 
@@ -1324,7 +1153,7 @@ private fun sessionId(
   dir.creator match {
   | Some(arrow) ->
     if (isResourceDir(arrow.parentName)) {
-      id = ResourceID::keyType(arrow.key);
+      id = ResourceDef::keyType(arrow.key);
       Some(toResourceId(id.name, id.params))
     } else {
       context.unsafeMaybeGetEagerDir(arrow.parentName) match {
@@ -1364,7 +1193,9 @@ class CollectionWriter(dirName: SKStore.DirName) {
       this.dirName,
       (_root, context) ~> {
         this.updateStatus(context, status ~> status.init(error));
-        updateContext(context);
+        context.update();
+        checkInitialization(context);
+        checkGarbage(context);
       },
       true,
     )
@@ -1432,11 +1263,11 @@ fun getAll(
   params: SKJSON.CJSON,
 ): GetResult<Values> {
   graphHdl = SKStore.EHandle(
-    ResourceID::keyType,
+    ResourceDef::keyType,
     ResourceInfo::type,
     kResourceCollectionsDir,
   );
-  resourceID = ResourceID(resourceName, params);
+  resourceID = ResourceDef(resourceName, params);
   resource = graphHdl.get(context, resourceID);
   resource.getResult(
     context,
@@ -1454,11 +1285,11 @@ fun getForKey(
   key: SKJSON.CJSON,
 ): GetResult<Array<SKJSON.CJSON>> {
   graphHdl = SKStore.EHandle(
-    ResourceID::keyType,
+    ResourceDef::keyType,
     ResourceInfo::type,
     kResourceCollectionsDir,
   );
-  resourceID = ResourceID(resourceName, params);
+  resourceID = ResourceDef(resourceName, params);
   resource = graphHdl.get(context, resourceID);
   pushContext(context);
   values = resource.collection.getArray(key);
@@ -1536,7 +1367,7 @@ fun subscribe(
     kResourceSessionDir,
   );
   resourcesCollectionsHdl = SKStore.EHandle(
-    ResourceID::keyType,
+    ResourceDef::keyType,
     ResourceInfo::type,
     kResourceCollectionsDir,
   );
@@ -1546,7 +1377,7 @@ fun subscribe(
   };
   resourceHdl.maybeGet(context, sid) match {
   | Some(definition) ->
-    info = resourcesCollectionsHdl.get(context, definition.toID());
+    info = resourcesCollectionsHdl.get(context, definition);
     start = `${info.session}/`;
     from = optWatermark match {
     | Some(watermark) if (watermark.startsWith(start)) ->
@@ -1643,7 +1474,7 @@ private fun writeInCollection(
   commit(transaction.context);
   // Do not check carbage collection to prevent closing resources
   transaction.context.update();
-  finaliseTransaction(root, main, transaction, commit, executor);
+  finalizeTransaction(root, main, transaction, commit, executor);
 }
 
 fun update(
@@ -1680,16 +1511,16 @@ fun createReactiveResource(
   identifier: String,
   resource: String,
   params: SKJSON.CJSON,
-  executor: ?Executor,
+  executor: Executor,
 ): ResourceInfo {
-  tick = context.tick;
+  checkInitializations(context);
   resourceHdl = SKStore.EHandle(
     SKStore.SID::keyType,
     ResourceDef::type,
     kResourceSessionDir,
   );
   graphHdl = SKStore.EHandle(
-    ResourceID::keyType,
+    ResourceDef::keyType,
     ResourceInfo::type,
     kResourceCollectionsDir,
   );
@@ -1698,18 +1529,12 @@ fun createReactiveResource(
   | Some _ -> throw ExistingResourceException()
   | _ -> void
   };
-  definition = ResourceDef(resource, params, executor, tick);
+  definition = ResourceDef(resource, params);
   resourceHdl.writeArray(context, key, Array[definition]);
-  updateContext(context);
-
-  info = graphHdl.get(context, definition.toID());
-  created = context
-    .unsafeGetEagerDir(info.statusRef.sub("created"))
-    .getChangesAfter(tick);
-  if (created.i1.isEmpty()) {
-    executor.each(e -> e.resolve())
-  };
-  info
+  context.update();
+  checkSubcriptions(context, executor, Some(identifier));
+  checkGarbage(context);
+  graphHdl.get(context, definition);
 }
 
 fun getReactiveResource(
@@ -1722,13 +1547,13 @@ fun getReactiveResource(
     kResourceSessionDir,
   );
   graphHdl = SKStore.EHandle(
-    ResourceID::keyType,
+    ResourceDef::keyType,
     ResourceInfo::type,
     kResourceCollectionsDir,
   );
   key = SKStore.SID(identifier);
   definition = resourceHdl.get(context, key);
-  graphHdl.get(context, definition.toID());
+  graphHdl.get(context, definition);
 }
 
 fun checkGarbage(context: mutable SKStore.Context): void {

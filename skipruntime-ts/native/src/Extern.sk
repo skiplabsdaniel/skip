@@ -583,13 +583,7 @@ fun createResourceOfRuntime(
   executor: Executor,
 ): Float {
   SKStore.runWithResult(context ~> {
-    createReactiveResource(
-      context,
-      identifier,
-      resource,
-      params,
-      Some(executor),
-    )
+    createReactiveResource(context, identifier, resource, params, executor)
   }) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)

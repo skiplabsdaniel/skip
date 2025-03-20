@@ -256,7 +256,7 @@ export class Utils {
     if (kind == Stream.DEBUG) {
       const lines = str.split("\n");
       for (let i = 0; i < lines.length - 1; i++) {
-        this.stddebug.push(lines[i]!);
+        console.error(lines[i]!);
         this.stddebug = [];
       }
       this.stddebug.push(lines[lines.length - 1]!);
