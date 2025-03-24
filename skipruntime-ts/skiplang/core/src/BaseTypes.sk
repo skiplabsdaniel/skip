@@ -1,9 +1,47 @@
 module SkipRuntime;
 
+base class IError uses Show
+base class Parameters uses Orderable, Show
+base class Collections
+
+base class KeyConverter<K: frozen & Orderable> {
+  fun fromKey(SKStore.Key): K;
+  fun toKey(K): SKStore.Key;
+}
+
+base class ValueConverter<V: frozen> {
+  fun fromFile(SKStore.File): V;
+  fun toFile(V): SKStore.File;
+}
+
+base class ErrorConverter<E: frozen> {
+  fun fromError(IError): E;
+  fun toError(E): IError;
+}
+
+base class ParamsConverter<P: frozen> {
+  fun fromParams(Parameters): P;
+  fun toParams(P): Parameters;
+}
+
+class ConverterPair<K: frozen & Orderable, V: frozen>(
+  key: KeyConverter<K>,
+  value: ValueConverter<V>,
+) {
+  fun fromSKStore(values: (SKStore.Key, Array<SKStore.File>)): (K, Array<V>) {
+    (this.key.fromKey(values.i0), values.i1.map(this.value.fromFile))
+  }
+
+  fun toSKStore(values: (K, Array<V>)): (SKStore.Key, Array<SKStore.File>) {
+    (this.key.toKey(values.i0), values.i1.map(this.value.toFile))
+  }
+}
+
 base class Reducer<V1: frozen, V2: frozen>(initial: V2) {
-  fun getType(): SKStore.File ~> V2;
   fun add(acc: V2, value: V1): V2;
   fun remove(acc: V2, value: V1): ?V2;
+  fun valueConverter(): SKStore.File ~> V1;
+  fun accConverter(): ValueConverter<V2>;
 }
 
 /**
@@ -14,23 +52,30 @@ base class Reducer<V1: frozen, V2: frozen>(initial: V2) {
  * @param values - the values mapped to by `key` in the input collection
  * @returns an iterable of key/value pairs to output for the given input(s)
  */
-base class Mapper {
+base class Mapper<
+  K1: frozen & Orderable,
+  V1: frozen,
+  K2: frozen & Orderable,
+  V2: frozen,
+> {
   fun mapEntry(
-    key: SKJSON.CJSON,
-    values: mutable SKStore.NonEmptyIterator<SKJSON.CJSON>,
-  ): mutable Iterator<(SKJSON.CJSON, SKJSON.CJSON)>;
+    key: K1,
+    values: mutable SKStore.NonEmptyIterator<V1>,
+  ): mutable Iterator<(K2, V2)>;
+
+  fun converters(): ConverterPair<K2, V2>;
 }
 
-base class LazyCompute {
-  fun compute(self: LazyCollection, key: SKJSON.CJSON): Array<SKJSON.CJSON>;
+base class LazyCompute<K: frozen & Orderable, V: frozen> {
+  fun compute(self: LazyCollection<K, V>, key: K): Array<V>;
 }
 
 base class ExternalService {
   fun subscribe(
     instance: String,
-    collection: CollectionWriter,
+    writer: CollectionWriter,
     resource: String,
-    params: SKJSON.CJSON,
+    params: Parameters,
   ): void;
 
   fun unsubscribe(instance: String): void;
@@ -39,25 +84,52 @@ base class ExternalService {
 }
 
 base class Resource {
-  fun instantiate(collections: Map<String, Collection>): Collection;
+  fun materialize(
+    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Collection<SKStore.Key, SKStore.File>;
 }
 
 base class ResourceBuilder {
-  fun build(parameters: SKJSON.CJSON): Resource;
+  fun parseParameters(params: String): Parameters;
+  fun produce(params: Parameters): Resource;
 }
 
-base class Service(
-  initialData: Array<Input>,
-  resources: Map<String, ResourceBuilder>,
-  remoteCollections: Map<String, ExternalService> = Map[],
-) {
+base class Data {
+  fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)>;
+}
+
+class InitialData<K: frozen & Orderable, V: frozen>(
+  values: Array<(K, Array<V>)>,
+  converters: ConverterPair<K, V>,
+) extends Data {
+  fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)> {
+    this.values.map(v ->
+      (
+        SKStore.Key::unTyped(this.converters.key.toKey(v.i0)),
+        v.i1.map(this.converters.value.toFile).map(unTypedFile),
+      )
+    )
+  }
+}
+
+class EmptyData() extends Data {
+  fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)> {
+    Array[]
+  }
+}
+
+base class Service {
+  fun initialData(): Map<String, Data>;
+  fun resourceBuilders(): Map<String, ResourceBuilder>;
+  fun externalServices(): Map<String, ExternalService>;
+
   fun createGraph(
-    inputCollections: Map<String, Collection>,
-  ): Map<String, Collection>;
+    inputCollections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Map<String, Collection<SKStore.Key, SKStore.File>>;
 }
 
 value class Values(
-  values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+  values: Array<(SKStore.Key, Array<SKStore.File>)>,
   watermark: String,
 )
 
@@ -66,16 +138,40 @@ base class Executor {
   fun reject(exc: .Exception): void;
 }
 
-base class Notifier {
+base class Notifier<K: frozen & Orderable, V: frozen> {
   fun subscribed(): void;
 
   fun notify(
-    values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+    values: Array<(K, Array<V>)>,
     watermark: String,
     updates: Bool,
   ): void;
 
   fun close(): void;
+}
+
+// ************ Typed ************************
+
+base class TResourceBuilder<P: frozen> extends ResourceBuilder {
+  fun build(params: P): Resource;
+  fun fromParameters(params: Parameters): P;
+
+  fun produce(params: Parameters): Resource {
+    this.build(this.fromParameters(params))
+  }
+}
+
+base class TResource<K: frozen & Orderable, V: frozen, CS: Collections> extends
+  Resource,
+{
+  fun materialize(
+    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Collection<SKStore.Key, SKStore.File> {
+    this.instantiate(this.fromMap(collections)).unTyped()
+  }
+
+  fun instantiate(collections: CS): Collection<K, V>;
+  fun fromMap(Map<String, Collection<SKStore.Key, SKStore.File>>): CS;
 }
 
 module end;
