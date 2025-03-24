@@ -36,31 +36,88 @@ class JSONID(json: SKJSON.CJSON) extends SKStore.Key {
 
 class JSONFile(json: SKJSON.CJSON) extends SKStore.File
 
-fun accReducer<V1: SKStore.File, V2: SKStore.File>(
+class JSONValueConverter() extends ValueConverter<SKJSON.CJSON> {
+  fun fromFile(v: SKStore.File): SKJSON.CJSON {
+    JSONFile::type(v).json
+  }
+  fun toFile(v: SKJSON.CJSON): SKStore.File {
+    JSONFile(v)
+  }
+}
+
+class JSONKeyConverter() extends KeyConverter<SKJSON.CJSON> {
+  fun fromKey(k: SKStore.Key): SKJSON.CJSON {
+    JSONID::keyType(k).json
+  }
+  fun toKey(k: SKJSON.CJSON): SKStore.Key {
+    JSONID(k)
+  }
+  fun fromString(k: String): SKJSON.CJSON {
+    SKJSON.decode(k, x ~> x)
+  }
+}
+
+const kJSON_CONVERTERS: ConverterPair<
+  SKJSON.CJSON,
+  SKJSON.CJSON,
+> = ConverterPair(JSONKeyConverter(), JSONValueConverter());
+
+class NOOPValueConverter() extends ValueConverter<SKStore.File> {
+  fun fromFile(v: SKStore.File): SKStore.File {
+    v
+  }
+  fun toFile(v: SKStore.File): SKStore.File {
+    v
+  }
+}
+
+class NOOPKeyConverter() extends KeyConverter<SKStore.Key> {
+  fun fromKey(k: SKStore.Key): SKStore.Key {
+    k
+  }
+  fun toKey(k: SKStore.Key): SKStore.Key {
+    k
+  }
+  fun fromString(_k: String): SKStore.Key {
+    invariant_violation("Unable to convert untyped file")
+  }
+}
+
+const kNOTYPE_CONVERTERS: ConverterPair<
+  SKStore.Key,
+  SKStore.File,
+> = ConverterPair(NOOPKeyConverter(), NOOPValueConverter());
+
+const kNOTYPE_KEY: SKStore.Key ~> SKStore.Key = kNOTYPE_CONVERTERS.key.fromKey;
+const kNOTYPE_VALUE: SKStore.File ~> SKStore.File = kNOTYPE_CONVERTERS.value.fromFile;
+
+fun accReducer<V1: frozen, V2: frozen>(
   reducer: Reducer<V1, V2>,
-): SKStore.EReducer<V1, V2> {
+): SKStore.EReducer<SKStore.File, SKStore.File> {
+  valueConverter = reducer.valueConverter();
+  accConverter = reducer.accConverter();
   SKStore.EReducer{
-    type => reducer.getType(),
+    type => kNOTYPE_VALUE,
     canReset => true,
     init => iter ~> {
       acc = reducer.initial;
       for (x in iter) {
-        !acc = reducer.add(acc, x)
+        !acc = reducer.add(acc, valueConverter(x))
       };
-      Array[acc]
+      Array[accConverter.toFile(acc)]
     },
     update => (state, old, new) ~> {
-      acc = state[0];
+      acc = accConverter.fromFile(state[0]);
       for (x in old) {
-        reducer.remove(acc, x) match {
+        reducer.remove(acc, valueConverter(x)) match {
         | Some(v) -> !acc = v
         | _ -> return None()
         }
       };
       for (x in new) {
-        !acc = reducer.add(acc, x)
+        !acc = reducer.add(acc, valueConverter(x))
       };
-      Some(Array[acc])
+      Some(Array[accConverter.toFile(acc)])
     },
   }
 }
@@ -112,30 +169,194 @@ fun base64<T: Show>(toEncode: T): String {
   | None() -> ""
   }
 }
-fun toResourceId(resource: String, params: SKJSON.CJSON): String {
-  `${resource}_${base64(params.prettyPrint())}`
+fun toResourceId(resource: String, params: Parameters): String {
+  `${resource}_${base64(params.toString())}`
 }
 
 fun toSuppliedResourceId(
   supplier: String,
   resource: String,
-  params: SKJSON.CJSON,
+  params: Parameters,
 ): String {
   `${supplier}_${toResourceId(resource, params)}`;
 }
 
+fun collectionForNameJSON(
+  name: String,
+): TCollection<SKJSON.CJSON, SKJSON.CJSON> {
+  TCollection::forName(name, kJSON_CONVERTERS)
+}
+
 fun collectionForName(name: String): Collection {
-  Collection::forName(name)
+  TCollection::forName(name, kNOTYPE_CONVERTERS)
 }
 
-fun lazyForName(name: String): LazyCollection {
-  LazyCollection::forName(name)
+fun lazyForNameJSON(name: String): LazyCollection<SKJSON.CJSON, SKJSON.CJSON> {
+  LazyCollection::forName(name, kJSON_CONVERTERS)
 }
 
-fun collectionsByName(collections: Map<String, Collection>): SKJSON.CJObject {
+fun lazyForName(name: String): LazyCollection<SKStore.Key, SKStore.File> {
+  LazyCollection::forName(name, kNOTYPE_CONVERTERS)
+}
+
+fun collectionsByName(collections: Collections): SKJSON.CJObject {
   fields = mutable Vector[];
-  collections.each((k, c) -> fields.push((k, SKJSON.CJString(c.getId()))));
+  collections.each((k, v) -> fields.push((k, SKJSON.CJString(v.getId()))));
   SKJSON.CJObject(SKJSON.CJFields::create(fields.toArray(), x -> x));
+}
+
+class IntValueConverter() extends ValueConverter<Int> {
+  fun fromFile(v: SKStore.File): Int {
+    SKStore.IntFile::type(v).value
+  }
+  fun toFile(v: Int): SKStore.File {
+    SKStore.IntFile(v)
+  }
+}
+
+class IntKeyConverter() extends KeyConverter<Int> {
+  fun fromKey(k: SKStore.Key): Int {
+    SKStore.IID::keyType(k).value
+  }
+  fun toKey(k: Int): SKStore.Key {
+    SKStore.IID(k)
+  }
+  fun fromString(k: String): Int {
+    k.toInt()
+  }
+}
+
+class StringValueConverter() extends ValueConverter<String> {
+  fun fromFile(v: SKStore.File): String {
+    SKStore.StringFile::type(v).value
+  }
+  fun toFile(v: String): SKStore.File {
+    SKStore.StringFile(v)
+  }
+}
+
+class StringKeyConverter() extends KeyConverter<String> {
+  fun fromKey(k: SKStore.Key): String {
+    SKStore.SID::keyType(k).value
+  }
+  fun toKey(k: String): SKStore.Key {
+    SKStore.SID(k)
+  }
+  fun fromString(k: String): String {
+    k
+  }
+}
+
+class FileValueConverter<V: SKStore.File>(
+  type: SKStore.File ~> V,
+) extends ValueConverter<V> {
+  fun fromFile(v: SKStore.File): V {
+    this.type(v)
+  }
+  fun toFile(v: V): SKStore.File {
+    v
+  }
+}
+
+class ServiceData{
+  initialData: Map<String, Data>,
+  resourceBuilders: Map<String, ResourceBuilder>,
+  externalServices: Map<String, ExternalService>,
+}
+
+class EmptyParameters() extends Parameters {
+  fun toString(): String {
+    ""
+  }
+}
+
+class NoParamsBuilder(
+  resource: Resource,
+  snapshot_: Snapshot,
+) extends ResourceBuilder {
+  fun parseParameters(_params: String): Parameters {
+    EmptyParameters()
+  }
+
+  fun produce(_params: Parameters): Resource {
+    this.resource
+  }
+
+  fun snapshot(): Snapshot {
+    this.snapshot_
+  }
+}
+
+trait WithServiceData {
+  macro fun initialData(): Map<String, Data> {
+    static::data.initialData
+  }
+
+  macro fun resourceBuilders(): Map<String, ResourceBuilder> {
+    static::data.resourceBuilders
+  }
+
+  macro fun externalServices(): Map<String, ExternalService> {
+    static::data.externalServices
+  }
+}
+
+class JSONParams(json: SKJSON.CJSON) extends Parameters {
+  fun toString(): String {
+    this.json.prettyPrint()
+  }
+}
+
+class JSONError(error: SKJSON.CJSON) extends IError {
+  fun toString(): String {
+    this.error.prettyPrint()
+  }
+}
+
+trait SKJSONParameters {
+  fun fromParameters(params: Parameters): SKJSON.CJSON {
+    params match {
+    | JSONParams(json) -> json
+    | _ -> invariant_violation("Must be a JSONParams")
+    }
+  }
+
+  fun parseParameters(params: String): Parameters {
+    JSONParams(SKJSON.decode(params, x ~> x))
+  }
+}
+
+class UnusedSnapshot() extends Snapshot {
+  fun snapshot(_entries: Array<Entry>): String {
+    invariant_violation("snapshot function should not be called.")
+  }
+
+  fun snapshotLookup(_entry: Entry): String {
+    invariant_violation("snapshot function should not be called.")
+  }
+}
+
+class CollectionsMap(map: Map<String, Collection>) extends Collections {
+  fun maybeGet(name: String): ?Collection {
+    this.map.maybeGet(name)
+  }
+
+  fun each(fn: (String, Collection) -> void): void {
+    this.map.each(fn)
+  }
+}
+
+fun entriesFromJson(
+  json: SKJSON.CJSON,
+): Array<TEntry<SKJSON.CJSON, SKJSON.CJSON>> {
+  SKJSON.expectArray(json).map(v -> {
+    e = SKJSON.expectArray(v);
+    TEntry::create(e[0], SKJSON.expectArray(e[1]))
+  })
+}
+
+fun entriesFromJsonString(jsonString: String): Array<Entry> {
+  entriesFromJson(SKJSON.decode(jsonString, x -> x))
 }
 
 module end;
