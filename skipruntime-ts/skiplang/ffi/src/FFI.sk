@@ -1,5 +1,28 @@
 module SkipRuntime;
 
+type JSONMapper = Mapper<
+  SKJSON.CJSON,
+  SKJSON.CJSON,
+  SKJSON.CJSON,
+  SKJSON.CJSON,
+>;
+
+fun intToJSON(value: Int): SKJSON.CJSON {
+  SKJSON.CJInt(value)
+}
+
+fun jsonFromFile(value: SKStore.File): SKJSON.CJSON {
+  JSONFile::type(value).json
+}
+
+fun jsonFromKey(key: SKStore.Key): SKJSON.CJSON {
+  JSONID::keyType(key).json
+}
+
+fun jsonFromError(error: IError): SKJSON.CJSON {
+  (error as JSONError _).error
+}
+
 @cpp_extern("SkipRuntime_getErrorHdl")
 @debug
 native fun getErrorHdl(exn: .Exception): Float;
@@ -32,7 +55,9 @@ fun createMapper(mapper: UInt32): ExternMapper {
   ExternMapper(SKStore.ExternalPointer::create(mapper, deleteMapper))
 }
 
-class ExternMapper(eptr: SKStore.ExternalPointer) extends Mapper {
+class ExternMapper(
+  eptr: SKStore.ExternalPointer,
+) extends Mapper<SKJSON.CJSON, SKJSON.CJSON, SKJSON.CJSON, SKJSON.CJSON> {
   fun mapEntry(
     key: SKJSON.CJSON,
     values: mutable SKStore.NonEmptyIterator<SKJSON.CJSON>,
@@ -54,6 +79,10 @@ class ExternMapper(eptr: SKStore.ExternalPointer) extends Mapper {
         )
         .iterator()
     }
+  }
+
+  fun converters(): ConverterPair<SKJSON.CJSON, SKJSON.CJSON> {
+    kJSON_CONVERTERS
   }
 }
 
@@ -78,8 +107,13 @@ fun createLazyCompute(lazyCompute: UInt32): ExternLazyCompute {
   )
 }
 
-class ExternLazyCompute(eptr: SKStore.ExternalPointer) extends LazyCompute {
-  fun compute(self: LazyCollection, key: SKJSON.CJSON): Array<SKJSON.CJSON> {
+class ExternLazyCompute(
+  eptr: SKStore.ExternalPointer,
+) extends LazyCompute<SKJSON.CJSON, SKJSON.CJSON> {
+  fun compute(
+    self: LazyCollection<SKJSON.CJSON, SKJSON.CJSON>,
+    key: SKJSON.CJSON,
+  ): Array<SKJSON.CJSON> {
     computeOfLazyCompute(this.eptr.value, self.getId(), key) match {
     | SKJSON.CJArray(value) -> value
     | _ -> invariant_violation("Invalid computed value.")
@@ -126,16 +160,16 @@ class ExternExternalService(
 ) extends ExternalService {
   fun subscribe(
     instance: String,
-    collection: CollectionWriter,
+    writer: CollectionWriter,
     resource: String,
-    params: SKJSON.CJSON,
+    params: Parameters,
   ): void {
     subscribeOfExternalService(
       this.eptr.value,
-      collection.dirName.toString(),
+      writer.getId(),
       instance,
       resource,
-      params,
+      (params as JSONParams _).json,
     )
   }
 
@@ -163,7 +197,7 @@ fun updateOfCollectionWriter(
     | SKJSON.CJArray(vs) ->
       vs.map(v -> {
         e = SKJSON.expectArray(v);
-        (e[0], SKJSON.expectArray(e[1]))
+        (JSONID(e[0]), SKJSON.expectArray(e[1]).map(v -> JSONFile(v)))
       })
     },
     isInit != 0,
@@ -180,7 +214,12 @@ fun initializedOfCollectionWriter(
   error: SKJSON.CJSON,
 ): Float {
   writer = CollectionWriter(SKStore.DirName::create(collection));
-  writer.initialized(error) match {
+  writer.initialized(
+    error match {
+    | SKJSON.CJNull() -> None()
+    | _ -> Some(JSONError(error))
+    },
+  ) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -189,7 +228,7 @@ fun initializedOfCollectionWriter(
 @export("SkipRuntime_CollectionWriter__error")
 fun errorOfCollectionWriter(collection: String, error: SKJSON.CJSON): Float {
   writer = CollectionWriter(SKStore.DirName::create(collection));
-  writer.error(error) match {
+  writer.error(JSONError(error)) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -214,7 +253,7 @@ fun createResource(resource: UInt32): ExternResource {
 }
 
 class ExternResource(eptr: SKStore.ExternalPointer) extends Resource {
-  fun instantiate(collections: Map<String, Collection>): Collection {
+  fun materialize(collections: Collections): Collection {
     collectionName = instantiateOfResource(
       this.eptr.value,
       collectionsByName(collections),
@@ -245,9 +284,14 @@ fun createResourceBuilder(resourceBuilder: UInt32): ExternResourceBuilder {
 
 class ExternResourceBuilder(
   eptr: SKStore.ExternalPointer,
-) extends ResourceBuilder {
+) extends TResourceBuilder<SKJSON.CJSON> uses SKJSONParameters {
+  //
   fun build(params: SKJSON.CJSON): Resource {
     buildOfResourceBuilder(this.eptr.value, params)
+  }
+
+  fun snapshot(): Snapshot {
+    UnusedSnapshot()
   }
 }
 
@@ -285,30 +329,29 @@ class ExternExecutor(eptr: SKStore.ExternalPointer) extends Executor {
 @export("SkipRuntime_createService")
 fun createService(
   service: UInt32,
-  jsInputs: SKJSON.CJObject,
-  resources: mutable Map<String, ResourceBuilder>,
-  remotes: mutable Map<String, ExternalService>,
+  jsInitialData: SKJSON.CJObject,
+  resourceBuilders: mutable Map<String, ResourceBuilder>,
+  externalServices: mutable Map<String, ExternalService>,
 ): ExternService {
-  inputs = mutable Vector[];
-  jsInputs match {
+  initialData = mutable Map[];
+  jsInitialData match {
   | SKJSON.CJObject(fields) ->
     for (fieldName => field in fields) {
-      inputs.push(
-        Input(
-          fieldName,
-          SKJSON.expectArray(field).map(v -> {
-            e = SKJSON.expectArray(v);
-            (e[0], SKJSON.expectArray(e[1]))
-          }),
+      initialData.add(
+        fieldName,
+        InitialData(
+          entriesFromJson(field),
+          kJSON_CONVERTERS,
+          entriesFromJsonString,
         ),
       )
     }
   };
   ExternService(
     SKStore.ExternalPointer::create(service, deleteService),
-    inputs.toArray(),
-    resources.chill(),
-    remotes.chill(),
+    initialData.chill(),
+    resourceBuilders.chill(),
+    externalServices.chill(),
   )
 }
 
@@ -323,9 +366,25 @@ native fun createGraphOfService(
   collections: SKJSON.CJObject,
 ): SKJSON.CJObject;
 
-class ExternService(eptr: SKStore.ExternalPointer) extends Service {
+class ExternService(
+  eptr: SKStore.ExternalPointer,
+  initialData_: Map<String, Data>,
+  resourceBuilders_: Map<String, ResourceBuilder>,
+  externalServices_: Map<String, ExternalService>,
+) extends Service {
+  fun initialData(): Map<String, Data> {
+    this.initialData_
+  }
+
+  fun resourceBuilders(): Map<String, ResourceBuilder> {
+    this.resourceBuilders_
+  }
+
+  fun externalServices(): Map<String, ExternalService> {
+    this.externalServices_
+  }
   //
-  fun createGraph(inputs: Map<String, Collection>): Map<String, Collection> {
+  fun createGraph(inputs: Collections): Collections {
     names = createGraphOfService(this.eptr.value, collectionsByName(inputs));
     map = mutable Map[];
     names match {
@@ -334,7 +393,7 @@ class ExternService(eptr: SKStore.ExternalPointer) extends Service {
         map![fieldName] = collectionForName(SKJSON.asString(field));
       }
     };
-    map.chill()
+    CollectionsMap(map.chill())
   }
 }
 
@@ -349,7 +408,7 @@ fun createOfResourceBuilderMap(): mutable Map<String, ResourceBuilder> {
 fun addOfResourceBuilderMap(
   builders: mutable Map<String, ResourceBuilder>,
   name: String,
-  builder: ResourceBuilder,
+  builder: ExternResourceBuilder,
 ): void {
   builders.add(name, builder)
 }
@@ -377,45 +436,56 @@ fun getArrayOfCollection(
   collection: String,
   key: SKJSON.CJSON,
 ): SKJSON.CJArray {
-  SKJSON.CJArray(collectionForName(collection).getArray(key))
+  SKJSON.CJArray(collectionForNameJSON(collection).getArray(key))
 }
 
 @export("SkipRuntime_Collection__map")
-fun mapOfCollection(collection: String, mapper: Mapper): String {
-  collectionForName(collection).map(mapper).getId()
+fun mapOfCollection(collection: String, mapper: JSONMapper): String {
+  collectionForNameJSON(collection).map(mapper).getId()
 }
 
 @export("SkipRuntime_Collection__mapReduce")
 fun mapReduceOfCollection(
   collection: String,
-  mapper: Mapper,
+  mapper: JSONMapper,
   reducer: JSONReducer,
 ): String {
-  collectionForName(collection).mapReduce(Some(mapper), reducer).getId()
+  collectionForNameJSON(collection).mapReduce(mapper, reducer).getId()
+}
+
+fun intFromJSON(json: SKJSON.CJSON): Int {
+  json match {
+  | SKJSON.CJInt(v) -> v
+  | _ -> invariant_violation("Must be an Int value.")
+  }
 }
 
 @export("SkipRuntime_Collection__nativeMapReduce")
 fun nativeMapReduce(
   collection: String,
-  mapper: Mapper,
+  mapper: JSONMapper,
   reducer: String,
 ): String {
-  collectionForName(collection).nativeMapReduce(Some(mapper), reducer).getId()
+  collectionForNameJSON(collection)
+    .nativeMapReduce(mapper, reducer, intFromJSON, intToJSON)
+    .getId()
 }
 
 @export("SkipRuntime_Collection__reduce")
 fun reduceOfCollection(collection: String, reducer: JSONReducer): String {
-  collectionForName(collection).mapReduce(None(), reducer).getId()
+  collectionForNameJSON(collection).reduce(reducer).getId()
 }
 
 @export("SkipRuntime_Collection__nativeReduce")
 fun nativeReduceOfCollection(collection: String, reducer: String): String {
-  collectionForName(collection).nativeMapReduce(None(), reducer).getId()
+  collectionForNameJSON(collection)
+    .nativeReduce(reducer, intFromJSON, intToJSON)
+    .getId()
 }
 
 @export("SkipRuntime_Collection__slice")
 fun sliceOfCollection(collection: String, ranges: SKJSON.CJArray): String {
-  collectionForName(collection)
+  collectionForNameJSON(collection)
     .sliced(
       ranges match {
       | SKJSON.CJArray(values) ->
@@ -430,16 +500,16 @@ fun sliceOfCollection(collection: String, ranges: SKJSON.CJArray): String {
 
 @export("SkipRuntime_Collection__take")
 fun takeOfCollection(collection: String, limit: Int): String {
-  collectionForName(collection).take(limit).getId()
+  collectionForNameJSON(collection).take(limit).getId()
 }
 
 @export("SkipRuntime_Collection__merge")
 fun mergeOfCollection(collection: String, others: SKJSON.CJArray): String {
-  collectionForName(collection)
+  collectionForNameJSON(collection)
     .merge(
       others match {
       | SKJSON.CJArray(values) ->
-        values.map(c -> collectionForName(SKJSON.asString(c)))
+        values.map(c -> collectionForNameJSON(SKJSON.asString(c)))
       },
     )
     .getId()
@@ -447,14 +517,14 @@ fun mergeOfCollection(collection: String, others: SKJSON.CJArray): String {
 
 @export("SkipRuntime_Collection__size")
 fun sizeOfCollection(collection: String): Int {
-  collectionForName(collection).size()
+  collectionForNameJSON(collection).size()
 }
 
 /************  LazyCollection ****************/
 
 @export("SkipRuntime_LazyCollection__getArray")
 fun getArrayOfLazyCollection(lazy: String, key: SKJSON.CJSON): SKJSON.CJArray {
-  SKJSON.CJArray(lazyForName(lazy).getArray(key))
+  SKJSON.CJArray(lazyForNameJSON(lazy).getArray(key))
 }
 
 /************  Notifier ****************/
@@ -481,7 +551,7 @@ native fun closeOfNotifier(notifier: UInt32): void;
 native fun deleteNotifier(notifier: UInt32): void;
 
 @export("SkipRuntime_createNotifier")
-fun createNotifier(notifier: UInt32): Notifier {
+fun createNotifier(notifier: UInt32): ExternNotifier {
   ExternNotifier(SKStore.ExternalPointer::create(notifier, deleteNotifier))
 }
 
@@ -490,15 +560,19 @@ class ExternNotifier(eptr: SKStore.ExternalPointer) extends Notifier {
     subscribedOfNotifier(this.eptr.value)
   }
 
-  fun notify(
-    values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
-    watermark: String,
-    updates: Bool,
-  ): void {
+  fun notify(values: Array<Entry>, watermark: String, updates: Bool): void {
     notifyOfNotifier(
       this.eptr.value,
       SKJSON.CJArray(
-        values.map(v -> SKJSON.CJArray(Array[v.i0, SKJSON.CJArray(v.i1)])),
+        values.map(v -> {
+          entry = castEntry<SKStore.Key, SKStore.File>(v);
+          SKJSON.CJArray(
+            Array[
+              jsonFromKey(entry.key()),
+              SKJSON.CJArray(entry.values.map(jsonFromFile)),
+            ],
+          )
+        }),
       ),
       watermark,
       Int32::truncate(if (updates) 1 else 0),
@@ -540,9 +614,7 @@ fun createReducer(reducer: UInt32, initial: SKJSON.CJSON): JSONReducer {
 class JSONReducer(
   eptr: SKStore.ExternalPointer,
 ) extends Reducer<SKJSON.CJSON, SKJSON.CJSON> {
-  fun getType(): SKStore.File ~> SKJSON.CJSON {
-    f ~> JSONFile::type(f).json
-  }
+  const kConverter: ValueConverter<SKJSON.CJSON> = JSONValueConverter();
 
   fun add(acc: SKJSON.CJSON, value: SKJSON.CJSON): SKJSON.CJSON {
     addOfReducer(this.eptr.value, acc, value)
@@ -551,9 +623,17 @@ class JSONReducer(
   fun remove(acc: SKJSON.CJSON, value: SKJSON.CJSON): ?SKJSON.CJSON {
     removeOfReducer(this.eptr.value, acc, value)
   }
+
+  fun valueConverter(): SKStore.File ~> SKJSON.CJSON {
+    static::kConverter.fromFile
+  }
+
+  fun accConverter(): ValueConverter<SKJSON.CJSON> {
+    static::kConverter
+  }
 }
 
-/************  Runtime ****************/
+/************  Service Instance ****************/
 
 @export("SkipRuntime_Runtime__createResource")
 fun createResourceOfRuntime(
@@ -563,17 +643,23 @@ fun createResourceOfRuntime(
   executor: Executor,
 ): Float {
   SKStore.runWithResult(context ~> {
-    createReactiveResource(context, identifier, resource, params, executor)
+    _ = createReactiveResource(
+      context,
+      identifier,
+      resource,
+      JSONParams(params),
+      executor,
+    )
   }) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
-  };
+  }
 }
 
 @export("SkipRuntime_Runtime__getAll")
 fun getAllOfRuntime(resource: String, params: SKJSON.CJSON): SKJSON.CJSON {
   SKStore.runWithResult(context ~> {
-    res = getAll(context, resource, params);
+    res = getAll(context, resource, JSONParams(params));
     /* Ensure all resources closed at right time */
     updateContext(context);
     res
@@ -583,12 +669,18 @@ fun getAllOfRuntime(resource: String, params: SKJSON.CJSON): SKJSON.CJSON {
       (
         "payload",
         SKJSON.CJArray(
-          result.values.values.map(v ->
-            SKJSON.CJArray(Array[v.i0, SKJSON.CJArray(v.i1)])
-          ),
+          result.values.entries.map(v -> {
+            entry = castEntry<SKStore.Key, SKStore.File>(v);
+            SKJSON.CJArray(
+              Array[
+                jsonFromKey(entry.key()),
+                SKJSON.CJArray(entry.values.map(jsonFromFile)),
+              ],
+            )
+          }),
         ),
       ),
-      ("errors", SKJSON.CJArray(result.errors)),
+      ("errors", SKJSON.CJArray(result.errors.map(jsonFromError))),
     ];
     SKJSON.CJObject(
       SKJSON.CJFields::create(fields.sortedBy(x ~> x.i0).toArray(), x -> x),
@@ -604,15 +696,15 @@ fun getForKeyOfRuntime(
   key: SKJSON.CJSON,
 ): SKJSON.CJSON {
   SKStore.runWithResult(context ~> {
-    res = getForKey(context, resource, params, key);
+    res = getForKey(context, resource, JSONParams(params), JSONID(key));
     /* Ensure all resources closed at right time */
     updateContext(context);
     res
   }) match {
   | Success(result) ->
     fields = mutable Vector<(String, SKJSON.CJSON)>[
-      ("payload", SKJSON.CJArray(result.values)),
-      ("errors", SKJSON.CJArray(result.errors)),
+      ("payload", SKJSON.CJArray(result.values.map(jsonFromFile))),
+      ("errors", SKJSON.CJArray(result.errors.map(jsonFromError))),
     ];
     SKJSON.CJObject(
       SKJSON.CJFields::create(fields.sortedBy(x ~> x.i0).toArray(), x -> x),
@@ -623,9 +715,7 @@ fun getForKeyOfRuntime(
 
 @export("SkipRuntime_Runtime__closeResource")
 fun closeResourceOfRuntime(identifier: String): Float {
-  SKStore.runWithResult(context ~> {
-    closeReactiveResource(context, identifier)
-  }) match {
+  ServiceInstance.closeResourceInstance(identifier) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };
@@ -634,13 +724,15 @@ fun closeResourceOfRuntime(identifier: String): Float {
 @export("SkipRuntime_Runtime__subscribe")
 fun subscribeOfRuntime(
   reactiveId: String,
-  notifier: Notifier,
+  notifier: ExternNotifier,
   watermark: ?String,
 ): Int {
   SKStore.runWithResult(context ~> {
     subscribe(context, reactiveId, notifier, watermark)
   }) match {
   | Success(id) -> id
+  | Failure(UnknownCollectionError _) -> -1
+  | Failure(ResourceInstanceInUse _) -> -2
   | Failure(err) -> -getErrorHdl(err).toInt()
   };
 }
@@ -669,7 +761,7 @@ fun updateOfRuntime(
       | SKJSON.CJArray(vs) ->
         vs.map(v -> {
           e = SKJSON.expectArray(v);
-          (e[0], SKJSON.expectArray(e[1]))
+          (JSONID(e[0]), SKJSON.expectArray(e[1]).map(v ~> JSONFile(v)))
         })
       },
       executor,
@@ -683,8 +775,8 @@ fun updateOfRuntime(
 /************ Context ****************/
 
 @export("SkipRuntime_Context__createLazyCollection")
-fun lazyOfContext(compute: LazyCompute): String {
-  createLazyCollection(compute).getId()
+fun lazyOfContext(compute: ExternLazyCompute): String {
+  createLazyCollection(compute, kJSON_CONVERTERS).getId()
 }
 
 @export("SkipRuntime_Context__jsonExtract")
@@ -701,7 +793,12 @@ fun useExternalResource(
   identifier: String,
   params: SKJSON.CJSON,
 ): String {
-  useExternalCollection(service, identifier, params).getId()
+  useExternalCollection(
+    service,
+    identifier,
+    JSONParams(params),
+    kJSON_CONVERTERS,
+  ).getId()
 }
 
 /************ initService ****************/
