@@ -6,18 +6,16 @@ class TransactionException(message: String) extends .Exception {
   }
 }
 
-class ResourceInstanceInitFailed(
-  errors: Array<SKJSON.CJSON>,
-) extends Exception {
+class ResourceInstanceInitFailed(errors: Array<IError>) extends Exception {
   fun getMessage(): String {
-    errors = this.errors.map(e -> e.prettyPrint()).join("\n  ");
+    errors = this.errors.join("\n  ");
     `Resource instance cannot be initialized:\n  ${errors}`
   }
 }
 
-class ServiceInstanceInitFailed(errors: Array<SKJSON.CJSON>) extends Exception {
+class ServiceInstanceInitFailed(errors: Array<IError>) extends Exception {
   fun getMessage(): String {
-    errors = this.errors.map(e -> e.prettyPrint()).join("\n  ");
+    errors = this.errors.join("\n  ");
     `Service instance cannot be initialized:\n  ${errors}`
   }
 }
@@ -47,7 +45,7 @@ fun linkKey(dirName: SKStore.DirName): String {
 class ExternalServiceDef(
   name: String,
   resource: String,
-  params: SKJSON.CJSON,
+  params: Parameters,
 ) uses Orderable
 
 private fun isInitialized(
@@ -76,7 +74,7 @@ private fun initialized(
 private fun initStatus(
   context: readonly SKStore.Context,
   dirName: SKStore.DirName,
-): ?SKJSON.CJSON {
+): ?Result<void, IError> {
   context.unsafeMaybeGetEagerDir(dirName) match {
   | Some(dir) ->
     dirname = sessionId(context, dir) match {
@@ -85,20 +83,20 @@ private fun initStatus(
     };
     shdl = SKStore.EHandle(SKStore.DirName::keyType, StatusFile::type, dirname);
     shdl.unsafeGet(context, dirName).status.initialiazed
-  | _ -> Some(SKJSON.CJNull())
+  | _ -> Some(Success(void))
   };
 }
 
 private fun fatals(
   context: mutable SKStore.Context,
   toCheck: SortedSet<SKStore.DirName>,
-): ?Array<SKJSON.CJSON> {
+): ?Array<IError> {
   if (toCheck.isEmpty()) return None();
   errors = mutable Vector[];
   for (dirName in toCheck) {
     initStatus(context, dirName) match {
-    | Some(SKJSON.CJNull()) -> void
-    | Some(error) -> errors.push(error)
+    | Some(Success _) -> void
+    | Some(Failure(error)) -> errors.push(error)
     | _ -> return None()
     }
   };

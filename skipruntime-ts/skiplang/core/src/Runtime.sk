@@ -2,6 +2,23 @@ module SkipRuntime;
 
 const kGarbageMillis: Int = 30000;
 
+class IdentityMapper<K: frozen & Orderable, V: frozen>(
+  converters_: ConverterPair<K, V>,
+) extends Mapper<K, V, K, V> {
+  fun mapEntry(
+    key: K,
+    values: mutable SKStore.NonEmptyIterator<V>,
+  ): mutable Iterator<(K, V)> {
+    vec = mutable Vector[];
+    values.values().each(v -> vec.push((key, v)));
+    vec.iterator()
+  }
+
+  fun converters(): ConverterPair<K, V> {
+    this.converters_
+  }
+}
+
 class ReadInCreatorException() extends Exception {
   fun getMessage(): String {
     "A collection cannot be read in the function that creates it."
@@ -20,12 +37,57 @@ class UseExternalResourceException() extends Exception {
   }
 }
 
-class Params(json: SKJSON.CJSON) extends SKStore.File uses Orderable {
+class UnknownCollectionError(resourceInstanceId: String) extends Exception {
+  fun getMessage(): String {
+    `Unknown resource instance '${this.resourceInstanceId}'`
+  }
+}
+
+class ResourceInstanceInUse(resourceInstanceId: String) extends Exception {
+  fun getMessage(): String {
+    `Resource instance '${this.resourceInstanceId}' cannot be subscribed twice.`
+  }
+}
+
+class SKStoreMapper<
+  K1: frozen & Orderable,
+  V1: frozen,
+  K2: frozen & Orderable,
+  V2: frozen,
+>(
+  mapper: Mapper<K1, V1, K2, V2>,
+  converters: ConverterPair<K1, V1>,
+) {
+  fun map(
+    ctx: mutable SKStore.Context,
+    writer: mutable SKStore.TWriter<SKStore.Key, SKStore.File>,
+    key: SKStore.Key,
+    values: mutable SKStore.NonEmptyIterator<SKStore.File>,
+  ): void {
+    pushContext(ctx);
+    try {
+      mc = this.mapper.converters();
+      for (entry in this.mapper.mapEntry(
+        this.converters.key.fromKey(key),
+        values.nonEmptyMap(this.converters.value.fromFile),
+      )) {
+        writer.append(mc.key.toKey(entry.i0), mc.value.toFile(entry.i1))
+      };
+      popContext();
+    } catch {
+    | ex ->
+      popContext();
+      throw ex
+    }
+  }
+}
+
+class Params(params: Parameters) extends SKStore.File uses Orderable {
   fun compare(other: Params): Order {
-    this.json.compare(other.json)
+    this.params.compare(other.params)
   }
   fun toString(): String {
-    this.json.prettyPrint()
+    this.params.toString()
   }
 }
 
@@ -39,88 +101,81 @@ class ServiceDefinition(
   executor: Executor,
 ) extends SKStore.File
 
-class Handle(value: SKStore.EHandle<JSONID, JSONFile>) extends SKStore.File
+class Handle(
+  value: SKStore.EHandle<SKStore.Key, SKStore.File>,
+) extends SKStore.File
 
 class StatusHandle(
   value: SKStore.EHandle<SKStore.DirName, SKStore.IntFile>,
 ) extends SKStore.File
 
-class ConvReducer(
-  private reducer: Reducer<SKJSON.CJSON, SKJSON.CJSON>,
-) extends Reducer<JSONFile, JSONFile> {
-  fun getType(): SKStore.File ~> JSONFile {
-    JSONFile::type
-  }
-
-  fun add(acc: JSONFile, value: JSONFile): JSONFile {
-    JSONFile(this.reducer.add(acc.json, value.json));
-  }
-
-  fun remove(acc: JSONFile, value: JSONFile): ?JSONFile {
-    this.reducer.remove(acc.json, value.json).map(x -> JSONFile(x))
-  }
-}
-
-class ResourceCollection(value: Collection) extends SKStore.File
+class ResourceCollection(value: Map<String, Collection>) extends SKStore.File
 
 class ResourceDef(
   name: String,
-  params: SKJSON.CJSON,
+  params: Parameters,
 ) extends SKStore.File, SKStore.Key {
   //
   fun toString(): String {
-    `${this.name}:${this.params.prettyPrint()}`
+    `${this.name}:${this.params}`
   }
 }
 
 class ResourceStatus(
   loadable: SKStore.DirName,
-  status: Status,
+  status: Status<IError>,
 ) extends SKStore.File {}
 
-class ServiceFile(
-  value: Map<String, Collection>,
-  inputs: Map<String, Collection>,
-) extends SKStore.File
+class ServiceFile(value: Collections, inputs: Collections) extends SKStore.File
 
-base class Status(
+base class Status<E: IError>(
   created: Int,
   modified: Int,
-  initialiazed: ?SKJSON.CJSON,
+  initialiazed: ?Result<void, IError>,
 ) uses Show {
   children =
   | Loading()
-  | Error(error: SKJSON.CJSON)
+  | Error(error: E)
   | Ok()
 
-  static fun create(): Status {
+  static fun create<E: IError>(): Status<E> {
     time = Time.time_ms();
-    Loading(time, time, None())
+    Loading<E>(time, time, None())
   }
 
-  fun ok(): Status {
+  fun ok(): Status<E> {
     Ok(this.created, Time.time_ms(), this.initialiazed)
   }
 
-  fun err(error: SKJSON.CJSON): Status {
+  fun err(error: E): Status<E> {
     Error(error, this.created, Time.time_ms(), this.initialiazed)
   }
 
-  fun init(error: SKJSON.CJSON): Status {
-    !this.initialiazed = Some(error);
+  fun init(error: ?E): Status<E> {
+    !this.initialiazed = Some(
+      error.map(e -> Failure(e)).default(Success(void)),
+    );
     this
   }
+
+  fun unTyped(): Status<IError>
+  | Loading(created, modified, initialiazed) ->
+    Loading<IError>(created, modified, initialiazed)
+  | Error(e, created, modified, initialiazed) ->
+    Error<IError>(e, created, modified, initialiazed)
+  | Ok(created, modifie, initialiazed) ->
+    Ok<IError>(created, modifie, initialiazed)
 
   fun toString(): String
   | Loading(created, modified, initialiazed) ->
     `Loading{created: ${created}, modified: ${modified}, initialiazed: ${initialiazed.isSome()}}`
   | Error(error, created, modified, initialiazed) ->
-    `Error{error: ${error.toJSON()}, created: ${created}, modified: ${modified}, initialiazed: ${initialiazed.isSome()}}`
+    `Error{error: ${error}, created: ${created}, modified: ${modified}, initialiazed: ${initialiazed.isSome()}}`
   | Ok(created, modified, initialiazed) ->
     `Ok{created: ${created}, modified: ${modified}, initialiazed: ${initialiazed.isSome()}}`
 }
 
-class StatusFile(status: Status) extends SKStore.File
+class StatusFile(status: Status<IError>) extends SKStore.File
 
 class RequestStatuses(statuses: Array<ResourceStatus>) extends SKStore.File {
   //
@@ -148,7 +203,7 @@ class RequestStatuses(statuses: Array<ResourceStatus>) extends SKStore.File {
     }
   }
 
-  fun getErrors(): Array<SKJSON.CJSON> {
+  fun getErrors(): Array<IError> {
     errors = mutable Vector[];
     for (resourceStatus in this.statuses) {
       resourceStatus.status match {
@@ -188,7 +243,9 @@ fun initCtx(): SKStore.Context {
   SKStore.Context::create{}
 }
 
-class Input(name: String, values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>)
+fun unTypedFile(x: SKStore.File): SKStore.File {
+  x
+}
 
 fun buildResourcesGraph(
   context: mutable SKStore.Context,
@@ -279,19 +336,19 @@ fun buildResourcesGraph(
     (context, writer, key, it) ~> {
       resourceId = toResourceId(key.name, key.params);
       statusRef = SKStore.DirName::create(it.first.value);
-      (runId, resources) = definitionHdl.maybeGet(
+      (runId, service) = definitionHdl.maybeGet(
         context,
         SKStore.UnitID::singleton,
       ) match {
-      | Some(definition) -> (definition.runId, definition.service.resources)
+      | Some(definition) -> (definition.runId, definition.service)
       | _ -> return void
       };
       pushContext(context);
       try {
-        resourceBuilder = resources.get(key.name);
-        resource = resourceBuilder.build(key.params);
+        resourceBuilder = service.resourceBuilders().get(key.name);
+        resource = resourceBuilder.produce(key.params);
         collections = servicesHdl.get(context, SKStore.SID(runId)).value;
-        collection = resource.instantiate(collections);
+        collection = resource.materialize(collections);
         writer.set(key, ResourceInfo(resourceId, collection, statusRef, runId));
         popContext()
       } catch {
@@ -320,13 +377,13 @@ fun buildResourcesGraph(
           it.toArray().map(v -> (key, v)),
         )
         .map(
-          JSONID::keyType,
-          JSONFile::type,
+          kNOTYPE_KEY,
+          kNOTYPE_VALUE,
           context,
           obsName,
           (context, writer, key, _it) ~> {
             info = instancesHdl.get(context, key);
-            info.collection.items(context).each((kv) -> {
+            info.collection.skitems(context).each((kv) -> {
               writer.setArray(kv.i0, kv.i1.collect(Array))
             });
           },
@@ -342,7 +399,7 @@ fun buildResourcesGraph(
     (context, writer, key, it) ~> {
       info = it.first;
       resourceData = instancesCopyHdl.get(context, key).value;
-      !info.collection.hdl = resourceData;
+      !info.collection = info.collection.withHandle(resourceData);
       writer.set(key, info)
     },
   );
@@ -377,25 +434,14 @@ fun initService(
         (ctx, writer, _key, it) ~> {
           serviceDef = it.first;
           pushContext(ctx);
-          mInputs = mutable Map<String, Collection>[];
-          serviceDef.service.initialData.each(input -> {
-            iDirName = SKStore.DirName::create(`/${input.name}/`);
-            iHdl = ctx.mkdirMulti(
-              JSONID::keyType,
-              JSONFile::type,
-              iDirName,
-              input.values.map(v -> (JSONID(v.i0), v.i1.map(x -> JSONFile(x)))),
-            );
-            mInputs.add(input.name, Collection(iHdl))
-          });
-          inputCollections = mInputs.chill();
+          inputCollections = serviceDef.service
+            .initialData()
+            .map((name, initialData) -> initialData.toCollection(ctx, name));
+          inputs = CollectionsMap(inputCollections);
           try {
             writer.set(
               SKStore.SID(serviceDef.runId),
-              ServiceFile(
-                serviceDef.service.createGraph(inputCollections),
-                inputCollections,
-              ),
+              ServiceFile(serviceDef.service.createGraph(inputs), inputs),
             );
             popContext()
           } catch {
@@ -476,7 +522,8 @@ fun closeService_(
   );
   handles = sessionHdl.maybeGet(context, SKStore.UnitID::singleton) match {
   | Some(def) ->
-    def.service.remoteCollections
+    def.service
+      .externalServices()
       .values()
       .map(es -> es.shutdown())
       .collect(Array)
@@ -495,7 +542,7 @@ class LinkToResource(
   instance: String,
   writer: CollectionWriter,
   name: String,
-  params: SKJSON.CJSON,
+  params: Parameters,
 ) extends SKStore.Postponable {
   //
   fun perform(context: mutable SKStore.Context): void {
@@ -545,24 +592,28 @@ class CloseExternalService(
  * @param params - any additional parameters to the computation
  * @returns The resulting lazy collection
  */
-fun createLazyCollection(compute: LazyCompute): LazyCollection {
+fun createLazyCollection<K: frozen & Orderable, V: frozen>(
+  compute: LazyCompute<K, V>,
+  converters: ConverterPair<K, V>,
+): LazyCollection<K, V> {
   getContext() match {
   | Some(context) ->
     collectionId = `collection_${SKStore.genSym(0)}`;
     dirName = subDirName(context, collectionId);
     lhdl = SKStore.LHandle::create(
-      JSONID::keyType,
-      JSONFile::type,
+      kNOTYPE_KEY,
+      kNOTYPE_VALUE,
       context,
       dirName,
       (ctx, self, key) ~> {
         pushContext(ctx);
         try {
-          res = compute.compute(LazyCollection(self), key.json).map(json ->
-            JSONFile(json)
+          res = compute.compute(
+            LazyCollection(self, converters),
+            converters.key.fromKey(key),
           );
           popContext();
-          res
+          res.map(converters.value.toFile)
         } catch {
         | ex ->
           popContext();
@@ -570,7 +621,7 @@ fun createLazyCollection(compute: LazyCompute): LazyCollection {
         }
       },
     );
-    LazyCollection(lhdl)
+    LazyCollection(lhdl, converters)
 
   | _ -> invariant_violation("Store context must be specified.")
   }
@@ -592,11 +643,12 @@ fun jsonExtract(from: SKJSON.CJObject, pattern: String): Array<SKJSON.CJSON> {
   values.toArray()
 }
 
-fun useExternalCollection(
+fun useExternalCollection<K: frozen & Orderable, V: frozen>(
   supplier: String,
   resource: String,
-  params: SKJSON.CJSON,
-): Collection {
+  params: Parameters,
+  converters: ConverterPair<K, V>,
+): TCollection<K, V> {
   getContext() match {
   | Some(context) ->
     context.currentArrow().each(a -> {
@@ -610,11 +662,10 @@ fun useExternalCollection(
       ServiceDefinition::type,
       kSessionDir,
     );
-    remoteCollections = sessionHdl.get(
-      context,
-      SKStore.UnitID::singleton,
-    ).service.remoteCollections;
-    externalSupplier = remoteCollections.get(supplier);
+    externalServices = sessionHdl
+      .get(context, SKStore.UnitID::singleton)
+      .service.externalServices();
+    externalSupplier = externalServices.get(supplier);
     collectionId = toSuppliedResourceId(supplier, resource, params);
     dirName = subDirName(context, collectionId);
     paramsDir = dirName.sub("params");
@@ -647,7 +698,7 @@ fun useExternalCollection(
                 instance,
                 CollectionWriter(storeDir),
                 resource,
-                it.first.json,
+                it.first.params,
               ),
             ),
             CloseExternalService(
@@ -659,8 +710,8 @@ fun useExternalCollection(
           )
         };
         store = context.mkdir(
-          JSONID::keyType,
-          JSONFile::type,
+          kNOTYPE_KEY,
+          kNOTYPE_VALUE,
           storeDir,
           Array[],
           true,
@@ -670,10 +721,10 @@ fun useExternalCollection(
         writer.set(key, Handle(store));
       },
     );
-    Collection(
+    TCollection(
       hdl.map(
-        JSONID::keyType,
-        JSONFile::type,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         dataDir,
         (context, writer, key, _it) ~> {
@@ -683,39 +734,101 @@ fun useExternalCollection(
           });
         },
       ),
+      converters,
     )
   | _ -> invariant_violation("Store context must be specified.")
   }
 }
 
-class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
+base class Collection {
+  fun getId(): String;
+  fun handle(): SKStore.EHandle<SKStore.Key, SKStore.File>;
+  fun withHandle(SKStore.EHandle<SKStore.Key, SKStore.File>): Collection;
+  fun getAll(): Array<Entry>;
+  fun lookupValues(key: SKStore.Key): Array<SKStore.File>;
+  fun lookup(strKey: String): Entry;
+  fun subscribe(
+    identifier: String,
+    session: Int,
+    from: SKStore.Tick,
+    notify: (Array<Entry>, SKStore.Tick, Bool) ~> void,
+    close: () ~> void,
+  ): void;
+
+  fun unsafeCast<K: frozen & Orderable, V: frozen>(
+    converters: ConverterPair<K, V>,
+  ): TCollection<K, V>;
+
+  fun getToSKStore(): Entry ~> (SKStore.Key, Array<SKStore.File>);
+  fun skitems(
+    mutable SKStore.Context,
+  ): mutable Iterator<(SKStore.Key, mutable Iterator<SKStore.File>)>;
+}
+
+class TCollection<K: frozen & Orderable, V: frozen>(
+  hdl: SKStore.EHandle<SKStore.Key, SKStore.File>,
+  converters: ConverterPair<K, V>,
+) extends Collection {
   //
-  static fun forName(name: String): Collection {
-    hdl = SKStore.EHandle<JSONID, JSONFile>(
-      JSONID::keyType,
-      JSONFile::type,
+  static fun forName<K: frozen & Orderable, V: frozen>(
+    name: String,
+    converters: ConverterPair<K, V>,
+  ): TCollection<K, V> {
+    hdl = SKStore.EHandle<SKStore.Key, SKStore.File>(
+      kNOTYPE_KEY,
+      kNOTYPE_VALUE,
       SKStore.DirName::create(name),
     );
-    Collection(hdl)
+    TCollection(hdl, converters)
   }
 
   fun getId(): String {
     this.hdl.dirName.toString();
   }
 
+  fun handle(): SKStore.EHandle<SKStore.Key, SKStore.File> {
+    this.hdl
+  }
+
+  fun withHandle(hdl: SKStore.EHandle<SKStore.Key, SKStore.File>): Collection {
+    !this.hdl = hdl;
+    this
+  }
+
   /**
    * Get all values mapped to by some key of an eager reactive collection.
    */
-  fun getArray(key: SKJSON.CJSON): Array<SKJSON.CJSON> {
+  fun getArray(key: K): Array<V> {
     getContext() match {
     | Some(context) ->
       dir = context.unsafeGetEagerDir(this.hdl.dirName);
       if (dir.creator == context.currentArrow()) {
         throw ReadInCreatorException()
       };
-      dir.getArray(context, JSONID(key)).map(x ~> JSONFile::type(x).json)
+      dir
+        .getArray(context, this.converters.key.toKey(key))
+        .map(this.converters.value.fromFile)
     | _ -> invariant_violation("Store context must be specified.")
     }
+  }
+
+  fun lookupValues(key: SKStore.Key): Array<SKStore.File> {
+    getContext() match {
+    | Some(context) ->
+      dir = context.unsafeGetEagerDir(this.hdl.dirName);
+      if (dir.creator == context.currentArrow()) {
+        throw ReadInCreatorException()
+      };
+      dir.getArray(context, key)
+    | _ -> invariant_violation("Store context must be specified.")
+    }
+  }
+
+  fun lookup(strKey: String): Entry {
+    keyConv = this.converters.key;
+    key = keyConv.fromString(strKey);
+    values = this.lookupValues(keyConv.toKey(key));
+    TEntry::create(key, values.map(this.converters.value.fromFile))
   }
 
   /**
@@ -723,7 +836,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
    * If multiple values are mapped to by the key, any of them can be returned.
    * @returns the value for this `key`, or null if no such value exists
    */
-  fun getUnique(key: SKJSON.CJSON): ?SKJSON.CJSON {
+  fun getUnique(key: K): ?V {
     value = this.getArray(key);
     if (value.size() == 1) Some(value[0]) else None();
   }
@@ -733,8 +846,10 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
    * @param mapper - function to apply to each element of this collection
    * @returns The resulting (eager) output collection
    */
-  fun map(mapper: Mapper): Collection {
-    this.map_(Some(mapper), None())
+  fun map<K2: frozen & Orderable, V2: frozen>(
+    mapper: Mapper<K, V, K2, V2>,
+  ): TCollection<K2, V2> {
+    this.map_(mapper, None())
   }
 
   /**
@@ -744,165 +859,81 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
    * @param reducer - function to combine results of the `mapper`
    * @returns An eager collection containing the output of the reducer
    */
-  fun mapReduce(
-    mapperOpt: ?Mapper,
-    reducer: Reducer<SKJSON.CJSON, SKJSON.CJSON>,
-  ): Collection {
+  fun mapReduce<K2: frozen & Orderable, V2: frozen, V3: frozen>(
+    mapper: Mapper<K, V, K2, V2>,
+    reducer: Reducer<V2, V3>,
+  ): TCollection<K2, V3> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
       dirName = this.hdl.dirName.sub(collectionId);
-      mapper = mapperOpt match {
-      | None() -> identityMap
-      | Some(mapper) ->
-        (ctx, writer, key, values) ~> {
-          pushContext(ctx);
-          try {
-            for (entry in mapper.mapEntry(
-              key.json,
-              values.nonEmptyMap(x -> x.json),
-            )) {
-              writer.append(JSONID(entry.i0), JSONFile(entry.i1))
-            };
-            popContext();
-          } catch {
-          | ex ->
-            popContext();
-            throw ex
-          }
-        }
-      };
+      converters = mapper.converters();
       hdl = this.hdl.mapReduce(
-        JSONID::keyType,
-        JSONFile::type,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         dirName,
-        mapper,
-        accReducer(ConvReducer(reducer, JSONFile(reducer.initial))),
+        SKStoreMapper(mapper, this.converters).map,
+        accReducer(reducer),
       );
-      Collection(hdl)
+      TCollection(hdl, ConverterPair(converters.key, reducer.accConverter()))
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
 
-  fun nativeMapReduceImpl<V_elt: SKStore.File, V_acc: SKStore.File>(
-    mapperOpt: ?Mapper,
-    reducer: SKStore.EReducer<V_elt, V_acc>,
-    eltType: SKStore.File ~> V_elt,
-    inputConv: SKJSON.CJSON ~> V_elt,
-    outputConv: V_acc ~> SKJSON.CJSON,
-  ): Collection {
-    mapper = (ctx, writer, key, values) ~> {
-      mapperOpt match {
-      | None() ->
-        writer.setArray(
-          key,
-          Array::createFromIterator(
-            values.nonEmptyMap(x ~> inputConv(x.json)).values(),
-          ), // TODO: use .toArray()
-        )
-      | Some(mapper) ->
-        pushContext(ctx);
-        try {
-          for (entry in mapper.mapEntry(
-            key.json,
-            values.nonEmptyMap(x -> x.json),
-          )) {
-            writer.append(JSONID(entry.i0), inputConv(entry.i1))
-          };
-          popContext();
-        } catch {
-        | ex ->
-          popContext();
-          throw ex
-        }
-      }
-    };
-    getContext() match {
-    | Some(context) ->
-      hdl = this.hdl.mapReduce(
-        JSONID::keyType,
-        eltType,
-        context,
-        this.hdl.dirName.sub(`collection_${SKStore.genSym(0)}`),
-        mapper,
+  fun reduce<V2: frozen>(reducer: Reducer<V, V2>): TCollection<K, V2> {
+    this.mapReduce(IdentityMapper(this.converters), reducer)
+  }
+
+  fun unsafeCast<K2: frozen & Orderable, V2: frozen>(
+    converters: ConverterPair<K2, V2>,
+  ): TCollection<K2, V2> {
+    hdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, this.hdl.dirName);
+    TCollection(hdl, converters)
+  }
+
+  fun nativeMapReduce<K2: frozen & Orderable, V2: frozen>(
+    mapper: Mapper<K, V, K2, V2>,
+    reducer: String,
+    value: V2 ~> Int,
+    create: Int ~> V2,
+  ): TCollection<K2, V2> {
+    converters = mapper.converters();
+    this.nativeMapReduceImpl(
+      mapper,
+      this.eReducer(
         reducer,
-      );
-      Collection(
-        hdl.map(
-          JSONID::keyType,
-          JSONFile::type,
-          context,
-          this.hdl.dirName.sub(`collection_${SKStore.genSym(1)}`),
-          (_ctx, writer, key, values) ~> {
-            writer.setArray(
-              key,
-              Array::createFromIterator(
-                values.nonEmptyMap(x -> JSONFile(outputConv(x))).values(),
-              ), // TODO: use .toArray()
-            )
-          },
-        ),
-      )
-    | _ -> invariant_violation("Store context must be specified.")
-    }
+        v ~> value(converters.value.fromFile(v)),
+        v ~> converters.value.toFile(create(v)),
+      ),
+    )
   }
 
-  fun nativeMapReduce(mapperOpt: ?Mapper, reducer: String): Collection {
-    jsonToIntFile = json ~>
-      json match {
-      | SKJSON.CJInt(x) -> SKStore.IntFile(x)
-      | _ -> throw SKStore.Error("Non-number JSON input to native reducer")
-      };
-    reducer match {
-    | "sum" ->
-      this.nativeMapReduceImpl(
-        mapperOpt,
-        SKStore.sumReducer(),
-        SKStore.IntFile::type,
-        jsonToIntFile,
-        file ~> SKJSON.CJInt(file.value),
-      )
-    | "min" ->
-      this.nativeMapReduceImpl(
-        mapperOpt,
-        SKStore.minReducer(),
-        SKStore.IntFile::type,
-        jsonToIntFile,
-        file ~> SKJSON.CJInt(file.value),
-      )
-    | "max" ->
-      this.nativeMapReduceImpl(
-        mapperOpt,
-        SKStore.maxReducer(),
-        SKStore.IntFile::type,
-        jsonToIntFile,
-        file ~> SKJSON.CJInt(file.value),
-      )
-    | "count" ->
-      this.nativeMapReduceImpl(
-        mapperOpt,
-        SKStore.countReducer(),
-        JSONFile::type,
-        json ~> JSONFile(json),
-        file ~> SKJSON.CJInt(file.value),
-      )
-    | _ -> throw SKStore.Error("Unrecognized native reducer: " + reducer)
-    }
+  fun nativeReduce(
+    reducer: String,
+    value: V ~> Int,
+    create: Int ~> V,
+  ): TCollection<K, V> {
+    this.nativeMapReduce(
+      IdentityMapper(this.converters),
+      reducer,
+      value,
+      create,
+    )
   }
 
   /**
    * Create a new eager collection by keeping only the elements whose keys are in
    * the given ranges.
    */
-  fun sliced(ranges: Array<(SKJSON.CJSON, SKJSON.CJSON)>): Collection {
-    this.map_(None(), Some(ranges))
+  fun sliced(ranges: Array<(K, K)>): TCollection<K, V> {
+    this.map_(IdentityMapper(this.converters), Some(ranges))
   }
 
   /**
    * Create a new eager collection by keeping the given number of the first elements.
    */
-  fun take(limit: Int): Collection {
+  fun take(limit: Int): TCollection<K, V> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
@@ -916,7 +947,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
         removeElementAsOne,
         None(),
       );
-      Collection(resHdl)
+      TCollection(resHdl, this.converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -927,23 +958,23 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
    * @param others - some other eager collections of compatible type
    * @returns The resulting combination of all input key/value pairs
    */
-  fun merge(others: Array<Collection>): Collection {
+  fun merge(others: Array<TCollection<K, V>>): TCollection<K, V> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
       dirName = this.hdl.dirName.sub(collectionId);
       hdl = SKStore.EHandle::multiMap(
-        JSONID::keyType,
-        JSONFile::type,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         Array[this].concat(others).map(c ->
           c match {
-          | ci @ Collection _ -> (ci.hdl, (identityMap, None()))
+          | ci @ Collection _ -> (ci.handle(), (identityMap, None()))
           }
         ),
         dirName,
       );
-      Collection(hdl)
+      TCollection(hdl, this.converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -964,124 +995,161 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
     }
   }
 
-  fun getAll(
-    context: mutable SKStore.Context,
-  ): Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)> {
-    values = mutable Vector<(SKJSON.CJSON, Array<SKJSON.CJSON>)>[];
-    dir = context.unsafeGetEagerDir(this.hdl.dirName);
-    for (kv in dir.unsafeGetFileIter()) {
-      (key, files) = kv;
-      values.push(
-        (
-          JSONID::keyType(key).json,
-          files.collect(Array).map(x -> JSONFile::type(x).json),
-        ),
-      );
-    };
-    values.toArray();
+  fun getAll(): Array<Entry> {
+    getContext() match {
+    | Some(context) ->
+      values = mutable Vector<Entry>[];
+      dir = context.unsafeGetEagerDir(this.hdl.dirName);
+      for (kv in dir.unsafeGetFileIter()) {
+        (key, files) = kv;
+        values.push(
+          TEntry::create(
+            this.converters.key.fromKey(key),
+            files.collect(Array).map(this.converters.value.fromFile),
+          ),
+        );
+      };
+      values.toArray()
+    | _ -> invariant_violation("Store context must be specified.")
+    }
   }
 
-  fun items(
+  fun skitems(
     context: mutable SKStore.Context,
-  ): mutable Iterator<(JSONID, mutable Iterator<JSONFile>)> {
+  ): mutable Iterator<(SKStore.Key, mutable Iterator<SKStore.File>)> {
     this.hdl.items(context)
   }
 
+  fun items(): mutable Iterator<(K, mutable Iterator<V>)> {
+    getContext() match {
+    | Some(context) ->
+      this.skitems(context).map(v ->
+        (
+          this.converters.key.fromKey(v.i0),
+          v.i1.map(this.converters.value.fromFile),
+        )
+      )
+    | _ -> invariant_violation("Store context must be specified.")
+    }
+  }
+
   fun subscribe(
-    context: mutable SKStore.Context,
     identifier: String,
     session: Int,
     from: SKStore.Tick,
-    notify: (
-      Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
-      SKStore.Tick,
-      Bool,
-    ) ~> void,
+    notify: (Array<Entry>, SKStore.Tick, Bool) ~> void,
     close: () ~> void,
   ): void {
-    context.subscribe(
-      session,
-      SKStore.NWatch(
-        identifier,
-        from,
-        (_dirName, values, tick, update) ~> {
-          notify(
-            values.map(v ->
-              (
-                JSONID::keyType(v.i0).json,
-                v.i1.map(x -> JSONFile::type(x).json),
-              )
-            ),
-            tick,
-            update,
-          )
-        },
-        close,
-        true,
-      ),
-      None(),
-      Array[
-        SKStore.DirSub(this.hdl.dirName, "", SKStore.OJSON(Array[]), (__) ~>
-          None()
+    getContext() match {
+    | Some(context) ->
+      context.subscribe(
+        session,
+        SKStore.NWatch(
+          identifier,
+          from,
+          (_dirName, values, tick, update) ~> {
+            notify(values.map(this.converters.fromSKStore), tick, update)
+          },
+          close,
+          true,
         ),
-      ],
-      Some(from),
-    )
+        None(),
+        Array[
+          SKStore.DirSub(this.hdl.dirName, "", SKStore.OJSON(Array[]), (__) ~>
+            None()
+          ),
+        ],
+        Some(from),
+      )
+    | _ -> invariant_violation("Store context must be specified.")
+    }
   }
 
-  private fun map_(
-    mapperOpt: ?Mapper,
-    rangeOpt: ?Array<(SKJSON.CJSON, SKJSON.CJSON)> = None(),
-  ): Collection {
+  fun getToSKStore(): Entry ~> (SKStore.Key, Array<SKStore.File>) {
+    this.converters.toSKStore
+  }
+
+  private fun map_<K2: frozen & Orderable, V2: frozen>(
+    mapper: Mapper<K, V, K2, V2>,
+    rangeOpt: ?Array<(K2, K2)> = None(),
+  ): TCollection<K2, V2> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
       dirName = this.hdl.dirName.sub(collectionId);
-      mapper = mapperOpt match {
-      | None() -> identityMap
-      | Some(mapper) ->
-        (ctx, writer, key, values) ~> {
-          pushContext(ctx);
-          try {
-            for (entry in mapper.mapEntry(
-              key.json,
-              values.nonEmptyMap(x -> x.json),
-            )) {
-              writer.append(JSONID(entry.i0), JSONFile(entry.i1))
-            };
-            popContext();
-          } catch {
-          | ex ->
-            popContext();
-            throw ex
-          }
-        }
-      };
+      converters = mapper.converters();
       hdl = this.hdl.map(
-        JSONID::keyType,
-        JSONFile::type,
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
         context,
         dirName,
-        mapper,
+        SKStoreMapper(mapper, this.converters).map,
         rangeOpt.map(v ->
-          v.map(r -> SKStore.KeyRange::create(JSONID(r.i0), JSONID(r.i1)))
+          v.map(r ->
+            SKStore.KeyRange::create(
+              converters.key.toKey(r.i0),
+              converters.key.toKey(r.i1),
+            )
+          )
         ),
       );
-      Collection(hdl)
+      TCollection(hdl, converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
+
+  private fun nativeMapReduceImpl<K2: frozen & Orderable, V2: frozen>(
+    mapper: Mapper<K, V, K2, V2>,
+    reducer: SKStore.EReducer<SKStore.File, SKStore.File>,
+  ): TCollection<K2, V2> {
+    getContext() match {
+    | Some(context) ->
+      collectionId = `collection_${SKStore.genSym(0)}`;
+      dirName = this.hdl.dirName.sub(collectionId);
+      converters = mapper.converters();
+      hdl = this.hdl.mapReduce(
+        kNOTYPE_KEY,
+        kNOTYPE_VALUE,
+        context,
+        dirName,
+        SKStoreMapper(mapper, this.converters).map,
+        reducer,
+      );
+      TCollection(hdl, converters)
+    | _ -> invariant_violation("Store context must be specified.")
+    }
+  }
+
+  private fun eReducer(
+    reducer: String,
+    value: SKStore.File ~> Int,
+    create: Int ~> SKStore.File,
+  ): SKStore.EReducer<SKStore.File, SKStore.File> {
+    reducer match {
+    | "sum" -> SKStore.sumReducer_(value, create, kNOTYPE_VALUE)
+    | "min" -> SKStore.minReducer_(value, create, kNOTYPE_VALUE)
+    | "max" -> SKStore.maxReducer_(value, create, kNOTYPE_VALUE)
+    | "count" -> SKStore.countReducer_(value, create, kNOTYPE_VALUE)
+    | _ -> throw SKStore.Error("Unrecognized native reducer: " + reducer)
+    };
+  }
 }
 
-class LazyCollection(private hdl: SKStore.LHandle<JSONID, JSONFile>) {
+class LazyCollection<K: frozen & Orderable, V: frozen>(
+  private hdl: SKStore.LHandle<SKStore.Key, SKStore.File>,
+  converters: ConverterPair<K, V>,
+) {
   //
-  static fun forName(name: String): LazyCollection {
+  static fun forName<K: frozen & Orderable, V: frozen>(
+    name: String,
+    converters: ConverterPair<K, V>,
+  ): LazyCollection<K, V> {
     hdl = SKStore.LHandle(
-      JSONID::keyType,
-      JSONFile::type,
+      kNOTYPE_KEY,
+      kNOTYPE_VALUE,
       SKStore.DirName::create(name),
     );
-    LazyCollection(hdl)
+    LazyCollection(hdl, converters)
   }
 
   fun getId(): String {
@@ -1092,10 +1160,12 @@ class LazyCollection(private hdl: SKStore.LHandle<JSONID, JSONFile>) {
    * Get (and potentially compute) all values mapped to by some key of a lazy reactive
    * collection.
    */
-  fun getArray(key: SKJSON.CJSON): Array<SKJSON.CJSON> {
+  fun getArray(key: K): Array<V> {
     getContext() match {
     | Some(context) ->
-      this.hdl.getArray(context, JSONID(key)).map(file -> file.json)
+      this.hdl.getArray(context, this.converters.key.toKey(key)).map(
+        this.converters.value.fromFile,
+      )
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -1104,9 +1174,12 @@ class LazyCollection(private hdl: SKStore.LHandle<JSONID, JSONFile>) {
    * Get (and potentially compute) a value of a lazy reactive collection.
    * @throws {Error} when either zero or multiple such values exist
    */
-  fun getUnique(key: SKJSON.CJSON): SKJSON.CJSON {
+  fun getUnique(key: K): V {
     getContext() match {
-    | Some(context) -> this.hdl.get(context, JSONID(key)).json
+    | Some(context) ->
+      this.converters.value.fromFile(
+        this.hdl.get(context, this.converters.key.toKey(key)),
+      )
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -1143,8 +1216,12 @@ private fun isResourceDir(dirName: SKStore.DirName): Bool {
 
 class CollectionWriter(dirName: SKStore.DirName) {
   //
+  fun getId(): String {
+    this.dirName.toString()
+  }
+
   fun update(
-    values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+    values: Array<(SKStore.Key, Array<SKStore.File>)>,
     isInit: Bool,
     executor: Executor,
   ): Result<void, .Exception> {
@@ -1153,14 +1230,14 @@ class CollectionWriter(dirName: SKStore.DirName) {
     )
   }
 
-  fun error(error: SKJSON.CJSON): Result<void, .Exception> {
+  fun error(error: IError): Result<void, .Exception> {
     performOnTransaction(this.dirName, (_root, context) ~> {
       _ = this.updateStatus(context, status ~> status.err(error));
       updateContext(context);
     })
   }
 
-  fun initialized(error: SKJSON.CJSON): Result<void, .Exception> {
+  fun initialized(error: ?IError): Result<void, .Exception> {
     performOnTransaction(
       this.dirName,
       (_root, context) ~> {
@@ -1173,7 +1250,7 @@ class CollectionWriter(dirName: SKStore.DirName) {
     )
   }
 
-  fun status(context: mutable SKStore.Context, status: Status): void {
+  fun status(context: mutable SKStore.Context, status: Status<IError>): void {
     context.maybeGetEagerDir(this.dirName) match {
     | Some(dir) ->
       dirname = sessionId(context, dir) match {
@@ -1185,14 +1262,18 @@ class CollectionWriter(dirName: SKStore.DirName) {
         StatusFile::type,
         dirname,
       );
-      shdl.writeArray(context, this.dirName, Array[StatusFile(status)])
+      shdl.writeArray(
+        context,
+        this.dirName,
+        Array[StatusFile(status.unTyped())],
+      )
     | _ -> void
     };
   }
 
-  private fun updateStatus(
+  fun updateStatus(
     context: mutable SKStore.Context,
-    update: Status ~> Status,
+    update: Status<IError> ~> Status<IError>,
   ): ?ResourceDef {
     context.maybeGetEagerDir(this.dirName) match {
     | Some(dir) ->
@@ -1210,7 +1291,11 @@ class CollectionWriter(dirName: SKStore.DirName) {
         dirname,
       );
       status = update(shdl.get(context, this.dirName).status);
-      shdl.writeArray(context, this.dirName, Array[StatusFile(status)]);
+      shdl.writeArray(
+        context,
+        this.dirName,
+        Array[StatusFile(status.unTyped())],
+      );
       optResource
     | _ -> None()
     };
@@ -1219,7 +1304,7 @@ class CollectionWriter(dirName: SKStore.DirName) {
   private fun update_(
     root: mutable SKStore.Context,
     context: mutable SKStore.Context,
-    values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+    values: Array<(SKStore.Key, Array<SKStore.File>)>,
     isInit: Bool,
     executor: Executor,
   ): void {
@@ -1232,12 +1317,12 @@ class CollectionWriter(dirName: SKStore.DirName) {
   }
 }
 
-value class GetResult<T>(values: T, errors: Array<SKJSON.CJSON>)
+value class GetResult<T>(values: T, errors: Array<IError>)
 
 fun getAll(
   context: mutable SKStore.Context,
   resourceName: String,
-  params: SKJSON.CJSON,
+  params: Parameters,
 ): GetResult<Values> {
   graphHdl = SKStore.EHandle(
     ResourceDef::keyType,
@@ -1246,21 +1331,20 @@ fun getAll(
   );
   resourceID = ResourceDef(resourceName, params);
   resource = graphHdl.get(context, resourceID);
-  resource.getResult(
-    context,
-    Values(
-      resource.collection.getAll(context),
-      `${resource.session}/${context.getTick()}`,
-    ),
+  pushContext(context);
+  values = Values(
+    resource.collection.getAll(),
+    `${resource.session}/${context.getTick()}`,
   );
+  popContext();
+  resource.getResult(context, values);
 }
 
-fun getForKey(
+fun resourceSnapshot(
   context: mutable SKStore.Context,
   resourceName: String,
-  params: SKJSON.CJSON,
-  key: SKJSON.CJSON,
-): GetResult<Array<SKJSON.CJSON>> {
+  params: Parameters,
+): Array<Entry> {
   graphHdl = SKStore.EHandle(
     ResourceDef::keyType,
     ResourceInfo::type,
@@ -1269,9 +1353,47 @@ fun getForKey(
   resourceID = ResourceDef(resourceName, params);
   resource = graphHdl.get(context, resourceID);
   pushContext(context);
-  values = resource.collection.getArray(key);
+  entries = resource.collection.getAll();
+  popContext();
+  entries
+}
+
+fun getForKey(
+  context: mutable SKStore.Context,
+  resourceName: String,
+  params: Parameters,
+  key: SKStore.Key,
+): GetResult<Array<SKStore.File>> {
+  graphHdl = SKStore.EHandle(
+    ResourceDef::keyType,
+    ResourceInfo::type,
+    kResourceCollectionsDir,
+  );
+  resourceID = ResourceDef(resourceName, params);
+  resource = graphHdl.get(context, resourceID);
+  pushContext(context);
+  values = resource.collection.lookupValues(key);
   popContext();
   resource.getResult(context, values);
+}
+
+fun resourceSnapshotLookup(
+  context: mutable SKStore.Context,
+  resourceName: String,
+  params: Parameters,
+  key: String,
+): Entry {
+  graphHdl = SKStore.EHandle(
+    ResourceDef::keyType,
+    ResourceInfo::type,
+    kResourceCollectionsDir,
+  );
+  resourceID = ResourceDef(resourceName, params);
+  resource = graphHdl.get(context, resourceID);
+  pushContext(context);
+  entry = resource.collection.lookup(key);
+  popContext();
+  entry
 }
 
 fun destroyReactiveResource(
@@ -1330,6 +1452,7 @@ fun subscribe(
   identifier: String,
   notifier: Notifier,
   optWatermark: ?String,
+  optSession: ?Int = None(),
 ): Int {
   garbageHdl = SKStore.EHandle(
     SKStore.SID::keyType,
@@ -1337,7 +1460,7 @@ fun subscribe(
     kResourceGarbageDir,
   );
   sid = SKStore.SID(identifier);
-  session = SKStore.genSym(0);
+  session = optSession.default(SKStore.genSym(0));
   resourceHdl = SKStore.EHandle(
     SKStore.SID::keyType,
     ResourceDef::type,
@@ -1350,7 +1473,7 @@ fun subscribe(
   );
   subId = `subscription.${identifier}`;
   if (context.getPersistent(subId).isSome()) {
-    return -2
+    throw ResourceInstanceInUse(identifier)
   };
   resourceHdl.maybeGet(context, sid) match {
   | Some(definition) ->
@@ -1362,8 +1485,8 @@ fun subscribe(
     | _ -> 0
     };
     notifier.subscribed();
+    pushContext(context);
     info.collection.subscribe(
-      context,
       identifier,
       session,
       SKStore.Tick(from),
@@ -1372,6 +1495,7 @@ fun subscribe(
       },
       notifier.close,
     );
+    popContext();
     context.setPersistent(subId, SKStore.IntFile(session));
     if (garbageHdl.maybeGet(context, sid).isSome()) {
       garbageHdl.writeArray(context, sid, Array[]);
@@ -1379,7 +1503,7 @@ fun subscribe(
     };
     checkGarbage(context);
     session
-  | _ -> -1
+  | _ -> throw UnknownCollectionError(identifier)
   }
 }
 
@@ -1405,15 +1529,15 @@ fun unsubscribe(
 fun put(
   context: mutable SKStore.Context,
   collection: String,
-  key: SKJSON.CJSON,
-  value: Array<SKJSON.CJSON>,
+  key: SKStore.Key,
+  value: Array<SKStore.File>,
 ): void {
   chdl = SKStore.EHandle(
-    JSONID::keyType,
-    JSONFile::type,
+    kNOTYPE_KEY,
+    kNOTYPE_VALUE,
     SKStore.DirName::create(`/${collection}/`),
   );
-  chdl.writeArray(context, JSONID(key), value.map(v -> JSONFile(v)));
+  chdl.writeArray(context, key, value);
   updateContext(context);
 }
 
@@ -1421,26 +1545,24 @@ private fun writeInCollection(
   root: mutable SKStore.Context,
   main: mutable SKStore.Context,
   dirName: SKStore.DirName,
-  values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+  values: Array<(SKStore.Key, Array<SKStore.File>)>,
   executor: Executor,
   isInit: Bool = false,
 ): void {
-  chdl = SKStore.EHandle(JSONID::keyType, JSONFile::type, dirName);
+  chdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, dirName);
   transaction = checkTransaction(main);
   keys = if (isInit) {
     transaction.context.maybeGetEagerDir(dirName) match {
-    | Some(dir) -> dir.keys().map(JSONID::keyType)
-    | _ -> SortedSet<JSONID>[]
+    | Some(dir) -> dir.keys()
+    | _ -> SortedSet<SKStore.Key>[]
     }
   } else {
-    SortedSet<JSONID>[]
+    SortedSet<SKStore.Key>[]
   };
   toAdd = mutable Vector[];
   values.each(e -> {
-    key = JSONID(e.i0);
-    fvalues = e.i1.map(v -> JSONFile(v));
-    toAdd.push((key, fvalues));
-    !keys = keys.remove(key);
+    toAdd.push((e.i0, e.i1));
+    !keys = keys.remove(e.i0);
   });
   fadded = toAdd.toArray();
   fremoved = keys;
@@ -1457,7 +1579,7 @@ private fun writeInCollection(
 fun update(
   context: mutable SKStore.Context,
   collection: String,
-  values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+  values: Array<(SKStore.Key, Array<SKStore.File>)>,
   executor: Executor,
 ): void {
   writeInCollection(
@@ -1487,7 +1609,7 @@ fun createReactiveResource(
   context: mutable SKStore.Context,
   identifier: String,
   resource: String,
-  params: SKJSON.CJSON,
+  params: Parameters,
   executor: Executor,
 ): ResourceInfo {
   resourceHdl = SKStore.EHandle(
@@ -1530,6 +1652,73 @@ fun getReactiveResource(
   key = SKStore.SID(identifier);
   definition = resourceHdl.get(context, key);
   graphHdl.get(context, definition);
+}
+
+fun getResourceBuilder(
+  context: mutable SKStore.Context,
+  name: String,
+): ResourceBuilder {
+  sessionHdl = SKStore.EHandle(
+    SKStore.UnitID::keyType,
+    ServiceDefinition::type,
+    kSessionDir,
+  );
+  (sessionHdl.maybeGet(context, SKStore.UnitID::singleton) match {
+  | Some(def) -> def.service.resourceBuilders().maybeGet(name)
+  | _ -> None()
+  }) match {
+  | Some(builder) -> builder
+  | _ -> throw SKStore.Error(`Unable to find '${name}' resource.`)
+  }
+}
+
+fun getResourceBuilderForInstance(
+  context: mutable SKStore.Context,
+  instance: String,
+): ResourceBuilder {
+  resourceHdl = SKStore.EHandle(
+    SKStore.SID::keyType,
+    ResourceDef::type,
+    kResourceSessionDir,
+  );
+  sid = SKStore.SID(instance);
+  resourceHdl.maybeGet(context, sid) match {
+  | Some(definition) -> getResourceBuilder(context, definition.name)
+  | _ -> throw UnknownCollectionError(instance)
+  }
+}
+
+fun getInputData(
+  context: mutable SKStore.Context,
+  input: String,
+): (Collection, Data) {
+  sessionHdl = SKStore.EHandle(
+    SKStore.UnitID::keyType,
+    ServiceDefinition::type,
+    kSessionDir,
+  );
+  serviceHdl = SKStore.EHandle(
+    SKStore.SID::keyType,
+    ServiceFile::type,
+    kGraphDir,
+  );
+  (sessionHdl.maybeGet(context, SKStore.UnitID::singleton) match {
+  | Some(def) ->
+    (
+      def.service.initialData().maybeGet(input),
+      serviceHdl.maybeGet(context, SKStore.SID(def.runId)) match {
+      | Some(service) -> service.inputs.maybeGet(input)
+      | _ -> None()
+      },
+    ) match {
+    | (Some(d), Some(c)) -> Some((c, d))
+    | _ -> None()
+    }
+  | _ -> None()
+  }) match {
+  | Some(data) -> data
+  | _ -> throw SKStore.Error(`Unable to find '${input}' input.`)
+  }
 }
 
 fun checkGarbage(context: mutable SKStore.Context): void {
