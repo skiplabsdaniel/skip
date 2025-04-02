@@ -38,8 +38,8 @@ class LinksImpl implements Links {
   SKIP_throw_cruntime!: (code: int) => void;
   SKIP_JS_timeStamp!: () => float;
 
-  SKIP_delete_external_exception!: (exc: int) => void;
-  SKIP_external_exception_message!: (exc: int) => ptr<Internal.String>;
+  SKIP_delete_external_exception!: (exc: bigint) => void;
+  SKIP_external_exception_message!: (exc: bigint) => ptr<Internal.String>;
   SKIP_FileSystem_appendTextFile!: (
     path: ptr<Internal.String>,
     contents: ptr<Internal.String>,
@@ -107,7 +107,7 @@ class LinksImpl implements Links {
       utils.log(str, Stream.OUT);
     };
     this.SKIP_delete_external_exception = utils.deleteException;
-    this.SKIP_external_exception_message = (exc: int) => {
+    this.SKIP_external_exception_message = (exc: bigint) => {
       return utils.exportString(utils.getExceptionMessage(exc));
     };
 
@@ -260,9 +260,9 @@ class Manager implements ToWasmManager {
       f: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
       exn_handler: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
     ): ptr<Internal.T<Ret>> => links.SKIP_etry(f, exn_handler);
-    toWasm.SKIP_delete_external_exception = (actor: int) =>
+    toWasm.SKIP_delete_external_exception = (actor: bigint) =>
       links.SKIP_delete_external_exception(actor);
-    toWasm.SKIP_external_exception_message = (actor: int) =>
+    toWasm.SKIP_external_exception_message = (actor: bigint) =>
       links.SKIP_external_exception_message(actor);
     toWasm.SKIP_js_time_ms_lo = () => links.SKIP_js_time_ms_lo();
     toWasm.SKIP_js_time_ms_hi = () => links.SKIP_js_time_ms_hi();
@@ -334,8 +334,8 @@ interface ToWasm {
     f: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
     exn_handler: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
   ) => ptr<Internal.T<Ret>>;
-  SKIP_delete_external_exception: (exc: int) => void;
-  SKIP_external_exception_message: (exc: int) => ptr<Internal.String>;
+  SKIP_delete_external_exception: (exc: bigint) => void;
+  SKIP_external_exception_message: (exc: bigint) => ptr<Internal.String>;
   SKIP_js_time_ms_lo: () => int;
   SKIP_js_time_ms_hi: () => int;
   SKIP_js_get_entropy: () => int;

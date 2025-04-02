@@ -18,17 +18,17 @@ fun nextOfNonEmptyIterator(
 @cpp_extern("SkipRuntime_Mapper__mapEntry")
 @debug
 native fun mapEntryOfMapper(
-  mapper: UInt32,
+  mapper: Int,
   key: SKJSON.CJSON,
   values: mutable SKStore.NonEmptyIterator<SKJSON.CJSON>,
 ): SKJSON.CJArray;
 
 @cpp_extern("SkipRuntime_deleteMapper")
 @debug
-native fun deleteMapper(mapper: UInt32): void;
+native fun deleteMapper(mapper: Int): void;
 
 @export("SkipRuntime_createMapper")
-fun createMapper(mapper: UInt32): ExternMapper {
+fun createMapper(mapper: Int): ExternMapper {
   ExternMapper(SKStore.ExternalPointer::create(mapper, deleteMapper))
 }
 
@@ -62,17 +62,17 @@ class ExternMapper(eptr: SKStore.ExternalPointer) extends Mapper {
 @cpp_extern("SkipRuntime_LazyCompute__compute")
 @debug
 native fun computeOfLazyCompute(
-  lazyCompute: UInt32,
+  lazyCompute: Int,
   self: String,
   key: SKJSON.CJSON,
 ): SKJSON.CJSON;
 
 @cpp_extern("SkipRuntime_deleteLazyCompute")
 @debug
-native fun deleteLazyCompute(lazyCompute: UInt32): void;
+native fun deleteLazyCompute(lazyCompute: Int): void;
 
 @export("SkipRuntime_createLazyCompute")
-fun createLazyCompute(lazyCompute: UInt32): ExternLazyCompute {
+fun createLazyCompute(lazyCompute: Int): ExternLazyCompute {
   ExternLazyCompute(
     SKStore.ExternalPointer::create(lazyCompute, deleteLazyCompute),
   )
@@ -92,7 +92,7 @@ class ExternLazyCompute(eptr: SKStore.ExternalPointer) extends LazyCompute {
 @cpp_extern("SkipRuntime_ExternalService__subscribe")
 @debug
 native fun subscribeOfExternalService(
-  externalSupplier: UInt32,
+  externalSupplier: Int,
   collection: String,
   instance: String,
   resource: String,
@@ -102,20 +102,20 @@ native fun subscribeOfExternalService(
 @cpp_extern("SkipRuntime_ExternalService__unsubscribe")
 @debug
 native fun unsubscribeOfExternalService(
-  externalSupplier: UInt32,
+  externalSupplier: Int,
   instance: String,
 ): void;
 
 @cpp_extern("SkipRuntime_ExternalService__shutdown")
 @debug
-native fun shutdownOfExternalService(externalSupplier: UInt32): Waitable;
+native fun shutdownOfExternalService(externalSupplier: Int): Waitable;
 
 @cpp_extern("SkipRuntime_deleteExternalService")
 @debug
-native fun deleteExternalService(externalSupplier: UInt32): void;
+native fun deleteExternalService(externalSupplier: Int): void;
 
 @export("SkipRuntime_createExternalService")
-fun createExternalService(externalSupplier: UInt32): ExternExternalService {
+fun createExternalService(externalSupplier: Int): ExternExternalService {
   ExternExternalService(
     SKStore.ExternalPointer::create(externalSupplier, deleteExternalService),
   )
@@ -178,16 +178,16 @@ fun updateOfCollectionWriter(
 @cpp_extern("SkipRuntime_Resource__instantiate")
 @debug
 native fun instantiateOfResource(
-  resource: UInt32,
+  resource: Int,
   collections: SKJSON.CJObject,
 ): String;
 
 @cpp_extern("SkipRuntime_deleteResource")
 @debug
-native fun deleteResource(resource: UInt32): void;
+native fun deleteResource(resource: Int): void;
 
 @export("SkipRuntime_createResource")
-fun createResource(resource: UInt32): ExternResource {
+fun createResource(resource: Int): ExternResource {
   ExternResource(SKStore.ExternalPointer::create(resource, deleteResource))
 }
 
@@ -205,17 +205,14 @@ class ExternResource(eptr: SKStore.ExternalPointer) extends Resource {
 
 @cpp_extern("SkipRuntime_ResourceBuilder__build")
 @debug
-native fun buildOfResourceBuilder(
-  builder: UInt32,
-  params: SKJSON.CJSON,
-): Resource;
+native fun buildOfResourceBuilder(builder: Int, params: SKJSON.CJSON): Resource;
 
 @cpp_extern("SkipRuntime_deleteResourceBuilder")
 @debug
-native fun deleteResourceBuilder(resourceBuilder: UInt32): void;
+native fun deleteResourceBuilder(resourceBuilder: Int): void;
 
 @export("SkipRuntime_createResourceBuilder")
-fun createResourceBuilder(resourceBuilder: UInt32): ExternResourceBuilder {
+fun createResourceBuilder(resourceBuilder: Int): ExternResourceBuilder {
   ExternResourceBuilder(
     SKStore.ExternalPointer::create(resourceBuilder, deleteResourceBuilder),
   )
@@ -233,7 +230,7 @@ class ExternResourceBuilder(
 
 @export("SkipRuntime_createService")
 fun createService(
-  service: UInt32,
+  service: Int,
   jsInputs: SKJSON.CJObject,
   resources: mutable Map<String, ResourceBuilder>,
   remotes: mutable Map<String, ExternalService>,
@@ -263,12 +260,12 @@ fun createService(
 
 @cpp_extern("SkipRuntime_deleteService")
 @debug
-native fun deleteService(service: UInt32): void;
+native fun deleteService(service: Int): void;
 
 @cpp_extern("SkipRuntime_Service__createGraph")
 @debug
 native fun createGraphOfService(
-  resource: UInt32,
+  service: Int,
   collections: SKJSON.CJObject,
 ): SKJSON.CJObject;
 
@@ -410,12 +407,12 @@ fun getArrayOfLazyCollection(lazy: String, key: SKJSON.CJSON): SKJSON.CJArray {
 
 @cpp_extern("SkipRuntime_Notifier__subscribed")
 @debug
-native fun subscribedOfNotifier(notifier: UInt32): void;
+native fun subscribedOfNotifier(notifier: Int): void;
 
 @cpp_extern("SkipRuntime_Notifier__notify")
 @debug
 native fun notifyOfNotifier(
-  notifier: UInt32,
+  notifier: Int,
   values: SKJSON.CJArray,
   watermark: String,
   updates: Int32,
@@ -423,14 +420,14 @@ native fun notifyOfNotifier(
 
 @cpp_extern("SkipRuntime_Notifier__close")
 @debug
-native fun closeOfNotifier(notifier: UInt32): void;
+native fun closeOfNotifier(notifier: Int): void;
 
 @cpp_extern("SkipRuntime_deleteNotifier")
 @debug
-native fun deleteNotifier(notifier: UInt32): void;
+native fun deleteNotifier(notifier: Int): void;
 
 @export("SkipRuntime_createNotifier")
-fun createNotifier(notifier: UInt32): Notifier {
+fun createNotifier(notifier: Int): Notifier {
   ExternNotifier(SKStore.ExternalPointer::create(notifier, deleteNotifier))
 }
 
@@ -464,7 +461,7 @@ class ExternNotifier(eptr: SKStore.ExternalPointer) extends Notifier {
 @cpp_extern("SkipRuntime_Reducer__add")
 @debug
 native fun addOfReducer(
-  reducer: UInt32,
+  reducer: Int,
   acc: SKJSON.CJSON,
   value: SKJSON.CJSON,
 ): SKJSON.CJSON;
@@ -472,17 +469,17 @@ native fun addOfReducer(
 @cpp_extern("SkipRuntime_Reducer__remove")
 @debug
 native fun removeOfReducer(
-  reducer: UInt32,
+  reducer: Int,
   acc: SKJSON.CJSON,
   value: SKJSON.CJSON,
 ): ?SKJSON.CJSON;
 
 @cpp_extern("SkipRuntime_deleteReducer")
 @debug
-native fun deleteReducer(reducer: UInt32): void;
+native fun deleteReducer(reducer: Int): void;
 
 @export("SkipRuntime_createReducer")
-fun createReducer(reducer: UInt32, initial: SKJSON.CJSON): JSONReducer {
+fun createReducer(reducer: Int, initial: SKJSON.CJSON): JSONReducer {
   JSONReducer(SKStore.ExternalPointer::create(reducer, deleteReducer), initial)
 }
 

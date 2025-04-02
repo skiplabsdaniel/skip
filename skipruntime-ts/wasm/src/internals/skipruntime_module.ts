@@ -41,6 +41,16 @@ import {
   SKJSONShared,
 } from "../../skipwasm-json/skjson.js";
 
+export type SkHandle<T> = Internal.Opaque<bigint, { handle_for: T }>;
+
+function toHandle<T>(skHandle: SkHandle<T>): Handle<T> {
+  return Number(skHandle) as Handle<T>;
+}
+
+function toSkHandle<T>(handle: Handle<T>): SkHandle<T> {
+  return BigInt(handle) as SkHandle<T>;
+}
+
 export interface FromWasm {
   // NonEmptyIterator
   SkipRuntime_NonEmptyIterator__next(
@@ -54,19 +64,19 @@ export interface FromWasm {
     K2 extends Json,
     V2 extends Json,
   >(
-    ref: Handle<Mapper<K1, V1, K2, V2>>,
+    ref: SkHandle<Mapper<K1, V1, K2, V2>>,
   ): ptr<Internal.Mapper>;
 
   // LazyCompute
 
   SkipRuntime_createLazyCompute<K extends Json, V extends Json>(
-    ref: Handle<LazyCompute<K, V>>,
+    ref: SkHandle<LazyCompute<K, V>>,
   ): ptr<Internal.LazyCompute>;
 
   // ExternalService
 
   SkipRuntime_createExternalService(
-    ref: Handle<ExternalService>,
+    ref: SkHandle<ExternalService>,
   ): ptr<Internal.ExternalService>;
 
   // CollectionWriter
@@ -79,16 +89,16 @@ export interface FromWasm {
 
   // Resource
 
-  SkipRuntime_createResource(ref: Handle<Resource>): ptr<Internal.Resource>;
+  SkipRuntime_createResource(ref: SkHandle<Resource>): ptr<Internal.Resource>;
 
   // ResourceBuilder
   SkipRuntime_createResourceBuilder(
-    ref: Handle<ResourceBuilder>,
+    ref: SkHandle<ResourceBuilder>,
   ): ptr<Internal.ResourceBuilder>;
 
   // ResourceBuilder
   SkipRuntime_createService(
-    ref: Handle<SkipService>,
+    ref: SkHandle<SkipService>,
     jsInputs: ptr<Internal.CJObject>,
     resources: ptr<Internal.ResourceBuilderMap>,
     remotes: ptr<Internal.ExternalServiceMap>,
@@ -172,7 +182,7 @@ export interface FromWasm {
   // Notifier
 
   SkipRuntime_createNotifier<K extends Json, V extends Json>(
-    notifier: Handle<Notifier<K, V>>,
+    notifier: SkHandle<Notifier<K, V>>,
   ): ptr<Internal.Notifier>;
 
   // Runtime
@@ -219,7 +229,7 @@ export interface FromWasm {
   // Reducer
 
   SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(
-    ref: Handle<Reducer<K1, V1>>,
+    ref: SkHandle<Reducer<K1, V1>>,
     defaultValue: ptr<Internal.CJSON>,
   ): ptr<Internal.Reducer>;
 
@@ -258,27 +268,27 @@ interface ToWasm {
   // Mapper
 
   SkipRuntime_Mapper__mapEntry(
-    mapper: Handle<JSONMapper>,
+    mapper: SkHandle<JSONMapper>,
     key: ptr<Internal.CJSON>,
     values: ptr<Internal.NonEmptyIterator>,
   ): ptr<Internal.CJArray>;
 
-  SkipRuntime_deleteMapper(mapper: Handle<JSONMapper>): void;
+  SkipRuntime_deleteMapper(mapper: SkHandle<JSONMapper>): void;
 
   // LazyCompute
 
   SkipRuntime_LazyCompute__compute(
-    lazyCompute: Handle<JSONLazyCompute>,
+    lazyCompute: SkHandle<JSONLazyCompute>,
     self: ptr<Internal.String>,
     key: ptr<Internal.CJSON>,
   ): ptr<Internal.CJArray>;
 
-  SkipRuntime_deleteLazyCompute(mapper: Handle<JSONLazyCompute>): void;
+  SkipRuntime_deleteLazyCompute(mapper: SkHandle<JSONLazyCompute>): void;
 
   // ExternalService
 
   SkipRuntime_ExternalService__subscribe(
-    supplier: Handle<ExternalService>,
+    supplier: SkHandle<ExternalService>,
     collection: ptr<Internal.String>,
     instance: ptr<Internal.String>,
     resource: ptr<Internal.String>,
@@ -286,84 +296,84 @@ interface ToWasm {
   ): Handle<Promise<void>>;
 
   SkipRuntime_ExternalService__unsubscribe(
-    supplier: Handle<ExternalService>,
+    supplier: SkHandle<ExternalService>,
     instance: ptr<Internal.String>,
   ): void;
 
   SkipRuntime_ExternalService__shutdown(
-    supplier: Handle<ExternalService>,
+    supplier: SkHandle<ExternalService>,
   ): Handle<Promise<void>>;
 
-  SkipRuntime_deleteExternalService(supplier: Handle<ExternalService>): void;
+  SkipRuntime_deleteExternalService(supplier: SkHandle<ExternalService>): void;
 
   // Resource
 
   SkipRuntime_Resource__instantiate(
-    resource: Handle<Resource>,
+    resource: SkHandle<Resource>,
     collections: ptr<Internal.CJObject>,
   ): ptr<Internal.String>;
 
-  SkipRuntime_deleteResource(resource: Handle<Resource>): void;
+  SkipRuntime_deleteResource(resource: SkHandle<Resource>): void;
 
   // ResourceBuilder
 
   SkipRuntime_ResourceBuilder__build(
-    builder: Handle<ResourceBuilder>,
+    builder: SkHandle<ResourceBuilder>,
     params: ptr<Internal.CJSON>,
   ): ptr<Internal.Resource>;
 
-  SkipRuntime_deleteResourceBuilder(builder: Handle<ResourceBuilder>): void;
+  SkipRuntime_deleteResourceBuilder(builder: SkHandle<ResourceBuilder>): void;
 
   // Service
 
   SkipRuntime_Service__createGraph(
-    resource: Handle<SkipService>,
+    resource: SkHandle<SkipService>,
     collections: ptr<Internal.CJObject>,
   ): ptr<Internal.CJObject>;
 
-  SkipRuntime_deleteService(service: Handle<SkipService>): void;
+  SkipRuntime_deleteService(service: SkHandle<SkipService>): void;
 
   // Notifier
 
   SkipRuntime_Notifier__subscribed<K extends Json, V extends Json>(
-    notifier: Handle<Notifier<K, V>>,
+    notifier: SkHandle<Notifier<K, V>>,
   ): void;
 
   SkipRuntime_Notifier__notify<K extends Json, V extends Json>(
-    notifier: Handle<Notifier<K, V>>,
+    notifier: SkHandle<Notifier<K, V>>,
     values: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
     watermark: ptr<Internal.String>,
     isUpdates: number,
   ): void;
 
   SkipRuntime_Notifier__close<K extends Json, V extends Json>(
-    notifier: Handle<Notifier<K, V>>,
+    notifier: SkHandle<Notifier<K, V>>,
   ): void;
 
   SkipRuntime_deleteNotifier<K extends Json, V extends Json>(
-    notifier: Handle<Notifier<K, V>>,
+    notifier: SkHandle<Notifier<K, V>>,
   ): void;
 
   // Reducer
 
   SkipRuntime_Reducer__add(
-    reducer: Handle<Reducer<Json, Json>>,
+    reducer: SkHandle<Reducer<Json, Json>>,
     acc: ptr<Internal.CJSON>,
     value: ptr<Internal.CJSON>,
   ): ptr<Internal.CJSON>;
 
   SkipRuntime_Reducer__remove(
-    reducer: Handle<Reducer<Json, Json>>,
+    reducer: SkHandle<Reducer<Json, Json>>,
     acc: ptr<Internal.CJSON>,
     value: ptr<Internal.CJSON>,
   ): Nullable<ptr<Internal.CJSON>>;
 
-  SkipRuntime_deleteReducer(reducer: Handle<Reducer<Json, Json>>): void;
+  SkipRuntime_deleteReducer(reducer: SkHandle<Reducer<Json, Json>>): void;
 
   // Checker
 
   SkipRuntime_Checker__check(
-    checker: Handle<Checker>,
+    checker: SkHandle<Checker>,
     request: ptr<Internal.String>,
   ): void;
 
@@ -390,19 +400,19 @@ export class WasmFromBinding implements FromBinding {
     K2 extends Json,
     V2 extends Json,
   >(ref: Handle<Mapper<K1, V1, K2, V2>>): Pointer<Internal.Mapper> {
-    return this.fromWasm.SkipRuntime_createMapper(ref);
+    return this.fromWasm.SkipRuntime_createMapper(toSkHandle(ref));
   }
 
   SkipRuntime_createLazyCompute<K extends Json, V extends Json>(
     ref: Handle<LazyCompute<K, V>>,
   ): Pointer<Internal.LazyCompute> {
-    return this.fromWasm.SkipRuntime_createLazyCompute(ref);
+    return this.fromWasm.SkipRuntime_createLazyCompute(toSkHandle(ref));
   }
 
   SkipRuntime_createExternalService(
     ref: Handle<ExternalService>,
   ): Pointer<Internal.ExternalService> {
-    return this.fromWasm.SkipRuntime_createExternalService(ref);
+    return this.fromWasm.SkipRuntime_createExternalService(toSkHandle(ref));
   }
 
   SkipRuntime_CollectionWriter__update(
@@ -420,13 +430,13 @@ export class WasmFromBinding implements FromBinding {
   SkipRuntime_createResource(
     ref: Handle<Resource>,
   ): Pointer<Internal.Resource> {
-    return this.fromWasm.SkipRuntime_createResource(ref);
+    return this.fromWasm.SkipRuntime_createResource(toSkHandle(ref));
   }
 
   SkipRuntime_createResourceBuilder(
     ref: Handle<ResourceBuilder>,
   ): Pointer<Internal.ResourceBuilder> {
-    return this.fromWasm.SkipRuntime_createResourceBuilder(ref);
+    return this.fromWasm.SkipRuntime_createResourceBuilder(toSkHandle(ref));
   }
 
   SkipRuntime_createService(
@@ -436,7 +446,7 @@ export class WasmFromBinding implements FromBinding {
     remotes: Pointer<Internal.ExternalServiceMap>,
   ): Pointer<Internal.Service> {
     return this.fromWasm.SkipRuntime_createService(
-      ref,
+      toSkHandle(ref),
       toPtr(jsInputs),
       toPtr(resources),
       toPtr(remotes),
@@ -601,7 +611,7 @@ export class WasmFromBinding implements FromBinding {
   SkipRuntime_createNotifier<K extends Json, V extends Json>(
     ref: Handle<Notifier<K, V>>,
   ): Pointer<Internal.Notifier> {
-    return this.fromWasm.SkipRuntime_createNotifier(ref);
+    return this.fromWasm.SkipRuntime_createNotifier(toSkHandle(ref));
   }
 
   SkipRuntime_Runtime__createResource(
@@ -698,7 +708,10 @@ export class WasmFromBinding implements FromBinding {
     ref: Handle<Reducer<K1, V1>>,
     defaultValue: Pointer<Internal.CJSON>,
   ): Pointer<Internal.Reducer> {
-    return this.fromWasm.SkipRuntime_createReducer(ref, toPtr(defaultValue));
+    return this.fromWasm.SkipRuntime_createReducer(
+      toSkHandle(ref),
+      toPtr(defaultValue),
+    );
   }
 
   SkipRuntime_initService(
@@ -794,96 +807,106 @@ class LinksImpl implements Links {
   // Mapper
 
   mapEntryOfMapper(
-    skmapper: Handle<JSONMapper>,
+    skmapper: SkHandle<JSONMapper>,
     key: ptr<Internal.CJSON>,
     values: ptr<Internal.NonEmptyIterator>,
   ): ptr<Internal.CJArray> {
     return toPtr(
-      this.tobinding.SkipRuntime_Mapper__mapEntry(skmapper, key, values),
+      this.tobinding.SkipRuntime_Mapper__mapEntry(
+        toHandle(skmapper),
+        key,
+        values,
+      ),
     );
   }
 
-  deleteMapper(mapper: Handle<JSONMapper>) {
-    this.tobinding.SkipRuntime_deleteMapper(mapper);
+  deleteMapper(mapper: SkHandle<JSONMapper>) {
+    this.tobinding.SkipRuntime_deleteMapper(toHandle(mapper));
   }
 
   // LazyCompute
 
   computeOfLazyCompute(
-    sklazyCompute: Handle<JSONLazyCompute>,
+    sklazyCompute: SkHandle<JSONLazyCompute>,
     skself: ptr<Internal.String>,
     skkey: ptr<Internal.CJSON>,
   ) {
     return toPtr(
       this.tobinding.SkipRuntime_LazyCompute__compute(
-        sklazyCompute,
+        toHandle(sklazyCompute),
         this.utils.importString(skself),
         skkey,
       ),
     );
   }
 
-  deleteLazyCompute(lazyCompute: Handle<JSONLazyCompute>) {
-    this.tobinding.SkipRuntime_deleteLazyCompute(lazyCompute);
+  deleteLazyCompute(lazyCompute: SkHandle<JSONLazyCompute>) {
+    this.tobinding.SkipRuntime_deleteLazyCompute(toHandle(lazyCompute));
   }
 
   // Resource
 
   instantiateOfResource(
-    skresource: Handle<Resource>,
+    skresource: SkHandle<Resource>,
     skcollections: ptr<Internal.CJObject>,
   ): ptr<Internal.String> {
     return this.utils.exportString(
       this.tobinding.SkipRuntime_Resource__instantiate(
-        skresource,
+        toHandle(skresource),
         skcollections,
       ),
     );
   }
 
-  deleteResource(resource: Handle<Resource>) {
-    this.tobinding.SkipRuntime_deleteResource(resource);
+  deleteResource(resource: SkHandle<Resource>) {
+    this.tobinding.SkipRuntime_deleteResource(toHandle(resource));
   }
 
   // ResourceBuilder
 
   buildOfResourceBuilder(
-    skbuilder: Handle<ResourceBuilder>,
+    skbuilder: SkHandle<ResourceBuilder>,
     skparams: ptr<Internal.CJSON>,
   ): ptr<Internal.Resource> {
     return toPtr(
-      this.tobinding.SkipRuntime_ResourceBuilder__build(skbuilder, skparams),
+      this.tobinding.SkipRuntime_ResourceBuilder__build(
+        toHandle(skbuilder),
+        skparams,
+      ),
     );
   }
 
-  deleteResourceBuilder(builder: Handle<ResourceBuilder>) {
-    this.tobinding.SkipRuntime_deleteResourceBuilder(builder);
+  deleteResourceBuilder(builder: SkHandle<ResourceBuilder>) {
+    this.tobinding.SkipRuntime_deleteResourceBuilder(toHandle(builder));
   }
 
   // Service
 
   createGraphOfService(
-    skservice: Handle<SkipService>,
+    skservice: SkHandle<SkipService>,
     skcollections: ptr<Internal.CJObject>,
   ) {
     return toPtr(
-      this.tobinding.SkipRuntime_Service__createGraph(skservice, skcollections),
+      this.tobinding.SkipRuntime_Service__createGraph(
+        toHandle(skservice),
+        skcollections,
+      ),
     );
   }
 
-  deleteService(service: Handle<SkipService>) {
-    this.tobinding.SkipRuntime_deleteService(service);
+  deleteService(service: SkHandle<SkipService>) {
+    this.tobinding.SkipRuntime_deleteService(toHandle(service));
   }
 
   // Notifier
   notifyOfNotifier<K extends Json, V extends Json>(
-    sknotifier: Handle<Notifier<K, V>>,
+    sknotifier: SkHandle<Notifier<K, V>>,
     skvalues: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
     watermark: ptr<Internal.String>,
     isUpdates: number,
   ) {
     this.tobinding.SkipRuntime_Notifier__notify(
-      sknotifier,
+      toHandle(sknotifier),
       skvalues,
       this.utils.importString(watermark) as Watermark,
       isUpdates,
@@ -891,60 +914,68 @@ class LinksImpl implements Links {
   }
 
   subscribedOfNotifier<K extends Json, V extends Json>(
-    sknotifier: Handle<Notifier<K, V>>,
+    sknotifier: SkHandle<Notifier<K, V>>,
   ) {
-    this.tobinding.SkipRuntime_Notifier__subscribed(sknotifier);
+    this.tobinding.SkipRuntime_Notifier__subscribed(toHandle(sknotifier));
   }
 
   closeOfNotifier<K extends Json, V extends Json>(
-    sknotifier: Handle<Notifier<K, V>>,
+    sknotifier: SkHandle<Notifier<K, V>>,
   ) {
-    this.tobinding.SkipRuntime_Notifier__close(sknotifier);
+    this.tobinding.SkipRuntime_Notifier__close(toHandle(sknotifier));
   }
 
   deleteNotifier<K extends Json, V extends Json>(
-    notifier: Handle<Notifier<K, V>>,
+    notifier: SkHandle<Notifier<K, V>>,
   ) {
-    this.tobinding.SkipRuntime_deleteNotifier(notifier);
+    this.tobinding.SkipRuntime_deleteNotifier(toHandle(notifier));
   }
 
   // Reducer
 
   addOfReducer(
-    skreducer: Handle<Reducer<Json, Json>>,
+    skreducer: SkHandle<Reducer<Json, Json>>,
     skacc: ptr<Internal.CJSON>,
     skvalue: ptr<Internal.CJSON>,
   ) {
     return toPtr(
-      this.tobinding.SkipRuntime_Reducer__add(skreducer, skacc, skvalue),
+      this.tobinding.SkipRuntime_Reducer__add(
+        toHandle(skreducer),
+        skacc,
+        skvalue,
+      ),
     );
   }
 
   removeOfReducer(
-    skreducer: Handle<Reducer<Json, Json>>,
+    skreducer: SkHandle<Reducer<Json, Json>>,
     skacc: ptr<Internal.CJSON>,
     skvalue: ptr<Internal.CJSON>,
   ) {
     return toNullablePtr(
-      this.tobinding.SkipRuntime_Reducer__remove(skreducer, skacc, skvalue),
+      this.tobinding.SkipRuntime_Reducer__remove(
+        toHandle(skreducer),
+        skacc,
+        skvalue,
+      ),
     );
   }
 
-  deleteReducer(reducer: Handle<Reducer<Json, Json>>) {
-    this.tobinding.SkipRuntime_deleteReducer(reducer);
+  deleteReducer(reducer: SkHandle<Reducer<Json, Json>>) {
+    this.tobinding.SkipRuntime_deleteReducer(toHandle(reducer));
   }
 
   // ExternalService
 
   subscribeOfExternalService(
-    sksupplier: Handle<ExternalService>,
+    sksupplier: SkHandle<ExternalService>,
     skwriter: ptr<Internal.String>,
     skinstance: ptr<Internal.String>,
     skresource: ptr<Internal.String>,
     skparams: ptr<Internal.CJSON>,
   ): Handle<Promise<void>> {
     return this.tobinding.SkipRuntime_ExternalService__subscribe(
-      sksupplier,
+      toHandle(sksupplier),
       this.utils.importString(skwriter),
       this.utils.importString(skinstance),
       this.utils.importString(skresource),
@@ -953,21 +984,23 @@ class LinksImpl implements Links {
   }
 
   unsubscribeOfExternalService(
-    sksupplier: Handle<ExternalService>,
+    sksupplier: SkHandle<ExternalService>,
     skinstance: ptr<Internal.String>,
   ) {
     this.tobinding.SkipRuntime_ExternalService__unsubscribe(
-      sksupplier,
+      toHandle(sksupplier),
       this.utils.importString(skinstance),
     );
   }
 
-  shutdownOfExternalService(sksupplier: Handle<ExternalService>) {
-    return this.tobinding.SkipRuntime_ExternalService__shutdown(sksupplier);
+  shutdownOfExternalService(sksupplier: SkHandle<ExternalService>) {
+    return this.tobinding.SkipRuntime_ExternalService__shutdown(
+      toHandle(sksupplier),
+    );
   }
 
-  deleteExternalService(supplier: Handle<ExternalService>) {
-    this.tobinding.SkipRuntime_deleteExternalService(supplier);
+  deleteExternalService(supplier: SkHandle<ExternalService>) {
+    this.tobinding.SkipRuntime_deleteExternalService(toHandle(supplier));
   }
 }
 

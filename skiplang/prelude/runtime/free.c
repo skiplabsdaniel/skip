@@ -59,8 +59,8 @@ void sk_free_obj(sk_stack_t* st, char* obj) {
     }
 #endif
     char* destructor = sk_get_external_pointer_destructor(obj);
-    uint32_t value = sk_get_external_pointer_value(obj);
-    uint32_t magic = sk_get_magic_number(obj);
+    int64_t value = sk_get_external_pointer_value(obj);
+    int64_t magic = sk_get_magic_number(obj);
     if (magic != 234566 && magic != 234567) {
 #ifdef SKIP64
       fprintf(stderr, "Invalid external pointer found\n");
