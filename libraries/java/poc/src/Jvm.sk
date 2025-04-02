@@ -1,0 +1,42 @@
+
+class UnableToLoadJVM() extends .Exception
+class JVM(vm: SKStore.ExternalPointer, env: Runtime.NonGCPointer)
+
+class Verbose{cls: Bool = false, jni: Bool = false}
+
+@debug
+@cpp_extern
+native fun destroyJVM(vm: Int): void;
+
+@debug
+@cpp_extern
+native fun loadJVM_(
+  jarOption: String,
+  verboseClass: Bool,
+  verboseJNI: Bool,
+): JVM;
+
+fun loadJVM(jar: String, verbose: Verbose = Verbose{}): JVM {
+  path = Path.resolve(jar);
+  if (!FileSystem.exists(path)) {
+    throw LibraryException("FileSystem", `File not found '${jar}'.`);
+  };
+
+  loadJVM_(`-Djava.class.path=${path}`, verbose.cls, verbose.jni)
+}
+
+@export("SKIP_createJVM")
+fun createJVM(vm: Int, env: Runtime.NonGCPointer): JVM {
+  JVM(SKStore.ExternalPointer::create(vm, destroyJVM), env)
+}
+
+ 
+@export("SKIP_getJVMEnv")
+fun getEnv(lib: Library): Runtime.NonGCPointer {
+  lib.jvm.env
+}
+
+@export("SKIP_throwUnableToLoadJVM")
+fun throwUnableToLoadJVM(): void {
+  throw UnableToLoadJVM()
+}

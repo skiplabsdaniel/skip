@@ -1,0 +1,76 @@
+base class EObject {
+  children=
+  | A(field1: Int, field2: B)
+  | B(field1: Float)
+  | C(field1: B)
+}
+
+fun toDebugString<T>(t: T): String {
+  buffer = mutable Vector[];
+  Debug.debugImpl(t, buffer.push);
+  buffer.join("")
+} 
+
+class LibraryException(
+  type: String,
+  message: String,
+  trace: ?String = None(),
+) extends .Exception
+
+@export("SKIP_createC")
+fun createC(field1: B): C {
+  C(field1)
+}
+
+@export("SKIP_createB")
+fun createB(field1: Float): B {
+  B(field1)
+}
+
+@export("SKIP_B__getField1")
+fun getBField1(b: B): Float {
+  b.field1
+}
+
+@export("SKIP_A__getField1")
+fun getAField1(a: A): Int {
+  a.field1
+}
+
+@cpp_export("SKIP_A__getField2")
+fun getAField2(a: A): B {
+  a.field2
+}
+
+@export("SKIP_C__getField1")
+fun getCField1(c: C): B {
+  c.field1
+}
+
+
+class Library(jvm: JVM) {
+  @debug
+  @cpp_extern
+  native fun performSomething(a: A): C; 
+}
+
+@export("SKIP_throwLibraryException")
+fun throwLibraryException(type: String, message: String, trace: ?String): void {
+  throw LibraryException(type, message, trace)
+}
+
+fun main(): void {
+  obstack = SKStore.newObstack();
+  try {
+    lib = Library(loadJVM(
+      "./java/library/target/library-1.0-SNAPSHOT.jar"
+    ));
+    print_debug(`Skiplang => ${toDebugString(lib.performSomething(A(10, B(5.0))))}`);
+    SKStore.destroyObstack(obstack);
+  } catch {
+  | e ->
+    print_error(e.getMessage());
+    SKStore.destroyObstack(obstack);
+    exit(1)
+  }
+}
