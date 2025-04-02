@@ -25,16 +25,16 @@ CJArray SkipRuntime_Context__jsonExtract(CJObject json, char* pattern);
 char* SkipRuntime_Context__useExternalResource(char* service, char* identifier,
                                                CJObject json);
 
-SKMapper SkipRuntime_createMapper(int32_t ref);
-SKLazyCompute SkipRuntime_createLazyCompute(int32_t ref);
-SKExternalService SkipRuntime_createExternalService(int32_t ref);
-SKResource SkipRuntime_createResource(int32_t ref);
-SKResourceBuilder SkipRuntime_createResourceBuilder(int32_t ref);
-SKService SkipRuntime_createService(int32_t ref, CJObject inputs,
+SKMapper SkipRuntime_createMapper(int64_t ref);
+SKLazyCompute SkipRuntime_createLazyCompute(int64_t ref);
+SKExternalService SkipRuntime_createExternalService(int64_t ref);
+SKResource SkipRuntime_createResource(int64_t ref);
+SKResourceBuilder SkipRuntime_createResourceBuilder(int64_t ref);
+SKService SkipRuntime_createService(int64_t ref, CJObject inputs,
                                     SKResourceBuilderMap resources,
                                     SKExternalServiceMap exservices);
-SKNotifier SkipRuntime_createNotifier(int32_t ref);
-SKReducer SkipRuntime_createReducer(int32_t ref, CJSON json);
+SKNotifier SkipRuntime_createNotifier(int64_t ref);
+SKReducer SkipRuntime_createReducer(int64_t ref, CJSON json);
 
 CJSON SkipRuntime_initService(SKService service);
 CJSON SkipRuntime_closeService();
