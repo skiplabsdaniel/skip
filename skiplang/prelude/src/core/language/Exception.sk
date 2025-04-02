@@ -93,7 +93,7 @@ class ExternalException(
   private eptr: SKStore.ExternalPointer,
 ) extends Exception {
   //
-  static fun make(id: UInt32): this {
+  static fun make(id: Int): this {
     static(SKStore.ExternalPointer::create(id, deleteExternalException))
   }
 
@@ -104,14 +104,14 @@ class ExternalException(
 }
 
 @cpp_extern("SKIP_external_exception_message")
-native fun getExternalExceptionMessage(actor: UInt32): String;
+native fun getExternalExceptionMessage(exn: Int): String;
 
 @cpp_extern("SKIP_delete_external_exception")
-native fun deleteExternalException(actor: UInt32): void;
+native fun deleteExternalException(exn: Int): void;
 
 @wasm_export("SKIP_callWithException")
-fun callWithException(f: () -> void, exc: UInt32): void {
-  if (exc.toInt() > 0) saveExn(ExternalException::make(exc));
+fun callWithException(f: () -> void, exc: Int): void {
+  if (exc > 0) saveExn(ExternalException::make(exc));
   f();
 }
 
