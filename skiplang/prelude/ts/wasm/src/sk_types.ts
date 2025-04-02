@@ -187,7 +187,7 @@ interface Exported {
   SKIP_skstore_end_of_init: () => void;
   SKIP_callWithException: <Ret>(
     fnc: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
-    exc: int,
+    exc: bigint,
   ) => ptr<Internal.T<Ret>>;
   SKIP_getExceptionMessage: (
     skExc: ptr<Internal.Exception>,
@@ -486,7 +486,7 @@ export class Utils {
   ): ptr<Internal.T<Ret>> => {
     return this.exports.SKIP_callWithException(
       fnId,
-      exception ? exception.id : 0,
+      BigInt(exception ? exception.id : 0),
     );
   };
   getBytesFromBuffer = (dataPtr: ptr<Internal.T<any>>, length: int) => {
@@ -557,21 +557,23 @@ export class Utils {
       this.stacks.set(newex, stack);
     }
   }
-  deleteException = (exc: int) => {
-    this.state.exceptions.delete(exc);
+  deleteException = (exc: bigint) => {
+    this.state.exceptions.delete(Number(exc));
   };
 
-  getExceptionMessage = (exc: int) => {
-    if (this.state.exceptions.has(exc)) {
-      return this.state.exceptions.get(exc)!.err.message;
+  getExceptionMessage = (exc: bigint) => {
+    const nexc = Number(exc);
+    if (this.state.exceptions.has(nexc)) {
+      return this.state.exceptions.get(nexc)!.err.message;
     } else {
       return "Unknown";
     }
   };
 
-  getExceptionStack = (exc: int) => {
-    if (this.state.exceptions.has(exc)) {
-      return this.state.exceptions.get(exc)!.err.stack ?? "";
+  getExceptionStack = (exc: bigint) => {
+    const nexc = Number(exc);
+    if (this.state.exceptions.has(nexc)) {
+      return this.state.exceptions.get(nexc)!.err.stack ?? "";
     } else {
       return "";
     }

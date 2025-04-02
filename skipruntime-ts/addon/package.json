@@ -9,7 +9,7 @@
   "scripts": {
     "prepare": "skargo build -r --lib --manifest-path=../native/Skargo.toml --out-dir=../../build/skipruntime",
     "build": "skargo build -r --lib --manifest-path=../native/Skargo.toml --out-dir=../../build/skipruntime && tsc && SKIPRUNTIME=$(realpath ../../build/skipruntime) node-gyp configure && node-gyp build",
-    "clean": "rm -rf dist && node-gyp clean",
+    "clean": "rm -rf dist && node-gyp clean && skargo clean -r --manifest-path=../native/Skargo.toml",
     "lint": "eslint"
   },
   "dependencies": {
