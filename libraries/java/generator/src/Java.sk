@@ -1,0 +1,290 @@
+module Java;
+
+base class Visibility uses Show {
+  children =
+  | Public()
+  | Protected()
+  | Private()
+
+  fun toString(): String
+  | Public _ -> "public"
+  | Protected _ -> "proteced"
+  | Private _ -> "private"
+}
+
+base class Named{name: String}
+base class Typed{type: Type}
+base class Observable{visibility: Visibility = Public()}
+base class Staticable{static_: Bool = false}
+
+class Field{final_: Bool = true} extends Named, Typed, Observable {
+  fun print(printer: String -> void): void {
+    printer(this.visibility.toString());
+    printer(" ");
+    if (this.final_) {
+      printer("final ")
+    };
+    this.type.print(printer);
+    printer(" ");
+    printer(`${this.name};`);
+  }
+}
+
+class Parameter extends Named, Typed {
+  fun print(printer: String -> void): void {
+    this.type.print(printer);
+    printer(`${this.name}`);
+  }
+}
+
+base class SignatureBase{
+  parameters: Array<Parameter> = Array[],
+  typeParameters: Array<Type> = Array[],
+} extends Named, Observable {
+  fun print(printer: String -> void): void;
+}
+
+class Signature extends Typed, Staticable, SignatureBase {
+  fun print(printer: String -> void): void {
+    printer(this.visibility.toString());
+    if (this.static_) {
+      printer(" static");
+    };
+    printer(" ");
+    this.type.print(printer);
+    printer(` ${this.name}`);
+    tpsize = this.typeParameters.size();
+    for (i in Range(0, tpsize)) {
+      if (i == 0) {
+        printer("<");
+      };
+      this.typeParameters[i].print(printer);
+      if (i == tpsize - 1) {
+        printer(">");
+      } else {
+        printer(", ");
+      }
+    };
+    printer("(");
+    tsize = this.parameters.size();
+    for (i in Range(0, tsize)) {
+      this.parameters[i].print(printer);
+      if (i < tsize - 1) {
+        printer(", ");
+      }
+    };
+    printer(")");
+  }
+}
+
+class Constructor extends SignatureBase {
+  fun print(printer: String -> void): void {
+    printer(this.visibility.toString());
+    printer(` ${this.name}`);
+    tpsize = this.typeParameters.size();
+    for (i in Range(0, tpsize)) {
+      if (i == 0) {
+        printer("<");
+      };
+      this.typeParameters[i].print(printer);
+      if (i == tpsize - 1) {
+        printer(">");
+      } else {
+        printer(", ");
+      }
+    };
+    printer("(");
+    tsize = this.parameters.size();
+    for (i in Range(0, tsize)) {
+      this.parameters[i].print(printer);
+      if (i < tsize - 1) {
+        printer(", ");
+      }
+    };
+    printer(")");
+  }
+}
+
+class Method{
+  signature: SignatureBase,
+  equations: Array<Equation> = Array[],
+  return_: ?Expression = None(),
+} {
+  fun print(printer: String -> void, tab: String): void {
+    this.signature.print(printer);
+    stab = `${tab}  `;
+    printer("{\n");
+    for (e in this.equations) {
+      printer(stab);
+      e.print(printer);
+      printer(";\n");
+    };
+    this.return_.each(return_ -> {
+      printer(`${stab}return `);
+      return_.print(printer);
+      printer(";\n");
+    });
+    printer(`${tab}}`);
+  }
+}
+
+base class ClassBase{
+  package: Array<String> = Array[],
+  imports: SortedSet<String> = SortedSet[],
+  types: Array<Type> = Array[],
+} extends Named, Observable {
+  fun printHeader(name: String, printer: String -> void): void {
+    if (!this.package.isEmpty()) {
+      printer(`package ${this.package.join(".")};\n\n`)
+    };
+    if (!this.imports.isEmpty()) {
+      this.imports.each(import -> printer(`import ${import};\n`));
+      printer("\n")
+    };
+    printer(`${this.visibility} ${name} ${this.name}`);
+    tsize = this.types.size();
+    for (i in Range(0, tsize)) {
+      if (i == 0) {
+        printer("<");
+      };
+      this.types[i].print(printer);
+      if (i == tsize - 1) {
+        printer(">");
+      } else {
+        printer(", ");
+      }
+    };
+  }
+}
+
+class Class_{
+  implements: Array<Type> = Array[],
+  fields: Array<Field> = Array[],
+  static_: Array<Expression> = Array[],
+  methods: Array<Method> = Array[],
+  extends_: ?Type = None(),
+} extends ClassBase {
+  fun print(printer: String -> void): void {
+    this.printHeader("class", printer);
+    isize = this.implements.size();
+    for (i in Range(0, isize)) {
+      if (i == 0) {
+        printer("\n  implements ");
+      };
+      this.implements[i].print(printer);
+      if (i < isize - 1) {
+        printer(", ");
+      }
+    };
+    this.extends_.each(e -> {
+      printer("\n  extends ");
+      e.print(printer);
+    });
+    printer(" {\n");
+    if (!this.fields.isEmpty()) {
+      this.fields.each(f -> {
+        printer("\n  ");
+        f.print(printer)
+      });
+      printer("\n");
+    };
+    msize = this.methods.size();
+    for (i in Range(0, msize)) {
+      printer("\n  ");
+      this.methods[i].print(printer, "  ");
+      printer("\n");
+    };
+    printer("}");
+  }
+}
+
+class Interface{
+  signatures_: Array<Signature>,
+  extends_: Array<Type> = Array[],
+} extends ClassBase {
+  fun print(printer: String -> void): void {
+    this.printHeader("interface", printer);
+    esize = this.extends_.size();
+    for (i in Range(0, esize)) {
+      if (i == 0) {
+        printer(`\n  extends `);
+      };
+      this.extends_[i].print(printer);
+      if (i < esize - 1) {
+        printer(", ");
+      }
+    };
+    printer(" {\n");
+    ssize = this.signatures_.size();
+    for (i in Range(0, ssize)) {
+      printer(`\n  `);
+      this.signatures_[i].print(printer);
+      printer(";\n");
+    };
+    printer(`}`);
+  }
+}
+
+class Type{types: Array<Type> = Array[]} extends Named {
+  fun print(printer: String -> void): void {
+    printer(this.name);
+    tsize = this.types.size();
+    for (i in Range(0, tsize)) {
+      if (i == 0) {
+        printer("<");
+      };
+      this.types[i].print(printer);
+      if (i == tsize - 1) {
+        printer(">");
+      } else {
+        printer(", ");
+      }
+    }
+  }
+}
+
+base class Expression uses Show {
+  children =
+  | NArityOp(op: String, exprs: Array<Expression>)
+  | Call(var: String, fn: String, exprs: Array<Expression>)
+  | Literal(value: String)
+  | Access(var: String, field: String)
+
+  fun print(printer: String -> void): void
+  | NArityOp(op, exprs) ->
+    printer(
+      exprs
+        .map(e -> {
+          if (
+            e match {
+            | NArityOp _ -> true
+            | _ -> false
+            }
+          ) `(${e})` else {
+            e.toString()
+          }
+        })
+        .join(` ${op} `),
+    )
+  | Call(var, fn, exprs) -> printer(`${var}.${fn}(${exprs.join(", ")})`)
+  | Literal(value) -> printer(value)
+  | Access(var, field) -> printer(`${var}.${field}`)
+
+  fun toString(): String {
+    buffer = mutable Vector[];
+    this.print(buffer.push);
+    buffer.join("");
+  }
+}
+
+class Equation{expression: Expression} extends Named, Typed {
+  fun print(printer: String -> void): void {
+    this.type.print(printer);
+    printer(` ${this.name} = `);
+    this.expression.print(printer);
+  }
+}
+
+class Package{classes: Array<Class_>} extends Named {}
+
+module end;

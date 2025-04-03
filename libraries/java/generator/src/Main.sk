@@ -1,0 +1,105 @@
+module JavaGenerator;
+
+const kName: String = "skjava";
+const kKeyConv: SKStore.Key ~> SKStore.Key = x ~> x;
+const kFileConv: SKStore.File ~> SKStore.File = x ~> x;
+
+fun initContext(context: mutable SKStore.Context): void {
+  _ = context.mkdir(kKeyConv, kFileConv, FileCache.fileDirName);
+  _ = context.mkdir(kKeyConv, kFileConv, FileCache.packageDirName);
+  _ = SkipMain.type_program(context);
+}
+
+fun initCtx(): SKStore.Context {
+  context = mutable SKStore.Context{};
+  initContext(context);
+  context.clone();
+}
+
+fun error(message: String, code: Int): void {
+  print_error(message);
+  skipExit(code)
+}
+
+fun main(): void {
+  obstack = SKStore.newObstack();
+  cmd = Cli.Command(kName)
+    .about("Skip java library generator")
+    .help()
+    .arg(
+      Cli.Arg::bool("version")
+        .short("V")
+        .long("version")
+        .about("Print version info and exit"),
+    )
+    .arg(
+      Cli.Arg::bool("quiet")
+        .short("q")
+        .long("quiet")
+        .about(`Do not print ${kName} log messages`)
+        .global(),
+    )
+    .arg(
+      Cli.Arg::bool("verbose")
+        .short("v")
+        .long("verbose")
+        .repeatable()
+        .about("Use verbose output (-vv very verbose)")
+        .global(),
+    )
+    .arg(
+      Cli.Arg::string("color")
+        .value_name("WHEN")
+        .default("auto")
+        .about("Coloring: auto, always, never")
+        .global(),
+    )
+    .arg(
+      Cli.Arg::bool("std")
+        .negatable()
+        .default(true)
+        .about("Include a dependency to `std` (default: true)."),
+    )
+    .arg(
+      Cli.Arg::string("libraries")
+        .short("l")
+        .repeatable()
+        .about("Link against a skip library."),
+    )
+    .arg(
+      Cli.Arg::string("library-paths")
+        .short("L")
+        .repeatable()
+        .about("Add path to the library search path."),
+    )
+    .arg(Cli.Arg::bool("canonize-paths").negatable())
+    .arg(Cli.Arg::string("files").positional().repeatable());
+  suppliers = Array[java, JavaGenerator.help];
+  commands = mutable Map[];
+  for (supplier in suppliers) {
+    (subcommand, cmdFn) = supplier();
+    !cmd = cmd.subcommand(subcommand);
+    commands.set(subcommand.name, cmdFn);
+  };
+  args = cmd.parseArgs();
+  if (args.getBool("version")) {
+    // FIXME
+    print_string(kName + " FIXME");
+  } else {
+    if (SKStore.gHasContext() == 0) {
+      SKStore.gContextInit(initCtx());
+    };
+    gctx = GlobalContext::create(args);
+    args.maybeGetSubcommand() match {
+    | Some(subcmd) ->
+      commands.maybeGet(subcmd) match {
+      | Some(handler) -> skipExit(handler(gctx, args))
+      | _ -> error(`unknown subcommand ${subcmd}`, 4)
+      }
+    | None() -> print_string(Cli.usage(args.cmd, true))
+    }
+  };
+  SKStore.destroyObstack(obstack)
+}
+
+module end;

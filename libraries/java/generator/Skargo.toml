@@ -1,0 +1,17 @@
+[package]
+name = "java-generator"
+version = "0.1.0"
+
+[dependencies]
+skc = { path = "../../../skiplang/compiler" }
+
+[dev-dependencies]
+sktest = { path = "../../../skiplang/sktest" }
+
+[build-dependencies]
+cc = { path = "../../../skiplang/cc" }
+
+[[bin]]
+name = "java-generator"
+main = "JavaGenerator.main"
+

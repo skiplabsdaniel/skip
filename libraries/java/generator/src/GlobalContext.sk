@@ -1,0 +1,80 @@
+module JavaGenerator;
+
+class GlobalContext{
+  console: Console,
+  cwd: Config.WorkingDirectory,
+  input_files: Array<String>,
+  dependencies: Map<String, (String, Sklib.Metadata)>,
+  canonize_paths: Bool,
+} {
+  static fun create(args: Cli.ParseResults): GlobalContext {
+    verbosity = args.getArray("verbose").size() match {
+    | 0 ->
+      if (args.getBool("quiet")) {
+        VerbosityQuiet()
+      } else {
+        VerbosityNormal()
+      }
+    | 1 -> VerbosityVerbose()
+    | _ -> VerbosityProlix()
+    };
+    console = Console::create(verbosity, args.getString("color"));
+    if (args.getBool("quiet") && args.getArray("verbose").size() > 0) {
+      console.error("cannot set both --verbose and --quiet");
+      skipExit(3)
+    };
+    input_files_vec = mutable Vector[];
+    for (input_file in args.getArray("files")) {
+      if (input_file.endsWith(".sk")) {
+        input_files_vec.push(input_file)
+      } else {
+        print_error(`Unrecognized file type for ${input_file}`);
+        skipExit(3);
+      }
+    };
+    input_files = input_files_vec.collect(Array);
+    sklib_search_paths = args.getArray("library-paths");
+    dep_roots = args.getArray("libraries");
+    dependency_resolver = Sklib.Resolver::create(
+      sklib_search_paths,
+      Config.hostTarget(),
+    );
+    dependencies = dependency_resolver.resolve(dep_roots);
+
+    // Automatically add stdlib as a dependency, unless explicitly removed or
+    // replaced.
+    if (
+      !sklib_search_paths.isEmpty() &&
+      args.getBool("std") &&
+      !dependencies.containsKey("std")
+    ) {
+      (std_path, std_metadata) = dependency_resolver.resolve_single("std");
+      new_dependencies = mutable Map["std" => (std_path, std_metadata)];
+      new_dependencies.extend(dependencies);
+      !dependencies = new_dependencies.chill();
+    };
+    canonize_paths = args.getBool("canonize-paths");
+    cwd = Config.WorkingDirectory::create(canonize_paths);
+    GlobalContext{console, cwd, input_files, dependencies, canonize_paths}
+  }
+
+  fun updateContext(context: mutable SKStore.Context): void {
+    make_input_source_path = (pkg_base_dir, src_path) ~> {
+      res = Path.join(pkg_base_dir, src_path);
+      if (this.canonize_paths) {
+        !res = this.cwd.makeRelative(res);
+      };
+      res
+    };
+    FileCache.writeFiles(
+      context,
+      this.input_files,
+      this.dependencies,
+      None(),
+      make_input_source_path,
+    );
+    context.update()
+  }
+}
+
+module end;

@@ -1,0 +1,147 @@
+module JavaGenerator;
+
+class Error(message: String) extends Exception
+
+const kDirName: SKStore.DirName = SKStore.DirName::create("/java/");
+const kDir: SKStore.EHandle<SKStore.SID, SkipTyping.DefFile> = SKStore.EHandle(
+  SKStore.SID::keyType,
+  SkipTyping.DefFile::type,
+  kDirName,
+);
+
+const kAnnotation: String = "@java";
+
+fun java(): (Cli.Command, (GlobalContext, Cli.ParseResults) ~> Int) {
+  (
+    Cli.Command("java").about(
+      `Generate the java jar file corresponding to the given Skiplang code.`,
+    ),
+    execJava,
+  )
+}
+
+fun execJava(gctx: GlobalContext, _args: Cli.ParseResults): Int {
+  if (gctx.input_files.isEmpty() && gctx.dependencies.isEmpty()) {
+    print_error("fatal error: no input files\n");
+    return 4;
+  };
+  SKStore.runWithResult(
+    context ~> generateJava(context, gctx),
+    Some(SKStore.Synchronizer(SKStore.import, SKStore.export, _ ~> void)),
+  ) match {
+  | Success _ -> 0
+  | Failure(Error(message)) ->
+    print_error(message);
+    5
+  | Failure(exn) ->
+    print_error(exn.getMessage());
+    1
+  }
+}
+
+fun generateJava(context: mutable SKStore.Context, gctx: GlobalContext): void {
+  _handle = context.unsafeMaybeGetEagerDir(kDirName) match {
+  | None _ ->
+    SkipTyping.dir.map(
+      SKStore.SID::keyType,
+      SkipTyping.DefFile::type,
+      context,
+      kDirName,
+      (context, writer, key, values) ~> {
+        def = values.first;
+        anns = annotations(def);
+        if (anns.contains(kAnnotation)) {
+          writer.set(key, def);
+          collect(context, def.value, writer)
+        }
+      },
+    )
+  | Some _ -> kDir
+  };
+  gctx.updateContext(context);
+}
+
+fun checkedWriteAndCollect(
+  context: mutable SKStore.Context,
+  name: String,
+  writer: mutable SKStore.TWriter<SKStore.SID, SkipTyping.DefFile>,
+): void {
+  id = SKStore.SID(name);
+  if (!writer.containsKey(id)) {
+    SkipTyping.dir.maybeGet(context, id) match {
+    | Some(symbol) ->
+      writer.set(id, symbol);
+      collect(context, symbol.value, writer)
+    | _ -> throw Error(`Unable to find symbol ${name}`)
+    }
+  }
+}
+
+fun collectType(
+  context: mutable SKStore.Context,
+  type_: SkipTypedAst.Type__,
+  writer: mutable SKStore.TWriter<SKStore.SID, SkipTyping.DefFile>,
+): void {
+  type_ match {
+  | SkipNamedAst.Tapply(_, tname, _) ->
+    print_debug(`collectType ${tname.i1}`);
+    checkedWriteAndCollect(context, tname.i1, writer)
+  | SkipNamedAst.Tfun _ ->
+    void // Skipped
+  | _ -> throw Error(`Symbol of type ${type_.getClassName()} not managed`)
+  }
+}
+
+fun collectClass(
+  context: mutable SKStore.Context,
+  classDef: SkipTypedAst.Class_def,
+  writer: mutable SKStore.TWriter<SKStore.SID, SkipTyping.DefFile>,
+): void {
+  classDef.kind match {
+  | SkipAst.KClass()
+  | SkipAst.KBase() ->
+    void
+  | SkipAst.KTrait() -> invariant_violation("trait not managed.")
+  };
+  for (extends_ in classDef.extends_.keys()) {
+    checkedWriteAndCollect(context, extends_.i1, writer)
+  };
+  for (field in classDef.fields.values()) {
+    collectType(context, field.type.i1, writer)
+  }
+}
+
+fun collectFun(
+  context: mutable SKStore.Context,
+  funDef: SkipTypedAst.Fun_def,
+  writer: mutable SKStore.TWriter<SKStore.SID, SkipTyping.DefFile>,
+): void {
+  print_debug(funDef.name.i1);
+  for (param in funDef.params) {
+    collectType(context, param.type.i1, writer)
+  };
+  collectType(context, funDef.return_.i1, writer)
+}
+
+fun collect(
+  context: mutable SKStore.Context,
+  def: SkipTypedAst.Def,
+  writer: mutable SKStore.TWriter<SKStore.SID, SkipTyping.DefFile>,
+): void {
+  def match {
+  | SkipTypedAst.DClass(classDef) -> collectClass(context, classDef, writer)
+  | SkipTypedAst.DFun(funDef) -> collectFun(context, funDef, writer)
+  | SkipTypedAst.DConst _ -> void
+  }
+}
+
+fun annotations(def: SkipTyping.DefFile): SortedSet<String> {
+  def.value match {
+  | SkipTypedAst.DFun(funDef) -> funDef.annotations
+  | SkipTypedAst.DClass _
+  | SkipTypedAst.DConst _ ->
+    SortedSet[]
+  }
+}
+
+module end;

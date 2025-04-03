@@ -1,0 +1,140 @@
+module alias T = SKTest;
+
+module TestJava;
+
+@test
+fun interface1(): void {
+  buffer = mutable Vector[];
+  i = Java.Interface{
+    package => Array["io", "skiplabs"],
+    name => "A",
+    signatures_ => Array[
+      Java.Signature{
+        name => "getField1",
+        type => Java.Type{name => "int"},
+        static_ => false,
+      },
+    ],
+  };
+  i.print(buffer.push);
+  T.expectEq(
+    buffer.join(""),
+    Array[
+      "package io.skiplabs;",
+      "",
+      "public interface A {",
+      "",
+      "  public int getField1();",
+      "}",
+    ].join("\n"),
+  );
+}
+
+@test
+fun interface2(): void {
+  buffer = mutable Vector[];
+  i = Java.Interface{
+    package => Array["io", "skiplabs"],
+    imports => SortedSet["java.util.*"],
+    name => "B",
+    extends_ => Array[Java.Type{name => "C"}],
+    types => Array[Java.Type{name => "T"}],
+    signatures_ => Array[
+      Java.Signature{
+        name => "getField1",
+        type => Java.Type{name => "int"},
+        static_ => false,
+      },
+      Java.Signature{
+        name => "getField2",
+        type => Java.Type{name => "A", types => Array[Java.Type{name => "T"}]},
+        static_ => false,
+      },
+    ],
+  };
+  i.print(buffer.push);
+  T.expectEq(
+    buffer.join("").split("\n").toArray(),
+    Array[
+      "package io.skiplabs;",
+      "",
+      "import java.util.*;",
+      "",
+      "public interface B<T>",
+      "  extends C {",
+      "",
+      "  public int getField1();",
+      "",
+      "  public A<T> getField2();",
+      "}",
+    ],
+  );
+}
+
+@test
+fun class1(): void {
+  buffer = mutable Vector[];
+  i = Java.Class_{
+    package => Array["io", "skiplabs"],
+    imports => SortedSet["java.util.*"],
+    name => "B",
+    extends_ => Some(Java.Type{name => "C"}),
+    implements => Array[Java.Type{name => "A"}],
+    types => Array[Java.Type{name => "T"}],
+    fields => Array[
+      Java.Field{name => "field1", type => Java.Type{name => "int"}},
+      Java.Field{
+        name => "field2",
+        type => Java.Type{name => "A", types => Array[Java.Type{name => "T"}]},
+      },
+    ],
+    methods => Array[
+      Java.Method{
+        signature => Java.Signature{
+          name => "getField1",
+          type => Java.Type{name => "int"},
+          static_ => false,
+        },
+        return_ => Some(Java.Access("this", "field1")),
+      },
+      Java.Method{
+        signature => Java.Signature{
+          name => "getField2",
+          type => Java.Type{
+            name => "A",
+            types => Array[Java.Type{name => "T"}],
+          },
+          static_ => false,
+        },
+        return_ => Some(Java.Access("this", "field2")),
+      },
+    ],
+  };
+  i.print(buffer.push);
+  T.expectEq(
+    buffer.join("").split("\n").toArray(),
+    Array[
+      "package io.skiplabs;",
+      "",
+      "import java.util.*;",
+      "",
+      "public class B<T>",
+      "  implements A",
+      "  extends C {",
+      "",
+      "  public final int field1;",
+      "  public final A<T> field2;",
+      "",
+      "  public int getField1(){",
+      "    return this.field1;",
+      "  }",
+      "",
+      "  public A<T> getField2(){",
+      "    return this.field2;",
+      "  }",
+      "}",
+    ],
+  );
+}
+
+module end;

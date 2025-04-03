@@ -37,7 +37,7 @@ fun getAField1(a: A): Int {
   a.field1
 }
 
-@cpp_export("SKIP_A__getField2")
+@export("SKIP_A__getField2")
 fun getAField2(a: A): B {
   a.field2
 }
@@ -47,6 +47,9 @@ fun getCField1(c: C): B {
   c.field1
 }
 
+@java
+@cpp_extern
+native fun performSomething(a: A): C; 
 
 class Library(jvm: JVM) {
   @debug
