@@ -105,25 +105,29 @@ class Constructor extends SignatureBase {
   }
 }
 
-class Method{
-  signature: SignatureBase,
+class Block{
   equations: Array<Equation> = Array[],
   return_: ?Expression = None(),
 } {
   fun print(printer: String -> void, tab: String): void {
-    this.signature.print(printer);
-    stab = `${tab}  `;
-    printer("{\n");
     for (e in this.equations) {
-      printer(stab);
+      printer(tab);
       e.print(printer);
       printer(";\n");
     };
     this.return_.each(return_ -> {
-      printer(`${stab}return `);
+      printer(`${tab}return `);
       return_.print(printer);
       printer(";\n");
-    });
+    })
+  }
+}
+
+class Method{signature: SignatureBase, body: Block} {
+  fun print(printer: String -> void, tab: String): void {
+    this.signature.print(printer);
+    printer("{\n");
+    this.body.print(printer, `${tab}  `);
     printer(`${tab}}`);
   }
 }
@@ -249,18 +253,19 @@ base class Expression uses Show {
   | Call(var: String, fn: String, exprs: Array<Expression>)
   | Literal(value: String)
   | Access(var: String, field: String)
+  | IfThenElse(condition: Expression, then: Expression, else_: Expression)
+
+  protected fun needParent(): Bool
+  | NArityOp _ -> true
+  | IfThenElse _ -> true
+  | _ -> false
 
   fun print(printer: String -> void): void
   | NArityOp(op, exprs) ->
     printer(
       exprs
         .map(e -> {
-          if (
-            e match {
-            | NArityOp _ -> true
-            | _ -> false
-            }
-          ) `(${e})` else {
+          if (e.needParent()) `(${e})` else {
             e.toString()
           }
         })
@@ -269,6 +274,17 @@ base class Expression uses Show {
   | Call(var, fn, exprs) -> printer(`${var}.${fn}(${exprs.join(", ")})`)
   | Literal(value) -> printer(value)
   | Access(var, field) -> printer(`${var}.${field}`)
+  | IfThenElse(condition, then, else_) ->
+    strCondition = if (condition.needParent()) `(${condition})` else {
+      condition.toString()
+    };
+    strThen = if (then.needParent()) `(${then})` else {
+      then.toString()
+    };
+    strElse = if (else_.needParent()) `(${else_})` else {
+      else_.toString()
+    };
+    printer(`${strCondition} ? ${strThen} : ${strElse}`)
 
   fun toString(): String {
     buffer = mutable Vector[];

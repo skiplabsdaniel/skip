@@ -55,6 +55,28 @@ fun call1(): void {
 }
 
 @test
+fun ifthenelse(): void {
+  buffer = mutable Vector[];
+  i = Java.IfThenElse(
+    Java.Literal("c"),
+    Java.NArityOp(
+      "+",
+      Array[
+        Java.Literal("x"),
+        Java.Literal("y"),
+      ],
+    ),
+    Java.IfThenElse(
+      Java.Literal("b"),
+      Java.Literal("1.0"),
+      Java.Literal("2.0"),
+    ),
+  );
+  i.print(buffer.push);
+  expectBuffer(buffer, Vector["c ? (x + y) : (b ? 1.0 : 2.0)"]);
+}
+
+@test
 fun equation1(): void {
   buffer = mutable Vector[];
   i = Java.Equation{
@@ -67,12 +89,11 @@ fun equation1(): void {
         Java.Literal("x"),
         Java.NArityOp("*", Array[Java.Literal("y"), Java.Literal("z")]),
       ],
-    )
+    ),
   };
   i.print(buffer.push);
   expectBuffer(buffer, Vector["int d = c.foo(x, y * z)"]);
 }
-
 
 @test
 fun interface1(): void {
@@ -167,7 +188,7 @@ fun class1(): void {
           type => Java.Type{name => "int"},
           static_ => false,
         },
-        return_ => Some(Java.Access("this", "field1")),
+        body => Java.Block{return_ => Some(Java.Access("this", "field1"))},
       },
       Java.Method{
         signature => Java.Signature{
@@ -178,7 +199,7 @@ fun class1(): void {
           },
           static_ => false,
         },
-        return_ => Some(Java.Access("this", "field2")),
+        body => Java.Block{return_ => Some(Java.Access("this", "field2"))},
       },
     ],
   };
