@@ -59,13 +59,7 @@ fun ifthenelse(): void {
   buffer = mutable Vector[];
   i = Java.IfThenElse(
     Java.Literal("c"),
-    Java.NArityOp(
-      "+",
-      Array[
-        Java.Literal("x"),
-        Java.Literal("y"),
-      ],
-    ),
+    Java.NArityOp("+", Array[Java.Literal("x"), Java.Literal("y")]),
     Java.IfThenElse(
       Java.Literal("b"),
       Java.Literal("1.0"),
