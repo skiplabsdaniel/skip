@@ -20,6 +20,15 @@ fun java(): (Cli.Command, (GlobalContext, Cli.ParseResults) ~> Int) {
   )
 }
 
+fun isPrimitive(name: String): Bool {
+  name match {
+  | "Int" | "Float" | "String" | "Bool" | "Int32" | "Int16" | "Int8" | "UInt32"
+  | "UInt16" | "UInt8" ->
+    true
+  | _ -> false
+  }
+}
+
 fun execJava(gctx: GlobalContext, _args: Cli.ParseResults): Int {
   if (gctx.input_files.isEmpty() && gctx.dependencies.isEmpty()) {
     print_error("fatal error: no input files\n");
@@ -47,13 +56,22 @@ fun generateJava(context: mutable SKStore.Context, gctx: GlobalContext): void {
       SkipTyping.DefFile::type,
       context,
       kDirName,
-      (context, writer, key, values) ~> {
+      (_context, writer, key, values) ~> {
         def = values.first;
         anns = annotations(def);
         if (anns.contains(kAnnotation)) {
           writer.set(key, def);
-          collect(context, def.value, writer)
         }
+      },
+    ).map(
+      SKStore.SID::keyType,
+      SkipTyping.DefFile::type,
+      context,
+      kDirName.sub("collect"),
+      (context, writer, key, values) ~> {
+        def = values.first;
+        writer.set(key, def);
+        collect(context, def.value, writer)
       },
     )
   | Some _ -> kDir
@@ -107,7 +125,10 @@ fun collectClass(
     checkedWriteAndCollect(context, extends_.i1, writer)
   };
   for (field in classDef.fields.values()) {
-    collectType(context, field.type.i1, writer)
+    field.eltk match {
+    | SkipNamedAst.EConst() -> void
+    | _ -> collectType(context, field.type.i1, writer)
+    }
   }
 }
 
