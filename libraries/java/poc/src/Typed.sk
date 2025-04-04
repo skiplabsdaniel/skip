@@ -1,0 +1,54 @@
+module Test;
+
+trait WithDefault {
+  static fun instance(): inst;
+}
+
+@cpp_extern("SKIP_is_same_type")
+native fun isSameType<T, F: T>(t: T, f: F): Bool;
+
+@cpp_extern("SKIP_unsafe_cast")
+native fun unsafeCast<T, F: T>(t: T): F;
+
+fun cast<T: frozen, F: frozen & T & WithDefault>(v: T, c: Concrete<F>): F {
+  invariant(instanceOf(v, c), "invalid cast");
+  unsafeCast<T, F>(v);
+}
+
+fun instanceOf<T: frozen, F: frozen & T & WithDefault>(
+  v: T,
+  c: Concrete<F>,
+): Bool {
+  isSameType(v, c::instance())
+}
+
+base class Dir
+
+fun getInstance<K: frozen & Orderable, V: frozen>():  TDir<K, V> {
+  TDir<K, V>();
+}
+
+class TDir<K: frozen & Orderable, V: frozen>(
+  a: ?(K, V) = None(),
+) extends Dir uses WithDefault {
+  static fun instance(): TDir<K, V> {
+    TDir<K, V>();
+  }
+}
+
+class Ctxt(dirs: Map<String, Dir>) {
+  fun tget<K: frozen & Orderable, V: frozen>(dirName: String): TDir<K, V> {
+    dir = this.dirs.get(dirName);
+    cast(dir, TDir<K, V>);
+  }
+}
+
+fun castDir<K: frozen & Orderable, V: frozen>(dir: Dir): TDir<K, V> {
+  cast(dir, TDir<K, V>);
+}
+
+fun instanceOfDir<K: frozen & Orderable, V: frozen>(dir: Dir): Bool {
+  instanceOf(dir, TDir<K, V>);
+}
+
+module end;

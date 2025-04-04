@@ -1,4 +1,3 @@
-
 class UnableToLoadJVM() extends .Exception
 class JVM(vm: SKStore.ExternalPointer, env: Runtime.NonGCPointer)
 
@@ -30,7 +29,6 @@ fun createJVM(vm: Int, env: Runtime.NonGCPointer): JVM {
   JVM(SKStore.ExternalPointer::create(vm, destroyJVM), env)
 }
 
- 
 @export("SKIP_getJVMEnv")
 fun getEnv(lib: Library): Runtime.NonGCPointer {
   lib.jvm.env

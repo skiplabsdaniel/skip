@@ -1,0 +1,88 @@
+module JavaGenerator;
+
+mutable class NameValidator(
+  package: String,
+  chars: Vector<Char>,
+  mutable idx: Int,
+) {
+  readonly fun error(msg: String): void {
+    throw Error(`Invalid package name ${this.package}: ${msg}`)
+  }
+
+  readonly fun current(): Char {
+    this.chars[this.idx]
+  }
+
+  readonly fun reachedEnd(): Bool {
+    this.idx >= this.chars.size()
+  }
+
+  mutable fun next(): void {
+    this.!idx = this.idx + 1
+  }
+
+  mutable fun go(): void {
+    if (this.reachedEnd()) {
+      this.error("path is empty");
+    };
+    while (this.idx < this.chars.size() - 1) {
+      if (this.idx > 0) this.mustBeDot();
+      this.mustBeKey();
+    };
+    if (!this.reachedEnd()) {
+      this.error("Unexpected characters at the end of the path");
+    };
+  }
+
+  mutable fun mustBeDot(): void {
+    if (this.reachedEnd()) {
+      this.error(
+        `Expected a dot, reached the end of the path instead (${this.package})`,
+      );
+    };
+    c = this.current();
+    if (c == '.') {
+      this.next()
+    } else {
+      this.error(`Expected a dot, found '${c}' instead (${this.package})`);
+    }
+  }
+
+  mutable fun mustBeKey(): void {
+    if (this.reachedEnd() || this.current() == '.') {
+      this.error(`Empty element ${this.package}`);
+    };
+    c = this.current();
+    if (!(c >= 'a' && c <= 'z')) {
+      this.error(
+        `The first char of package must be a lowercase letter, found '${c}' instead (${
+          this.package
+        })`,
+      );
+    };
+    this.next();
+    while (!this.reachedEnd()) {
+      !c = this.current();
+      if ((c >= 'a' && c <= 'z') || c >= '0' && c <= '9') {
+        this.next();
+      } else {
+        break void
+      };
+    }
+  }
+}
+
+fun validatePackageName(package: String): void {
+  validator = mutable NameValidator(package, package.chars(), 0);
+  validator.go()
+}
+
+class JavaContext{package: Vector<String>} extends SKStore.File {
+  static fun create(args: Cli.ParseResults): JavaContext {
+    package = args.getString("package");
+    validatePackageName(package);
+    JavaContext{package => package.split(".")}
+  }
+}
+
+module end;

@@ -1,6 +1,7 @@
 module JavaGenerator;
 
 class Error(message: String) extends Exception
+class JavaFile(value: Java.ClassBase) extends SKStore.File
 
 const kDirName: SKStore.DirName = SKStore.DirName::create("/java/");
 const kDir: SKStore.EHandle<SKStore.SID, SkipTyping.DefFile> = SKStore.EHandle(
@@ -13,9 +14,17 @@ const kAnnotation: String = "@java";
 
 fun java(): (Cli.Command, (GlobalContext, Cli.ParseResults) ~> Int) {
   (
-    Cli.Command("java").about(
-      `Generate the java jar file corresponding to the given Skiplang code.`,
-    ),
+    Cli.Command("java")
+      .about(
+        `Generate the java jar file corresponding to the given Skiplang code.`,
+      )
+      .arg(
+        Cli.Arg::string("package")
+          .short("pck")
+          .default("io.skiplabs")
+          .value_name("PACKAGE")
+          .about("The generated package target"),
+      ),
     execJava,
   )
 }
@@ -29,13 +38,16 @@ fun isPrimitive(name: String): Bool {
   }
 }
 
-fun execJava(gctx: GlobalContext, _args: Cli.ParseResults): Int {
+fun execJava(gctx: GlobalContext, args: Cli.ParseResults): Int {
   if (gctx.input_files.isEmpty() && gctx.dependencies.isEmpty()) {
     print_error("fatal error: no input files\n");
     return 4;
   };
   SKStore.runWithResult(
-    context ~> generateJava(context, gctx),
+    context ~> {
+      jctx = JavaContext::create(args);
+      generateJava(context, gctx, jctx)
+    },
     Some(SKStore.Synchronizer(SKStore.import, SKStore.export, _ ~> void)),
   ) match {
   | Success _ -> 0
@@ -48,10 +60,15 @@ fun execJava(gctx: GlobalContext, _args: Cli.ParseResults): Int {
   }
 }
 
-fun generateJava(context: mutable SKStore.Context, gctx: GlobalContext): void {
+fun generateJava(
+  context: mutable SKStore.Context,
+  gctx: GlobalContext,
+  jctx: JavaContext,
+): void {
+  debug(jctx);
   _handle = context.unsafeMaybeGetEagerDir(kDirName) match {
   | None _ ->
-    SkipTyping.dir.map(
+    collected = SkipTyping.dir.map(
       SKStore.SID::keyType,
       SkipTyping.DefFile::type,
       context,
@@ -73,7 +90,24 @@ fun generateJava(context: mutable SKStore.Context, gctx: GlobalContext): void {
         writer.set(key, def);
         collect(context, def.value, writer)
       },
-    )
+    );
+    _ = collected.map(
+      SKStore.SID::keyType,
+      JavaFile::type,
+      context,
+      kDirName.sub("types"),
+      (context, writer, _key, values) ~> {
+        def = values.first;
+        def.value match {
+        | SkipTypedAst.DClass(classDef) ->
+          convertToJavaTypes(context, classDef, writer)
+        | SkipTypedAst.DFun _
+        | SkipTypedAst.DConst _ ->
+          void
+        }
+      },
+    );
+    collected
   | Some _ -> kDir
   };
   gctx.updateContext(context);
@@ -115,12 +149,7 @@ fun collectClass(
   classDef: SkipTypedAst.Class_def,
   writer: mutable SKStore.TWriter<SKStore.SID, SkipTyping.DefFile>,
 ): void {
-  classDef.kind match {
-  | SkipAst.KClass()
-  | SkipAst.KBase() ->
-    void
-  | SkipAst.KTrait() -> invariant_violation("trait not managed.")
-  };
+  assertNotTrait(classDef);
   for (extends_ in classDef.extends_.keys()) {
     checkedWriteAndCollect(context, extends_.i1, writer)
   };
@@ -163,6 +192,23 @@ fun annotations(def: SkipTyping.DefFile): SortedSet<String> {
   | SkipTypedAst.DConst _ ->
     SortedSet[]
   }
+}
+
+fun convertToJavaTypes(
+  _context: mutable SKStore.Context,
+  _classDef: SkipTypedAst.Class_def,
+  _writer: mutable SKStore.TWriter<SKStore.SID, JavaFile>,
+): void {
+  void
+}
+
+fun assertNotTrait(classDef: SkipTypedAst.Class_def): void {
+  classDef.kind match {
+  | SkipAst.KClass()
+  | SkipAst.KBase() ->
+    void
+  | SkipAst.KTrait() -> invariant_violation("trait not managed.")
+  };
 }
 
 module end;

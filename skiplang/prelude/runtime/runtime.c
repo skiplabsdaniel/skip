@@ -20,6 +20,12 @@ SKIP_gc_type_t* get_gc_type(char* skip_object) {
   return *slot1;
 }
 
+int SKIP_is_same_type(char* obj1, char* obj2) {
+  SKIP_gc_type_t* ty1 = get_gc_type(obj1);
+  SKIP_gc_type_t* ty2 = get_gc_type(obj2);
+  return ty1 == ty2;
+}
+
 /*****************************************************************************/
 /* Primitives that are not used in embedded mode. */
 /*****************************************************************************/

@@ -294,4 +294,8 @@ void SKIP_setBPointer(void* b, void** ptr) {
   *ptr = b;
 }
 
+void* SKIP_unsafe_cast(void* obj) {
+  return obj;
+}
+
 }  // extern "C"
