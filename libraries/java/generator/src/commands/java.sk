@@ -100,7 +100,11 @@ fun generateJava(
         def = values.first;
         def.value match {
         | SkipTypedAst.DClass(classDef) ->
-          convertToJavaTypes(context, classDef, writer)
+          convertToJavaTypes(
+            sid -> SkipTyping.dir.maybeGet(context, sid),
+            classDef,
+            (sid, file) -> writer.set(sid, file),
+          )
         | SkipTypedAst.DFun _
         | SkipTypedAst.DConst _ ->
           void
@@ -198,10 +202,14 @@ fun annotations(def: SkipTyping.DefFile): SortedSet<String> {
   }
 }
 
+fun buildNew(_className: String, _fields: readonly Vector<Field>): Java.Method {
+  invariant_violation("TODO")
+}
+
 fun convertToJavaTypes(
-  context: mutable SKStore.Context,
+  getter: SKStore.SID -> ?SkipTyping.DefFile,
   classDef: SkipTypedAst.Class_def,
-  writer: mutable SKStore.TWriter<SKStore.SID, JavaFile>,
+  writer: (SKStore.SID, JavaFile) -> void,
 ): void {
   className = classDef.name.i1;
   if (isPrimitive(className)) return void;
@@ -213,7 +221,7 @@ fun convertToJavaTypes(
   } else {
     (Array["types"], elems[0])
   };
-  signatures = mutable Vector<Java.Signature>[];
+  fields = mutable Vector<>[];
   for (field in classDef.fields.items()) {
     field.i1.visibility.i1 match {
     | SkipNamedAst.VPublic() ->
@@ -223,14 +231,9 @@ fun convertToJavaTypes(
         field.i1.type.i1 match {
         | SkipNamedAst.Tapply(_, tname, _) ->
           id = SKStore.SID(tname.i1);
-          SkipTyping.dir.maybeGet(context, id) match {
+          getter(id) match {
           | Some(symbol) ->
-            collectSignature(
-              symbol.value,
-              field.i0.i1,
-              signatures,
-              Array["types"],
-            )
+            collectSignature(symbol.value, field.i0.i1, fields, Array["types"])
           | _ -> throw Error(`Unable to find symbol ${tname.i1}`)
           }
         | SkipNamedAst.Tfun _ -> void
@@ -243,17 +246,33 @@ fun convertToJavaTypes(
     | _ -> void
     }
   };
+
+  /* public static A newA(long field1, B field2) {
+      return io.skiplabs.types.proxies.SkPtrFactory.newA(field1, field2);
+  }
+  */
+  signatures = fields.map(f -> f.toSignature());
   i = Java.Interface{package, name, signatures => signatures.toArray()};
   buffer = mutable Vector[];
   i.print(buffer.push, Array[]);
   print_debug(buffer.join(""));
-  writer.set(SKStore.SID(package.concat(Array[name]).join(".")), JavaFile(i));
+  writer(SKStore.SID(package.concat(Array[name]).join(".")), JavaFile(i));
+}
+
+class Field(name: String, type: Java.Type) {
+  fun toSignature(): Java.Signature {
+    Java.Signature{
+      name => `get${this.name.uppercaseFirst()}`,
+      type => this.type,
+      static_ => false,
+    }
+  }
 }
 
 fun collectSignature(
   def: SkipTypedAst.Def,
   name: String,
-  signatures: mutable Vector<Java.Signature>,
+  fields: mutable Vector<Field>,
   package: Array<String>,
 ): void {
   def match {
@@ -263,13 +282,7 @@ fun collectSignature(
         "Mutable class ${classDef.name.i1} cannot be exporter to Java.",
       );
     };
-    signatures.push(
-      Java.Signature{
-        name => `get${name.uppercaseFirst()}`,
-        type => typeForClass(classDef, package),
-        static_ => false,
-      },
-    )
+    fields.push(Field(name, typeForClass(classDef, package)))
   | SkipTypedAst.DFun _
   | SkipTypedAst.DConst _ ->
     throw Error("Only classes can be exported to Java.")

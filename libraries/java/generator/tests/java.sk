@@ -13,7 +13,7 @@ fun expectBuffer(
 fun literal1(): void {
   buffer = mutable Vector[];
   i = Java.Literal("0L");
-  i.print(buffer.push);
+  i.print(buffer.push, Array[], Array[]);
   expectBuffer(buffer, Vector["0L"]);
 }
 
@@ -21,7 +21,7 @@ fun literal1(): void {
 fun narity1(): void {
   buffer = mutable Vector[];
   i = Java.NArityOp("+", Array[Java.Literal("x"), Java.Literal("2L")]);
-  i.print(buffer.push);
+  i.print(buffer.push, Array[], Array[]);
   expectBuffer(buffer, Vector["x + 2L"]);
 }
 
@@ -35,7 +35,7 @@ fun narity2(): void {
       Java.NArityOp("*", Array[Java.Literal("y"), Java.Literal("z")]),
     ],
   );
-  i.print(buffer.push);
+  i.print(buffer.push, Array[], Array[]);
   expectBuffer(buffer, Vector["x + (y * z)"]);
 }
 
@@ -50,7 +50,7 @@ fun call1(): void {
       Java.NArityOp("*", Array[Java.Literal("y"), Java.Literal("z")]),
     ],
   );
-  i.print(buffer.push);
+  i.print(buffer.push, Array[], Array[]);
   expectBuffer(buffer, Vector["c.foo(x, y * z)"]);
 }
 
@@ -66,7 +66,7 @@ fun ifthenelse(): void {
       Java.Literal("2.0"),
     ),
   );
-  i.print(buffer.push);
+  i.print(buffer.push, Array[], Array[]);
   expectBuffer(buffer, Vector["c ? (x + y) : (b ? 1.0 : 2.0)"]);
 }
 

@@ -142,7 +142,7 @@ class Block{
     };
     this.return_.each(return_ -> {
       printer(`${tab}return `);
-      return_.print(printer);
+      return_.print(printer, relative, base);
       printer(";\n");
     })
   }
@@ -166,6 +166,7 @@ base class ClassBase{
   package: Array<String> = Array[],
   imports: SortedSet<String> = SortedSet[],
   types: Array<Type> = Array[],
+  methods: Array<Method> = Array[],
 } extends Named, Observable {
   fun printHeader(
     name: String,
@@ -200,7 +201,6 @@ class Class_{
   implements: Array<Type> = Array[],
   fields: Array<Field> = Array[],
   static_: Array<Expression> = Array[],
-  methods: Array<Method> = Array[],
   extends_: ?Type = None(),
 } extends ClassBase {
   fun print(printer: String -> void, base: Array<String>): void {
@@ -312,10 +312,11 @@ class Type{
   }
 }
 
-base class Expression uses Show {
+base class Expression {
   children =
   | NArityOp(op: String, exprs: Array<Expression>)
   | Call(var: String, fn: String, exprs: Array<Expression>)
+  | StaticCall(type: Type, fn: String, exprs: Array<Expression>)
   | Literal(value: String)
   | Access(var: String, field: String)
   | IfThenElse(condition: Expression, then: Expression, else_: Expression)
@@ -325,35 +326,49 @@ base class Expression uses Show {
   | IfThenElse _ -> true
   | _ -> false
 
-  fun print(printer: String -> void): void
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void
   | NArityOp(op, exprs) ->
     printer(
       exprs
         .map(e -> {
-          if (e.needParent()) `(${e})` else {
-            e.toString()
+          strE = e.toString(relative, base);
+          if (e.needParent()) `(${strE})` else {
+            strE
           }
         })
         .join(` ${op} `),
     )
-  | Call(var, fn, exprs) -> printer(`${var}.${fn}(${exprs.join(", ")})`)
+  | Call(var, fn, exprs) ->
+    printer(
+      `${var}.${fn}(${exprs.map(e -> e.toString(relative, base)).join(", ")})`,
+    )
+  | StaticCall(type, fn, exprs) ->
+    type.print(printer, relative, base);
+    printer(`.${fn}(${exprs.map(e -> e.toString(relative, base)).join(", ")})`)
   | Literal(value) -> printer(value)
   | Access(var, field) -> printer(`${var}.${field}`)
   | IfThenElse(condition, then, else_) ->
-    strCondition = if (condition.needParent()) `(${condition})` else {
-      condition.toString()
+    strCondition = condition.toString(relative, base);
+    if (condition.needParent()) {
+      !strCondition = `(${strCondition})`
     };
-    strThen = if (then.needParent()) `(${then})` else {
-      then.toString()
+    strThen = then.toString(relative, base);
+    if (then.needParent()) {
+      !strThen = `(${strThen})`
     };
-    strElse = if (else_.needParent()) `(${else_})` else {
-      else_.toString()
+    strElse = else_.toString(relative, base);
+    if (else_.needParent()) {
+      !strElse = `(${strElse})`
     };
     printer(`${strCondition} ? ${strThen} : ${strElse}`)
 
-  fun toString(): String {
+  fun toString(relative: Array<String>, base: Array<String>): String {
     buffer = mutable Vector[];
-    this.print(buffer.push);
+    this.print(buffer.push, relative, base);
     buffer.join("");
   }
 }
@@ -366,7 +381,7 @@ class Equation{expression: Expression} extends Named, Typed {
   ): void {
     this.type.print(printer, relative, base);
     printer(` ${this.name} = `);
-    this.expression.print(printer);
+    this.expression.print(printer, relative, base);
   }
 }
 
