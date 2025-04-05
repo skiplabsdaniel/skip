@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include <sstream>
@@ -11,6 +12,7 @@ double SKIP_B__getField1(void* bObject);
 void* SKIP_createB(double field1);
 void* SKIP_C__getField1(void* cObject);
 void* SKIP_createC(void* bObject);
+void* SKIP_createA(int64_t field1, void* field2);
 
 char* sk_string_create(const char* buffer, uint32_t size);
 
@@ -18,8 +20,9 @@ __attribute__((noreturn)) void SKIP_throwUnableToLoadJVM();
 __attribute__((noreturn)) void SKIP_throwLibraryException(char*, char*,
                                                           char* = nullptr);
 
-jobject createBPointer(JNIEnv* env, void* handle);
-jobject createCPointer(JNIEnv* env, void* handle);
+jobject createA(JNIEnv* env, void* handle);
+jobject createB(JNIEnv* env, void* handle);
+jobject createC(JNIEnv* env, void* handle);
 
 void* SKIP_createJVM(JavaVM* jvm, JNIEnv* env);
 JNIEnv* SKIP_getJVMEnv(void* lib);
@@ -36,24 +39,31 @@ jstring getClassName(JNIEnv* env, jobject object, jclass clazz) {
 
 void clearPointers(JNIEnv* env, jobject obj) {
   jclass clazz = env->GetObjectClass(obj);
-  jmethodID clear = env->GetMethodID(clazz, "clear", "()V");
+  jmethodID clear = env->GetMethodID(clazz, "skPtrClear", "()V");
   env->CallObjectMethod(obj, clear);
 }
 
 jobject Java_A__getField2(JNIEnv* env, void* a) {
-  return createBPointer(env, SKIP_A__getField2(a));
+  return createB(env, SKIP_A__getField2(a));
+}
+
+jobject Java_createA(JNIEnv* env, jlong field1, void* field2) {
+  return createA(env, SKIP_createA(field1, field2));
 }
 
 jobject Java_createB(JNIEnv* env, jdouble field1) {
-  return createBPointer(env, SKIP_createB(field1));
+  return createB(env, SKIP_createB(field1));
 }
 
 jobject Java_C__getField1(JNIEnv* env, void* c) {
-  return createBPointer(env, SKIP_C__getField1(c));
+  return createB(env, SKIP_C__getField1(c));
 }
 
 jobject Java_createC(JNIEnv* env, void* b) {
-  return createCPointer(env, SKIP_createC(b));
+  printf("Java_createC %p\n", b);
+  void* c = SKIP_createC(b);
+  printf("Java_createC res %p\n", c);
+  return createC(env, c);
 }
 
 void collectStackTrace(JNIEnv* env, jthrowable exception, jclass throwableClass,
@@ -109,8 +119,31 @@ bool checkException(JNIEnv* env, char** skclazzName, char** skmsg,
   return false;
 }
 
-jobject createAPointer(JNIEnv* env, void* handle) {
-  jclass clazz = env->FindClass("io/skiplabs/types/APointer");
+jobject createProxy(JNIEnv* env, const char* clazzName, const char* signature,
+                    void* handle, ...) {
+  char* type;
+  char* message;
+  jclass clazz = env->FindClass(clazzName);
+  if (checkException(env, &type, &message)) {
+    SKIP_throwLibraryException(type, message);
+  }
+  jmethodID constructor = env->GetMethodID(clazz, "<init>", signature);
+  if (checkException(env, &type, &message)) {
+    SKIP_throwLibraryException(type, message);
+  }
+  va_list args;
+  jobject obj;
+  va_start(args, handle);
+  obj = env->NewObject(clazz, constructor, args);
+  va_end(args);
+  if (checkException(env, &type, &message)) {
+    SKIP_throwLibraryException(type, message);
+  }
+  return obj;
+}
+
+jobject createA(JNIEnv* env, void* handle) {
+  jclass clazz = env->FindClass("io/skiplabs/types/proxies/A");
   char* type;
   char* message;
   if (checkException(env, &type, &message)) {
@@ -130,8 +163,8 @@ jobject createAPointer(JNIEnv* env, void* handle) {
   return obj;
 }
 
-jobject createBPointer(JNIEnv* env, void* handle) {
-  jclass clazz = env->FindClass("io/skiplabs/types/BPointer");
+jobject createB(JNIEnv* env, void* handle) {
+  jclass clazz = env->FindClass("io/skiplabs/types/proxies/B");
   char* type;
   char* message;
   if (checkException(env, &type, &message)) {
@@ -150,10 +183,10 @@ jobject createBPointer(JNIEnv* env, void* handle) {
   return obj;
 }
 
-jobject createCPointer(JNIEnv* env, void* handle) {
-  jclass clazz = env->FindClass("io/skiplabs/types/CPointer");
+jobject createC(JNIEnv* env, void* handle) {
   char* type;
   char* message;
+  jclass clazz = env->FindClass("io/skiplabs/types/proxies/C");
   if (checkException(env, &type, &message)) {
     SKIP_throwLibraryException(type, message);
   }
@@ -170,49 +203,16 @@ jobject createCPointer(JNIEnv* env, void* handle) {
   return obj;
 }
 
-void* getCPointer(JNIEnv* env, jobject obj) {
+void* getPointer(JNIEnv* env, jobject obj) {
   char* type;
   char* message;
   jclass clazz = env->GetObjectClass(obj);
-  jfieldID pfid =
-      env->GetFieldID(clazz, "pointer", "Lio/skiplabs/types/CPointer;");
+  jfieldID hfid = env->GetFieldID(clazz, "skPtrHandle", "J");
   if (checkException(env, &type, &message)) {
     SKIP_throwLibraryException(type, message);
   }
-  jobject pointer = env->GetObjectField(obj, pfid);
-  if (checkException(env, &type, &message)) {
-    SKIP_throwLibraryException(type, message);
-  }
-
-  jclass pclazz = env->FindClass("io/skiplabs/types/CPointer");
-  jfieldID hfid = env->GetFieldID(pclazz, "handle", "J");
-  if (checkException(env, &type, &message)) {
-    SKIP_throwLibraryException(type, message);
-  }
-  jlong handle = env->GetLongField(pointer, hfid);
-  if (checkException(env, &type, &message)) {
-    SKIP_throwLibraryException(type, message);
-  }
-  return reinterpret_cast<void*>(handle);
-}
-
-jobject createA(JNIEnv* env, jobject pointer) {
-  jclass clazz = env->FindClass("io/skiplabs/types/A");
-  char* type;
-  char* message;
-  if (checkException(env, &type, &message)) {
-    SKIP_throwLibraryException(type, message);
-  }
-  jmethodID constructor =
-      env->GetMethodID(clazz, "<init>", "(Lio/skiplabs/types/APointer;)V");
-  if (checkException(env, &type, &message)) {
-    SKIP_throwLibraryException(type, message);
-  }
-  jobject obj = env->NewObject(clazz, constructor, pointer);
-  if (checkException(env, &type, &message)) {
-    SKIP_throwLibraryException(type, message);
-  }
-  return obj;
+  jlong handle = env->GetLongField(obj, hfid);
+  return (void*)handle;
 }
 
 void* SKIP_Library__performSomething(void* self, void* a) {
@@ -229,12 +229,13 @@ void* SKIP_Library__performSomething(void* self, void* a) {
   if (checkException(env, &type, &message)) {
     SKIP_throwLibraryException(type, message);
   }
-  jobject jA = createA(env, createAPointer(env, a));
+  jobject jA = createA(env, a);
   jobject jC = (jobject)env->CallStaticObjectMethod(clazz, method, jA);
   if (checkException(env, &type, &message)) {
     SKIP_throwLibraryException(type, message);
   }
-  void* c = getCPointer(env, jC);
+  void* c = getPointer(env, jC);
+  printf("SKIP_Library__performSomething res %p\n", c);
   clearPointers(env, jA);
   clearPointers(env, jC);
   return c;
@@ -279,9 +280,12 @@ void* SKIP_loadJVM_(const char* classpath, bool verboseClass, bool verbodeJNI) {
   if (res != JNI_OK) {
     SKIP_throwUnableToLoadJVM();
   }
-  setLongStaticField(env, "io/skiplabs/types/Pointers", "createB",
+  const char* proxies = "io/skiplabs/types/proxies/SkPtrFactory";
+  setLongStaticField(env, proxies, "newA",
+                     reinterpret_cast<jlong>(&Java_createA));
+  setLongStaticField(env, proxies, "newB",
                      reinterpret_cast<jlong>(&Java_createB));
-  setLongStaticField(env, "io/skiplabs/types/Pointers", "createC",
+  setLongStaticField(env, proxies, "newC",
                      reinterpret_cast<jlong>(&Java_createC));
   return SKIP_createJVM(vm, env);
 }

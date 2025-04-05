@@ -1,6 +1,5 @@
 
-
-target/host/lib/libmylibrary.so:
+target/host/lib/libmylibrary.so: extern/library.c
 	mkdir -p target/host/lib
 	clang -shared -o target/host/lib/libmylibrary.so -I"$(JAVA_HOME)/include" -I"$(JAVA_HOME)/include/linux" extern/library.c
 

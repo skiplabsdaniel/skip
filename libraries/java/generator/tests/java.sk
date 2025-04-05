@@ -85,7 +85,7 @@ fun equation1(): void {
       ],
     ),
   };
-  i.print(buffer.push);
+  i.print(buffer.push, Array[], Array[]);
   expectBuffer(buffer, Vector["int d = c.foo(x, y * z)"]);
 }
 
@@ -93,9 +93,8 @@ fun equation1(): void {
 fun interface1(): void {
   buffer = mutable Vector[];
   i = Java.Interface{
-    package => Array["io", "skiplabs"],
     name => "A",
-    signatures_ => Array[
+    signatures => Array[
       Java.Signature{
         name => "getField1",
         type => Java.Type{name => "int"},
@@ -103,7 +102,7 @@ fun interface1(): void {
       },
     ],
   };
-  i.print(buffer.push);
+  i.print(buffer.push, Array["io", "skiplabs"]);
   expectBuffer(
     buffer,
     Vector[
@@ -121,12 +120,11 @@ fun interface1(): void {
 fun interface2(): void {
   buffer = mutable Vector[];
   i = Java.Interface{
-    package => Array["io", "skiplabs"],
     imports => SortedSet["java.util.*"],
     name => "B",
     extends_ => Array[Java.Type{name => "C"}],
     types => Array[Java.Type{name => "T"}],
-    signatures_ => Array[
+    signatures => Array[
       Java.Signature{
         name => "getField1",
         type => Java.Type{name => "int"},
@@ -139,7 +137,7 @@ fun interface2(): void {
       },
     ],
   };
-  i.print(buffer.push);
+  i.print(buffer.push, Array["io", "skiplabs"]);
   expectBuffer(
     buffer,
     Vector[
@@ -162,7 +160,6 @@ fun interface2(): void {
 fun class1(): void {
   buffer = mutable Vector[];
   i = Java.Class_{
-    package => Array["io", "skiplabs"],
     imports => SortedSet["java.util.*"],
     name => "B",
     extends_ => Some(Java.Type{name => "C"}),
@@ -197,7 +194,7 @@ fun class1(): void {
       },
     ],
   };
-  i.print(buffer.push);
+  i.print(buffer.push, Array["io", "skiplabs"]);
   expectBuffer(
     buffer,
     Vector[

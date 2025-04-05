@@ -19,8 +19,17 @@ class LibraryException(
 
 @export("SKIP_createC")
 fun createC(field1: B): C {
-  C(field1)
+  debug(("createC", field1));
+  c = C(field1);
+  debug(("createC", field1, c));
+  c
 }
+
+@export("SKIP_createA")
+fun createA(field1: Int, field2: B): A {
+  A(field1, field2)
+}
+
 
 @export("SKIP_createB")
 fun createB(field1: Float): B {
@@ -67,9 +76,9 @@ fun main(): void {
   dir1: Test.Dir = Test.TDir<B, B>(Some((B(0.1), B(0.2))));
   dir2: Test.Dir = Test.TDir<Float, Float>(Some((0.1, 0.2)));
   dir3 = Test.castDir<B, B>(dir1);
-  debug(dir3);
+  debug(dir3.a);
   dir4 = Test.castDir<Float, Float>(dir2);
-  debug(dir4);
+  debug(dir4.a);
   print_debug(`Skiplang => ${Test.instanceOfDir<B, B>(dir1)}`);
   print_debug(`Skiplang => ${Test.instanceOfDir<Float, Float>(dir1)}`);
   print_debug(`Skiplang => ${Test.instanceOfDir<B, B>(dir2)}`);

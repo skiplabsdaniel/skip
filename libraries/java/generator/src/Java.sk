@@ -18,21 +18,29 @@ base class Observable{visibility: Visibility = Public()}
 base class Staticable{static_: Bool = false}
 
 class Field{final_: Bool = true} extends Named, Typed, Observable {
-  fun print(printer: String -> void): void {
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void {
     printer(this.visibility.toString());
     printer(" ");
     if (this.final_) {
       printer("final ")
     };
-    this.type.print(printer);
+    this.type.print(printer, relative, base);
     printer(" ");
     printer(`${this.name};`);
   }
 }
 
 class Parameter extends Named, Typed {
-  fun print(printer: String -> void): void {
-    this.type.print(printer);
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void {
+    this.type.print(printer, relative, base);
     printer(`${this.name}`);
   }
 }
@@ -41,24 +49,32 @@ base class SignatureBase{
   parameters: Array<Parameter> = Array[],
   typeParameters: Array<Type> = Array[],
 } extends Named, Observable {
-  fun print(printer: String -> void): void;
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void;
 }
 
 class Signature extends Typed, Staticable, SignatureBase {
-  fun print(printer: String -> void): void {
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void {
     printer(this.visibility.toString());
     if (this.static_) {
       printer(" static");
     };
     printer(" ");
-    this.type.print(printer);
+    this.type.print(printer, relative, base);
     printer(` ${this.name}`);
     tpsize = this.typeParameters.size();
     for (i in Range(0, tpsize)) {
       if (i == 0) {
         printer("<");
       };
-      this.typeParameters[i].print(printer);
+      this.typeParameters[i].print(printer, relative, base);
       if (i == tpsize - 1) {
         printer(">");
       } else {
@@ -68,7 +84,7 @@ class Signature extends Typed, Staticable, SignatureBase {
     printer("(");
     tsize = this.parameters.size();
     for (i in Range(0, tsize)) {
-      this.parameters[i].print(printer);
+      this.parameters[i].print(printer, relative, base);
       if (i < tsize - 1) {
         printer(", ");
       }
@@ -78,7 +94,11 @@ class Signature extends Typed, Staticable, SignatureBase {
 }
 
 class Constructor extends SignatureBase {
-  fun print(printer: String -> void): void {
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void {
     printer(this.visibility.toString());
     printer(` ${this.name}`);
     tpsize = this.typeParameters.size();
@@ -86,7 +106,7 @@ class Constructor extends SignatureBase {
       if (i == 0) {
         printer("<");
       };
-      this.typeParameters[i].print(printer);
+      this.typeParameters[i].print(printer, relative, base);
       if (i == tpsize - 1) {
         printer(">");
       } else {
@@ -96,7 +116,7 @@ class Constructor extends SignatureBase {
     printer("(");
     tsize = this.parameters.size();
     for (i in Range(0, tsize)) {
-      this.parameters[i].print(printer);
+      this.parameters[i].print(printer, relative, base);
       if (i < tsize - 1) {
         printer(", ");
       }
@@ -109,10 +129,15 @@ class Block{
   equations: Array<Equation> = Array[],
   return_: ?Expression = None(),
 } {
-  fun print(printer: String -> void, tab: String): void {
+  fun print(
+    printer: String -> void,
+    tab: String,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void {
     for (e in this.equations) {
       printer(tab);
-      e.print(printer);
+      e.print(printer, relative, base);
       printer(";\n");
     };
     this.return_.each(return_ -> {
@@ -124,10 +149,15 @@ class Block{
 }
 
 class Method{signature: SignatureBase, body: Block} {
-  fun print(printer: String -> void, tab: String): void {
-    this.signature.print(printer);
+  fun print(
+    printer: String -> void,
+    tab: String,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void {
+    this.signature.print(printer, relative, base);
     printer("{\n");
-    this.body.print(printer, `${tab}  `);
+    this.body.print(printer, `${tab}  `, relative, base);
     printer(`${tab}}`);
   }
 }
@@ -137,9 +167,14 @@ base class ClassBase{
   imports: SortedSet<String> = SortedSet[],
   types: Array<Type> = Array[],
 } extends Named, Observable {
-  fun printHeader(name: String, printer: String -> void): void {
-    if (!this.package.isEmpty()) {
-      printer(`package ${this.package.join(".")};\n\n`)
+  fun printHeader(
+    name: String,
+    printer: String -> void,
+    base: Array<String>,
+  ): void {
+    package = base.concat(this.package);
+    if (!package.isEmpty()) {
+      printer(`package ${package.join(".")};\n\n`)
     };
     if (!this.imports.isEmpty()) {
       this.imports.each(import -> printer(`import ${import};\n`));
@@ -151,7 +186,7 @@ base class ClassBase{
       if (i == 0) {
         printer("<");
       };
-      this.types[i].print(printer);
+      this.types[i].print(printer, this.package, base);
       if (i == tsize - 1) {
         printer(">");
       } else {
@@ -168,34 +203,35 @@ class Class_{
   methods: Array<Method> = Array[],
   extends_: ?Type = None(),
 } extends ClassBase {
-  fun print(printer: String -> void): void {
-    this.printHeader("class", printer);
+  fun print(printer: String -> void, base: Array<String>): void {
+    this.printHeader("class", printer, base);
+    relative = this.package;
     isize = this.implements.size();
     for (i in Range(0, isize)) {
       if (i == 0) {
         printer("\n  implements ");
       };
-      this.implements[i].print(printer);
+      this.implements[i].print(printer, relative, base);
       if (i < isize - 1) {
         printer(", ");
       }
     };
     this.extends_.each(e -> {
       printer("\n  extends ");
-      e.print(printer);
+      e.print(printer, relative, base);
     });
     printer(" {\n");
     if (!this.fields.isEmpty()) {
       this.fields.each(f -> {
         printer("\n  ");
-        f.print(printer)
+        f.print(printer, relative, base)
       });
       printer("\n");
     };
     msize = this.methods.size();
     for (i in Range(0, msize)) {
       printer("\n  ");
-      this.methods[i].print(printer, "  ");
+      this.methods[i].print(printer, "  ", relative, base);
       printer("\n");
     };
     printer("}");
@@ -203,41 +239,70 @@ class Class_{
 }
 
 class Interface{
-  signatures_: Array<Signature>,
+  signatures: Array<Signature>,
   extends_: Array<Type> = Array[],
 } extends ClassBase {
-  fun print(printer: String -> void): void {
-    this.printHeader("interface", printer);
+  fun print(printer: String -> void, base: Array<String>): void {
+    this.printHeader("interface", printer, base);
+    relative = this.package;
     esize = this.extends_.size();
     for (i in Range(0, esize)) {
       if (i == 0) {
         printer(`\n  extends `);
       };
-      this.extends_[i].print(printer);
+      this.extends_[i].print(printer, relative, base);
       if (i < esize - 1) {
         printer(", ");
       }
     };
     printer(" {\n");
-    ssize = this.signatures_.size();
+    ssize = this.signatures.size();
     for (i in Range(0, ssize)) {
       printer(`\n  `);
-      this.signatures_[i].print(printer);
+      this.signatures[i].print(printer, relative, base);
       printer(";\n");
     };
     printer(`}`);
   }
 }
 
-class Type{types: Array<Type> = Array[]} extends Named {
-  fun print(printer: String -> void): void {
+class PackageInfo(package: Array<String>, absolute: Bool = false)
+
+class Type{
+  types: Array<Type> = Array[],
+  package: ?PackageInfo = None(),
+} extends Named {
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void {
+    this.package.each(p ->
+      if (p.absolute) {
+        p.package.each(e -> {
+          printer(e);
+          printer(".");
+        });
+        printer(this.name)
+      } else if (p.package != relative) {
+        base.each(e -> {
+          printer(e);
+          printer(".");
+        });
+        p.package.each(e -> {
+          printer(e);
+          printer(".");
+        });
+        printer(this.name)
+      }
+    );
     printer(this.name);
     tsize = this.types.size();
     for (i in Range(0, tsize)) {
       if (i == 0) {
         printer("<");
       };
-      this.types[i].print(printer);
+      this.types[i].print(printer, relative, base);
       if (i == tsize - 1) {
         printer(">");
       } else {
@@ -294,8 +359,12 @@ base class Expression uses Show {
 }
 
 class Equation{expression: Expression} extends Named, Typed {
-  fun print(printer: String -> void): void {
-    this.type.print(printer);
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+  ): void {
+    this.type.print(printer, relative, base);
     printer(` ${this.name} = `);
     this.expression.print(printer);
   }

@@ -154,9 +154,13 @@ fun collectClass(
     checkedWriteAndCollect(context, extends_.i1, writer)
   };
   for (field in classDef.fields.values()) {
-    field.eltk match {
-    | SkipNamedAst.EConst() -> void
-    | _ -> collectType(context, field.type.i1, writer)
+    field.visibility.i1 match {
+    | SkipNamedAst.VPublic() ->
+      field.eltk match {
+      | SkipNamedAst.EConst() -> void
+      | _ -> collectType(context, field.type.i1, writer)
+      }
+    | _ -> void
     }
   }
 }
@@ -195,11 +199,81 @@ fun annotations(def: SkipTyping.DefFile): SortedSet<String> {
 }
 
 fun convertToJavaTypes(
-  _context: mutable SKStore.Context,
-  _classDef: SkipTypedAst.Class_def,
-  _writer: mutable SKStore.TWriter<SKStore.SID, JavaFile>,
+  context: mutable SKStore.Context,
+  classDef: SkipTypedAst.Class_def,
+  writer: mutable SKStore.TWriter<SKStore.SID, JavaFile>,
 ): void {
-  void
+  className = classDef.name.i1;
+  if (isPrimitive(className)) return void;
+  elems = className.split(".");
+  size = elems.size();
+  invariant(size == 1 || size == 2, "Invalid class name.");
+  (package, name) = if (elems.size() == 2) {
+    (Array["types", elems[0].lowercase()], elems[1])
+  } else {
+    (Array["types"], elems[0])
+  };
+  signatures = mutable Vector<Java.Signature>[];
+  for (field in classDef.fields.items()) {
+    field.i1.visibility.i1 match {
+    | SkipNamedAst.VPublic() ->
+      field.i1.eltk match {
+      | SkipNamedAst.EConst() -> void
+      | _ ->
+        field.i1.type.i1 match {
+        | SkipNamedAst.Tapply(_, tname, _) ->
+          id = SKStore.SID(tname.i1);
+          SkipTyping.dir.maybeGet(context, id) match {
+          | Some(symbol) ->
+            collectSignature(
+              symbol.value,
+              field.i0.i1,
+              signatures,
+              Array["types"],
+            )
+          | _ -> throw Error(`Unable to find symbol ${tname.i1}`)
+          }
+        | SkipNamedAst.Tfun _ -> void
+        | _ ->
+          throw Error(
+            `Symbol of type ${field.i1.type.i1.getClassName()} not managed`,
+          )
+        }
+      }
+    | _ -> void
+    }
+  };
+  i = Java.Interface{package, name, signatures => signatures.toArray()};
+  buffer = mutable Vector[];
+  i.print(buffer.push, Array[]);
+  print_debug(buffer.join(""));
+  writer.set(SKStore.SID(package.concat(Array[name]).join(".")), JavaFile(i));
+}
+
+fun collectSignature(
+  def: SkipTypedAst.Def,
+  name: String,
+  signatures: mutable Vector<Java.Signature>,
+  package: Array<String>,
+): void {
+  def match {
+  | SkipTypedAst.DClass(classDef) ->
+    if (classDef.mutable_.isSome()) {
+      throw Error(
+        "Mutable class ${classDef.name.i1} cannot be exporter to Java.",
+      );
+    };
+    signatures.push(
+      Java.Signature{
+        name => `get${name.uppercaseFirst()}`,
+        type => typeForClass(classDef, package),
+        static_ => false,
+      },
+    )
+  | SkipTypedAst.DFun _
+  | SkipTypedAst.DConst _ ->
+    throw Error("Only classes can be exported to Java.")
+  }
 }
 
 fun assertNotTrait(classDef: SkipTypedAst.Class_def): void {
@@ -209,6 +283,34 @@ fun assertNotTrait(classDef: SkipTypedAst.Class_def): void {
     void
   | SkipAst.KTrait() -> invariant_violation("trait not managed.")
   };
+}
+
+fun typeForClass(
+  classDef: SkipTypedAst.Class_def,
+  package: Array<String>,
+): Java.Type {
+  (name, packageInfo): (String, ?Java.PackageInfo) = classDef.name.i1 match {
+  | "Int" -> ("long", None())
+  | "Float" -> ("double", None())
+  | "String" -> ("String", None())
+  | "Bool" -> ("boolean", None())
+  | "UInt32" | "Int32" -> ("int", None())
+  | "UInt16" | "Int16" -> ("short", None())
+  | "UInt8" | "Int8" -> ("byte", None())
+  | n ->
+    elems = n.split(".");
+    size = elems.size();
+    invariant(size == 1 || size == 2, "Invalid class name.");
+    if (elems.size() == 2) {
+      (
+        elems[1],
+        Some(Java.PackageInfo(package.concat(Array[elems[0].lowercase()]))),
+      )
+    } else {
+      (elems[0], Some(Java.PackageInfo(package)))
+    }
+  };
+  Java.Type{name, package => packageInfo}
 }
 
 module end;
