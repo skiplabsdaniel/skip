@@ -86,7 +86,24 @@ fun equation1(): void {
     ),
   };
   i.print(buffer.push, Array[], Array[], "");
-  expectBuffer(buffer, Vector["int d = c.foo(x, y * z)"]);
+  expectBuffer(buffer, Vector["int d = c.foo(x, y * z);"]);
+}
+
+@test
+fun asser1(): void {
+  buffer = mutable Vector[];
+  a = Java.Assert(
+    Java.Call(
+      "c",
+      "foo",
+      Array[
+        Java.Literal("x"),
+        Java.NArityOp("*", Array[Java.Literal("y"), Java.Literal("z")]),
+      ],
+    ),
+  );
+  a.print(buffer.push, Array[], Array[], "");
+  expectBuffer(buffer, Vector["assert c.foo(x, y * z);"]);
 }
 
 @test
