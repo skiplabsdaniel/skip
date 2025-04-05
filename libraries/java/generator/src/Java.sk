@@ -131,13 +131,12 @@ class Block{
 } {
   fun print(
     printer: String -> void,
-    tab: String,
     relative: Array<String>,
     base: Array<String>,
+    tab: String = "  ",
   ): void {
     for (e in this.equations) {
-      printer(tab);
-      e.print(printer, relative, base);
+      e.print(printer, relative, base, tab);
       printer(";\n");
     };
     this.return_.each(return_ -> {
@@ -157,7 +156,7 @@ class Method{signature: SignatureBase, body: Block} {
   ): void {
     this.signature.print(printer, relative, base);
     printer("{\n");
-    this.body.print(printer, `${tab}  `, relative, base);
+    this.body.print(printer, relative, base, `${tab}  `);
     printer(`${tab}}`);
   }
 }
@@ -373,15 +372,66 @@ base class Expression {
   }
 }
 
-class Equation{expression: Expression} extends Named, Typed {
+base class Equation {
   fun print(
     printer: String -> void,
     relative: Array<String>,
     base: Array<String>,
+    tab: String = " ",
+  ): void;
+}
+
+class LeftRigth{expression: Expression} extends Named, Typed, Equation {
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String = " ",
   ): void {
+    printer(tab);
     this.type.print(printer, relative, base);
     printer(` ${this.name} = `);
     this.expression.print(printer, relative, base);
+  }
+}
+
+class Branch{condition: Expression, body: Block} {
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String,
+    first: Bool,
+  ): void {
+    printer(
+      `${tab}${if (first) "" else " else "}if (${this.condition.toString(
+        relative,
+        base,
+      )}) {\n`,
+    );
+    this.body.print(printer, relative, base, `  ${tab}`);
+    printer(`${tab}}`);
+  }
+}
+
+class Decision{branches: Array<Branch>, else_: ?Block} extends Equation {
+  fun print(
+    printer: String -> void,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String = " ",
+  ): void {
+    first = true;
+    for (branch in this.branches) {
+      branch.print(printer, relative, base, tab, first);
+      !first = false;
+    };
+    this.else_.each(e -> {
+      printer(`${tab} else {`);
+      e.print(printer, relative, base, tab);
+      printer(`${tab}}`);
+    });
+    printer("\n");
   }
 }
 

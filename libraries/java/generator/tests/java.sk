@@ -73,7 +73,7 @@ fun ifthenelse(): void {
 @test
 fun equation1(): void {
   buffer = mutable Vector[];
-  i = Java.Equation{
+  i = Java.LeftRigth{
     name => "d",
     type => Java.Type{name => "int"},
     expression => Java.Call(
@@ -85,7 +85,7 @@ fun equation1(): void {
       ],
     ),
   };
-  i.print(buffer.push, Array[], Array[]);
+  i.print(buffer.push, Array[], Array[], "");
   expectBuffer(buffer, Vector["int d = c.foo(x, y * z)"]);
 }
 
