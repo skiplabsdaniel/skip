@@ -1,0 +1,39 @@
+fun main(): void {
+  javaHome = Environ.varOpt("JAVA_HOME") match {
+  | Some(javaHome) -> javaHome
+  | _ ->
+    print_error("JAVA_HOME is not defined.");
+    return exit(1)
+  };
+
+  profile = Environ.var("PROFILE");
+  target = Environ.var("TARGET");
+  isWasm32 = target.startsWith("wasm32");
+
+  profile match {
+  | "release" ->
+    Environ.set_var("DEBUG", "false");
+    Environ.set_var("OPT_LEVEL", "3")
+  | "debug" | "dev" ->
+    Environ.set_var("DEBUG", "true");
+    Environ.set_var("OPT_LEVEL", "0")
+  | p -> invariant_violation(`Unrecognized profile ${p}`)
+  };
+
+  if (!isWasm32) {
+    src = "extern/extern.cpp";
+    print_string(`skargo:rerun-if-changed=${src}`);
+    Cc.Build()
+      .flags(Cc.kRecommendedCflags)
+      .include(`${javaHome}/include`)
+      .include(`${javaHome}/include/linux`)
+      .file(src)
+      .compile("library");
+    Array[
+      `-L${javaHome}/lib`,
+      `-L${javaHome}/lib/server`,
+      "-ljli",
+      "-ljvm",
+    ].each(link -> print_string(`skargo:skc-link-arg=${link}`))
+  }
+}

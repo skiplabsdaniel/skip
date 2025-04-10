@@ -1,0 +1,50 @@
+base class EObject uses Orderable {
+  children =
+  | A(field1: Int, field2: B)
+  | B(field1: Float)
+  | C(field1: B)
+}
+
+fun toDebugString<T>(t: T): String {
+  buffer = mutable Vector[];
+  Debug.debugImpl(t, buffer.push);
+  buffer.join("")
+}
+
+@java("io.skiplabs.Library")
+@cpp_extern
+native fun performSomething(a: A): C;
+
+@java("io.skiplabs.Library")
+@cpp_extern
+native fun performSomethingOnArray(array: Array<A>): Array<C>;
+
+
+@debug
+@cpp_extern
+native fun loadJVM(
+  classpath: String,
+  verboseClass: Bool = false,
+  verboseJNI: Bool = false,
+): void;
+
+fun main(): void {
+  obstack = SKStore.newObstack();
+  try {
+    loadJVM("-Djava.class.path=./library/target/library-1.0-SNAPSHOT.jar");
+    print_debug(
+      `Skiplang => ${toDebugString(performSomething(A(10, B(5.0))))}`,
+    );
+    print_debug(
+      `Skiplang => ${toDebugString(
+        performSomethingOnArray(Array[A(10, B(5.0))]),
+      )}`,
+    );
+    SKStore.destroyObstack(obstack);
+  } catch {
+  | e ->
+    print_error(e.getMessage());
+    SKStore.destroyObstack(obstack);
+    exit(1)
+  }
+}
