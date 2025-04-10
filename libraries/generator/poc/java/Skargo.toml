@@ -1,0 +1,17 @@
+[package]
+name = "java-poc"
+version = "0.1.0"
+
+[dependencies]
+std = { path = "../../../../skiplang/prelude" }
+
+[dev-dependencies]
+sktest = { path = "../../../../skiplang/sktest" }
+
+[build-dependencies]
+cc = { path = "../../../../skiplang/cc" }
+
+[[bin]]
+name = "javapoc"
+main = "main"
+
