@@ -249,7 +249,7 @@ private fun hashType(t: Type_): Int {
   t.i1.hash()
 }
 
-base class Type__ uses Hashable, Equality {
+base class Type__ uses Hashable, Equality, HasClassName {
   children =
   | Tfrozen(Variance)
   | TnonNullable(Variance)
