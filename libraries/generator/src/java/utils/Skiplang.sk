@@ -1,0 +1,173 @@
+module Java;
+
+fun collectExports(
+  def: Java.Class_,
+  params: Array<Java.Parameter>,
+  skipExports: mutable Vector<String>,
+  cExternsExports: mutable Vector<String>,
+): void {
+  name = def.skipname.replace(".", "_");
+  classtype = def.toType().toSkipType();
+  newParams = mutable Vector[];
+  for (p in params) {
+    skiptype = p.type.toSkipType();
+    skipname = `${name}__get${p.name.uppercaseFirst()}`;
+    skipExports.push(`@export("SKIP_${skipname}")`);
+    skipExports.push(
+      `fun sk${skipname}(skobject: ${classtype}): ${skiptype} {`,
+    );
+    skipExports.push(`  skobject.${p.name}`);
+    skipExports.push("}");
+    skipExports.push("");
+    ctype = p.type.toCType();
+    jniType = p.type.toJNIType();
+    cExternsExports.push(`${ctype} SKIP_${skipname}(void*);`);
+    newParams.push((p.name, skiptype, ctype, jniType));
+  };
+  skipExports.push(`@export("SKIP_create_${name}")`);
+  skipExports.push(
+    `fun create_${name}(${newParams
+      .map(p -> `${p.i0}: ${p.i1}`)
+      .join(", ")}): ${classtype} {`,
+  );
+  // TODO: named classe
+  skipExports.push(`  ${classtype}(${newParams.map(p -> p.i0).join(", ")})`);
+  skipExports.push("}");
+  skipExports.push("");
+  cExternsExports.push(
+    `void* SKIP_create_${name}(${newParams.map(p -> p.i2).join(", ")});`,
+  );
+  cExternsExports.push(`void* copy_${name}(JNIEnv*, jobject);`);
+  cExternsExports.push(`void* check_${name}(JNIEnv*, jobject);`);
+  cExternsExports.push(`jobject create_${name}(JNIEnv*, void*);`);
+  newParams.insert(0, ("env", "_", "JNIEnv*", "JNIEnv*"));
+}
+
+const kSkipUtils: Array<String> = Array[
+  "// Utils",
+  "",
+  "class LibraryException(",
+  "  type: String,",
+  "  message: String,",
+  "  trace: ?String = None(),",
+  ") extends .Exception",
+  "",
+  "@export(\"SKIP_throwLibraryException\")",
+  "fun throwLibraryException(type: String, message: String, trace: ?String): void {",
+  "  throw LibraryException(type, message, trace)",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_create_vector\")",
+  "fun createVector(): mutable Vector<Runtime.GCPointer> {",
+  "  mutable Vector<Runtime.GCPointer>[];",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_push_into_vector\")",
+  "fun pushIntoVector(",
+  "  vector: mutable Vector<Runtime.GCPointer>,",
+  "  t: Runtime.GCPointer,",
+  "): void {",
+  "  vector.push(t)",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_vector_to_array\")",
+  "fun vectorToArray(",
+  "  vector: mutable Vector<Runtime.GCPointer>,",
+  "): Array<Runtime.GCPointer> {",
+  "  vector.toArray()",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_get_array_size\")",
+  "fun getSkArraySize(array: Array<Runtime.GCPointer>): Int {",
+  "  array.size()",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_get_array_value_at\")",
+  "fun getSkArrayValueAt(",
+  "  array: Array<Runtime.GCPointer>,",
+  "  index: Int,",
+  "): Runtime.GCPointer {",
+  "  array.get(index)",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_create_long_array\")",
+  "fun create_long_array(size: Int): Array<Int> {",
+  "  Array::fill(size, 0)",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_create_int_array\")",
+  "fun create_int_array(size: Int): Array<Int32> {",
+  "  Array::fill(size, Int32::truncate(0))",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_create_short_array\")",
+  "fun create_short_array(size: Int): Array<Int16> {",
+  "  Array::fill(size, Int16::truncate(0))",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_create_byte_array\")",
+  "fun create_byte_array(size: Int): Array<Int8> {",
+  "  Array::fill(size, Int8::truncate(0))",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_create_double_array\")",
+  "fun create_double_array(size: Int): Array<Float> {",
+  "  Array::fill(size, 0.0)",
+  "}",
+  "",
+  "@cpp_export(\"SKIP_create_boolean_array\")",
+  "fun create_boolean_array(size: Int): Array<Bool> {",
+  "  Array::fill(size, false)",
+  "}",
+];
+
+fun writeSkiplang(
+  jc: Config,
+  lines: readonly Vector<String>,
+): Result<void, Exception> {
+  fileName = Path.join(jc.root, `exports.sk`);
+  file = IO.File::open(
+    fileName,
+    IO.OpenOptions{write => true, create => true, truncate => true},
+  );
+  res = Generator.write(
+    file,
+    Array[
+      Array["module GeneratedExports;\n"],
+      lines.toArray(),
+      kSkipUtils,
+      Array["module end;\n"],
+    ],
+  );
+  file.close();
+  res
+}
+
+fun writeCpp(
+  jc: Config,
+  lines: readonly Vector<String>,
+  jniInits: readonly Vector<String>,
+  creations: readonly Vector<String>,
+): Result<void, Exception> {
+  fileName = Path.join(jc.root, `exports.cpp`);
+  file = IO.File::open(
+    fileName,
+    IO.OpenOptions{write => true, create => true, truncate => true},
+  );
+  res = Generator.write(
+    file,
+    Array[
+      kCppHeader,
+      kCppUtils,
+      lines.toArray(),
+      Array[""],
+      creations.toArray(),
+      loadJVM(jc, jniInits),
+      kCppFooter,
+    ],
+  );
+  file.close();
+  res
+}
+
+module end;

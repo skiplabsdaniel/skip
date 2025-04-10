@@ -1,0 +1,76 @@
+module Java;
+
+fun externName(ann: String): ?String {
+  if (ann == "@cpp_extern") {
+    return None();
+  };
+  if (!ann.startsWith(`@cpp_extern("`) || !ann.endsWith("\")")) {
+    return None();
+  };
+  size = ann.chars().size();
+  name = ann.sub(ann.getIter().forward(12), size - 14);
+  if (name.isEmpty()) None() else Some(name)
+}
+
+class Annotation(
+  package: Array<String>,
+  clazz: String,
+  method: ?String,
+) uses Equality {
+  //
+  static fun fromString(ann: String): Result<Annotation, Generator.Error> {
+    if (ann == kAnnotation) {
+      return Failure(
+        Generator.Error(
+          `Invalid ${kAnnotation} annotation: The owner class must be specified`,
+        ),
+      )
+    };
+    if (!ann.startsWith(`${kAnnotation}("`) || !ann.endsWith("\")")) {
+      return Failure(
+        Generator.Error(`Invalid ${kAnnotation} annotation: ${ann}`),
+      )
+    };
+    size = ann.chars().size();
+    annsize = kAnnotationSize + 2;
+    javaInfo = ann
+      .sub(ann.getIter().forward(annsize), size - (annsize + 2))
+      .split(".");
+    index = 0;
+    while (
+      index < javaInfo.size() &&
+      Java.isValidPackageName(javaInfo[index])
+    ) {
+      !index = index + 1;
+    };
+    packageIndex = index;
+    while (index < javaInfo.size() && Java.isValidClassName(javaInfo[index])) {
+      !index = index + 1;
+    };
+    classIndex = index;
+    while (index < javaInfo.size() && Java.isValidMethodName(javaInfo[index])) {
+      !index = index + 1;
+    };
+    if (
+      index < javaInfo.size() ||
+      packageIndex == classIndex ||
+      index - classIndex > 1
+    ) {
+      return Failure(
+        Generator.Error(
+          `Invalid annotation '${ann}' must be a valid Java class name with or not method name.`,
+        ),
+      );
+    };
+    Success(
+      Annotation(
+        javaInfo.slice(0, packageIndex).toArray(),
+        // Inner classes ?
+        javaInfo.slice(packageIndex, classIndex).join("."),
+        if (index - classIndex > 0) Some(javaInfo[index - 1]) else None(),
+      ),
+    )
+  }
+}
+
+module end;

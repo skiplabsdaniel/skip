@@ -1,0 +1,688 @@
+module Java;
+
+const kCppHeader: Array<String> = Array[
+  "#include <jni.h>",
+  "#include <stdarg.h>",
+  "#include <stdint.h>",
+  "#include <string.h>",
+  "",
+  "extern \"C\" {",
+  "",
+  "char* sk_string_create(const char* buffer, uint32_t size);",
+  "void* SKIP_create_vector();",
+  "void SKIP_push_into_vector(void*, void*);",
+  "void* SKIP_vector_to_array(void*);",
+  "jlong SKIP_get_array_size(void*);",
+  "void* SKIP_get_array_value_at(void*, jlong);",
+  "jlong* SKIP_create_long_array(jlong);",
+  "jint* SKIP_create_int_array(jlong);",
+  "jshort* SKIP_create_short_array(jlong);",
+  "jbyte* SKIP_create_byte_array(jlong);",
+  "jdouble* SKIP_create_double_array(jlong);",
+  "jboolean* SKIP_create_boolean_array(jlong);",
+  "",
+  "__attribute__((noreturn)) void SKIP_throwLibraryException(char*, char*,",
+  "                                                         char* = nullptr);",
+  "void* SKIP_createJVM(JavaVM* jvm, JNIEnv* env);",
+  "",
+  "static JavaVM* vm;",
+  "static JNIEnv* env;",
+  "",
+  "static const char* kJVMType = \"Java\";",
+  "static size_t kJVMTypeSize = strlen(kJVMType);",
+  "static const char* kUnableToLoadJVM = \"Unable to load Java virtual machine.\";",
+  "static size_t kUnableToLoadJVMSize = strlen(kUnableToLoadJVM);",
+  "static const char* kJVMAlreadyLoaded = \"Java virtual machine already loaded.\";",
+  "static size_t kJVMAlreadyLoadedSize = strlen(kJVMAlreadyLoaded);",
+  "static const char* kJVMNotLoaded = \"Java virtual machine not loaded.\";",
+  "static size_t kJVMNotLoadedSize = strlen(kJVMNotLoaded);",
+  "",
+  "typedef void* (*CheckObject)(JNIEnv*, jobject);",
+  "typedef jobject (*CreateObject)(JNIEnv*, void*);",
+  "",
+  "__attribute__((noreturn)) void SKIP_throwUnableToLoadJVM() {",
+  "  SKIP_throwLibraryException(",
+  "      sk_string_create(kJVMType, kJVMTypeSize),",
+  "      sk_string_create(kUnableToLoadJVM, kUnableToLoadJVMSize));",
+  "}",
+  "",
+  "__attribute__((noreturn)) void SKIP_throwJVMAlreadyLoaded() {",
+  "  SKIP_throwLibraryException(",
+  "      sk_string_create(kJVMType, kJVMTypeSize),",
+  "      sk_string_create(kJVMAlreadyLoaded, kJVMAlreadyLoadedSize));",
+  "}",
+  "",
+  "__attribute__((noreturn)) void SKIP_throwJVMNotLoaded() {",
+  "  SKIP_throwLibraryException(",
+  "      sk_string_create(kJVMType, kJVMTypeSize),",
+  "      sk_string_create(kJVMNotLoaded, kJVMNotLoadedSize));",
+  "}",
+  "",
+];
+
+const kCppFooter: Array<String> = Array["}  // extern \"C\""];
+
+const kCppUtils: Array<String> = Array[
+  "jstring getClassName(JNIEnv* env, jobject object, jclass clazz) {",
+  "  jmethodID getClass =",
+  "      env->GetMethodID(clazz, \"getClass\", \"()Ljava/lang/Class;\");",
+  "  jobject classObj = env->CallObjectMethod(object, getClass);",
+  "  jclass classClass = env->FindClass(\"java/lang/Class\");",
+  "  jmethodID getName =",
+  "      env->GetMethodID(classClass, \"getName\", \"()Ljava/lang/String;\");",
+  "  return (jstring)env->CallObjectMethod(classObj, getName);",
+  "}",
+  "",
+  "void clearPointers(JNIEnv* env, jobject obj) {",
+  "  jclass clazz = env->GetObjectClass(obj);",
+  "  jmethodID clear = env->GetMethodID(clazz, \"skPtrClear\", \"()V\");",
+  "  if (clear != nullptr) env->CallObjectMethod(obj, clear);",
+  "}",
+  "",
+  "void collectStackTrace(JNIEnv* env, jthrowable exception, jclass throwableClass,",
+  "                       char** sktrace) {",
+  "  jmethodID printStackTrace = env->GetMethodID(",
+  "      throwableClass, \"printStackTrace\", \"(Ljava/io/PrintWriter;)V\");",
+  "",
+  "  // Create Java StringWriter and PrintWriter",
+  "  jclass stringWriterClass = env->FindClass(\"java/io/StringWriter\");",
+  "  jmethodID stringWriterInit =",
+  "      env->GetMethodID(stringWriterClass, \"<init>\", \"()V\");",
+  "  jobject stringWriter = env->NewObject(stringWriterClass, stringWriterInit);",
+  "",
+  "  jclass printWriterClass = env->FindClass(\"java/io/PrintWriter\");",
+  "  jmethodID printWriterInit =",
+  "      env->GetMethodID(printWriterClass, \"<init>\", \"(Ljava/io/Writer;)V\");",
+  "  jobject printWriter =",
+  "      env->NewObject(printWriterClass, printWriterInit, stringWriter);",
+  "",
+  "  // Call printStackTrace(PrintWriter)",
+  "  env->CallVoidMethod(exception, printStackTrace, printWriter);",
+  "",
+  "  // Get String result with toString()",
+  "  jmethodID toString =",
+  "      env->GetMethodID(stringWriterClass, \"toString\", \"()Ljava/lang/String;\");",
+  "  jstring stackTrace = (jstring)env->CallObjectMethod(stringWriter, toString);",
+  "  const char* trace = env->GetStringUTFChars(stackTrace, NULL);",
+  "  (*sktrace) = sk_string_create(trace, strlen(trace));",
+  "  env->ReleaseStringUTFChars(stackTrace, trace);",
+  "}",
+  "",
+  "void collectException(JNIEnv* env, jthrowable exception, char** skclazzName,",
+  "                      char** skmsg, char** sktrace = nullptr) {",
+  "  jclass throwableClass = env->GetObjectClass(exception);",
+  "  jmethodID getMessage =",
+  "      env->GetMethodID(throwableClass, \"getMessage\", \"()Ljava/lang/String;\");",
+  "  jstring message = (jstring)env->CallObjectMethod(exception, getMessage);",
+  "  jstring className = getClassName(env, exception, throwableClass);",
+  "  const char* msg = env->GetStringUTFChars(message, NULL);",
+  "  const char* clazzName = env->GetStringUTFChars(className, NULL);",
+  "  (*skmsg) = sk_string_create(msg, strlen(msg));",
+  "  (*skclazzName) = sk_string_create(clazzName, strlen(clazzName));",
+  "  env->ReleaseStringUTFChars(message, msg);",
+  "  env->ReleaseStringUTFChars(className, clazzName);",
+  "  if (sktrace != nullptr) {",
+  "    collectStackTrace(env, exception, throwableClass, sktrace);",
+  "  }",
+  "}",
+  "",
+  "void checkException(JNIEnv* env) {",
+  "  if (env->ExceptionCheck()) {",
+  "    char* type;",
+  "    char* message;",
+  "    jthrowable exception = env->ExceptionOccurred();",
+  "    env->ExceptionClear();",
+  "    collectException(env, exception, &type, &message);",
+  "    SKIP_throwLibraryException(type, message);",
+  "  }",
+  "}",
+  "",
+  "void* getPointer(JNIEnv* env, jobject obj) {",
+  "  jclass clazz = env->GetObjectClass(obj);",
+  "  jfieldID hfid = env->GetFieldID(clazz, \"skPtr\", \"J\");",
+  "  checkException(env);",
+  "  jlong handle = env->GetLongField(obj, hfid);",
+  "  return (void*)handle;",
+  "}",
+  "",
+  "void callStaticSetPointer(JNIEnv* env, jclass clazz,",
+  "                          const char* staticMethod, jlong value) {",
+  "  jmethodID methodID = env->GetStaticMethodID(clazz, staticMethod, \"(J)V\");",
+  "  checkException(env);",
+  "  env->CallStaticVoidMethod(clazz, methodID, value);",
+  "  checkException(env);",
+  "}",
+  "",
+  "jobjectArray createObjectArray(JNIEnv* env, void* skarray, const char* type,",
+  "                               CreateObject createObject) {",
+  "  jlong size = SKIP_get_array_size(skarray);",
+  "  jclass clazz = env->FindClass(type);",
+  "  jobjectArray array = env->NewObjectArray(size, clazz, NULL);",
+  "  for (jlong i = 0; i < size; i++) {",
+  "    // Check if the element is An object Array",
+  "    if (type[0] == '[' && type[1] == 'L')",
+  "      env->SetObjectArrayElement(",
+  "          array, i,",
+  "          createObjectArray(env, SKIP_get_array_value_at(skarray, i), type + 1,",
+  "                            createObject));",
+  "    else",
+  "      env->SetObjectArrayElement(",
+  "          array, i, createObject(env, SKIP_get_array_value_at(skarray, i)));",
+  "  }",
+  "  return array;",
+  "}",
+  "",
+  "jobject createLongArray(JNIEnv* env, void* skarray) {",
+  "  jlong size = SKIP_get_array_size(skarray);",
+  "  jlongArray array = env->NewLongArray(size);",
+  "  env->SetLongArrayRegion(array, 0, size,",
+  "                          reinterpret_cast<const jlong*>(skarray));",
+  "  return array;",
+  "}",
+  "",
+  "jobject createIntArray(JNIEnv* env, void* skarray) {",
+  "  jlong size = SKIP_get_array_size(skarray);",
+  "  jintArray array = env->NewIntArray(size);",
+  "  env->SetIntArrayRegion(array, 0, size,",
+  "                         reinterpret_cast<const jint*>(skarray));",
+  "  return array;",
+  "}",
+  "",
+  "jobject createShortArray(JNIEnv* env, void* skarray) {",
+  "  jlong size = SKIP_get_array_size(skarray);",
+  "  jshortArray array = env->NewShortArray(size);",
+  "  env->SetShortArrayRegion(array, 0, size,",
+  "                           reinterpret_cast<const jshort*>(skarray));",
+  "  return array;",
+  "}",
+  "",
+  "jobject createByteArray(JNIEnv* env, void* skarray) {",
+  "  jlong size = SKIP_get_array_size(skarray);",
+  "  jbyteArray array = env->NewByteArray(size);",
+  "  env->SetByteArrayRegion(array, 0, size,",
+  "                          reinterpret_cast<const jbyte*>(skarray));",
+  "  return array;",
+  "}",
+  "",
+  "jobject createDoubleArray(JNIEnv* env, void* skarray) {",
+  "  jlong size = SKIP_get_array_size(skarray);",
+  "  jdoubleArray array = env->NewDoubleArray(size);",
+  "  env->SetDoubleArrayRegion(array, 0, size,",
+  "                            reinterpret_cast<const jdouble*>(skarray));",
+  "  return array;",
+  "}",
+  "",
+  "void* toObjectArray(JNIEnv* env, jobjectArray array, CheckObject checkObject) {",
+  "  jclass objectArrayClass = env->FindClass(\"[Ljava/lang/Object;\");",
+  "  checkException(env);",
+  "  jsize size = env->GetArrayLength(array);",
+  "  void* vector = SKIP_create_vector();",
+  "  for (int i = 0; i < size; i++) {",
+  "    jobject element = env->GetObjectArrayElement(array, i);",
+  "    if (env->IsInstanceOf(element, objectArrayClass)) {",
+  "      SKIP_push_into_vector(",
+  "          vector, toObjectArray(env, (jobjectArray)element, checkObject));",
+  "    } else {",
+  "      SKIP_push_into_vector(vector, checkObject(env, element));",
+  "    }",
+  "    env->DeleteLocalRef(element);",
+  "  }",
+  "  return SKIP_vector_to_array(vector);",
+  "}",
+  "",
+  "void clearObjectArray(JNIEnv* env, jobjectArray array) {",
+  "  jclass objectArrayClass = env->FindClass(\"[Ljava/lang/Object;\");",
+  "  checkException(env);",
+  "  jsize size = env->GetArrayLength(array);",
+  "  for (int i = 0; i < size; i++) {",
+  "    jobject element = env->GetObjectArrayElement(array, i);",
+  "    if (env->IsInstanceOf(element, objectArrayClass)) {",
+  "      clearObjectArray(env, (jobjectArray)element);",
+  "    } else {",
+  "      clearPointers(env, element);",
+  "    }",
+  "    env->DeleteLocalRef(element);",
+  "  }",
+  "}",
+  "",
+  "void* toStringArray(JNIEnv* env, jobjectArray array) {",
+  "  jclass objectArrayClass = env->FindClass(\"[Ljava/lang/String;\");",
+  "  checkException(env);",
+  "  jsize size = env->GetArrayLength(array);",
+  "  void* vector = SKIP_create_vector();",
+  "  for (int i = 0; i < size; i++) {",
+  "    jobject element = env->GetObjectArrayElement(array, i);",
+  "    const char* cStr;",
+  "    if (env->IsInstanceOf(element, objectArrayClass)) {",
+  "      SKIP_push_into_vector(vector, toStringArray(env, (jobjectArray)element));",
+  "    } else {",
+  "      cStr = env->GetStringUTFChars((jstring)element, NULL);",
+  "      SKIP_push_into_vector(vector, sk_string_create(cStr, strlen(cStr)));",
+  "      env->ReleaseStringUTFChars((jstring)element, cStr);",
+  "    }",
+  "    env->DeleteLocalRef(element);",
+  "  }",
+  "  return SKIP_vector_to_array(vector);",
+  "}",
+  "",
+  "void* toLongArray(JNIEnv* env, jlongArray array) {",
+  "  jsize size = env->GetArrayLength(array);",
+  "  jlong* skarray = SKIP_create_long_array((jlong)size);",
+  "  for (int i = 0; i < size; i++) {",
+  "    env->GetLongArrayRegion(array, 0, size, skarray);",
+  "  }",
+  "  return skarray;",
+  "}",
+  "",
+  "void* toIntArray(JNIEnv* env, jintArray array) {",
+  "  jsize size = env->GetArrayLength(array);",
+  "  jint* skarray = SKIP_create_int_array((jlong)size);",
+  "  for (int i = 0; i < size; i++) {",
+  "    env->GetIntArrayRegion(array, 0, size, skarray);",
+  "  }",
+  "  return skarray;",
+  "}",
+  "",
+  "void* toShortArray(JNIEnv* env, jshortArray array) {",
+  "  jsize size = env->GetArrayLength(array);",
+  "  jshort* skarray = SKIP_create_short_array((jlong)size);",
+  "  for (int i = 0; i < size; i++) {",
+  "    env->GetShortArrayRegion(array, 0, size, skarray);",
+  "  }",
+  "  return skarray;",
+  "}",
+  "",
+  "void* toByteArray(JNIEnv* env, jbyteArray array) {",
+  "  jsize size = env->GetArrayLength(array);",
+  "  jbyte* skarray = SKIP_create_byte_array((jlong)size);",
+  "  for (int i = 0; i < size; i++) {",
+  "    env->GetByteArrayRegion(array, 0, size, skarray);",
+  "  }",
+  "  return skarray;",
+  "}",
+  "",
+  "void* toBooleanArray(JNIEnv* env, jbooleanArray array) {",
+  "  jsize size = env->GetArrayLength(array);",
+  "  jboolean* skarray = SKIP_create_boolean_array((jlong)size);",
+  "  for (int i = 0; i < size; i++) {",
+  "    env->GetBooleanArrayRegion(array, 0, size, skarray);",
+  "  }",
+  "  return skarray;",
+  "}",
+  "",
+];
+
+fun collectJNIInits(
+  def: Java.Class_,
+  params: Array<Java.Parameter>,
+  base: Array<String>,
+  jniInits: mutable Vector<String>,
+): void {
+  cname = def.skipname.replace(".", "_");
+  var = `clazz_${def.getName(base, "_")}`;
+  jniInits.push(
+    `  jclass ${var} = env->FindClass(\"${def.getName(base, "/")}\");`,
+  );
+  jniInits.push("  checkException(env);");
+  jniInits.push(`  callStaticSetPointer(env, ${var}, "setSkPtrNew",`);
+  jniInits.push(
+    `                       reinterpret_cast<jlong>(Java_create_${cname}));`,
+  );
+  for (p in params) {
+    pName = p.name.uppercaseFirst();
+    skipname = `${cname}__get${pName}`;
+    jniInits.push(`  callStaticSetPointer(env, ${var}, "setSkPtrGet${pName}",`);
+    jniInits.push(
+      `                       reinterpret_cast<jlong>(Java_${skipname}));`,
+    );
+  }
+}
+
+fun collectCopyFunction(
+  cname: String,
+  params: Array<Java.Parameter>,
+  base: Array<String>,
+  lines: mutable Vector<String>,
+): void {
+  lines.push(`void* copy_${cname}(JNIEnv* env, jobject object) {`);
+  lines.push("  jclass clazz = env->GetObjectClass(object);");
+  clear = mutable Vector<String>[];
+  args = params.map(p -> {
+    pName = p.name.uppercaseFirst();
+    sig = p.type.toSignature(base);
+    jniType = p.type.toJNIType();
+    lines.push(
+      `  jmethodID get${pName} = env->GetMethodID(clazz, "get${pName}", "()${sig}");`,
+    );
+    lines.push("  checkException(env);");
+    lines.push(
+      `  ${jniType} ${
+        p.name
+      } = env->Call${p.type.toMethodType()}Method(object, get${pName});`,
+    );
+    lines.push("  checkException(env);");
+    if (p.type.isArray()) {
+      aType = p.type.getArrayType();
+      fType = p.type.getLeafType();
+      tname = fType.skipname.replace(".", "_");
+      mname = fType.toMethodType();
+      if (aType.isArray() && fType.isPrimitive()) {
+        `toObjectArray(env, ${p.name}, to${mname}Array)`
+      } else if (fType.isPrimitive()) {
+        `to${mname}Array(env, ${p.name})`
+      } else {
+        `toObjectArray(env, ${p.name}, check_${tname})`
+      }
+    } else if (p.type.isString()) {
+      lines.push(
+        `  char* tmp_${p.name} = env->GetStringUTFChars(${p.name}, NULL);`,
+      );
+      lines.push(
+        `  char* sk_${p.name} = sk_string_create_(tmp_${p.name}, strlen(tmp_${
+          p.name
+        }));`,
+      );
+      clear.push(`  env->ReleaseStringUTFChars(${p.name}, tmp_${p.name});`);
+      `sk_${p.name}`
+    } else if (p.type.isPrimitive()) {
+      p.name
+    } else {
+      tname = p.type.skipname.replace(".", "_");
+      `check_${tname}(env, ${p.name})`
+    }
+  });
+  if (clear.isEmpty()) {
+    lines.push(`  return SKIP_create_${cname}(${args.join(", ")});`);
+  } else {
+    lines.push(`  void * skrezult = SKIP_create_${cname}(${args.join(", ")});`);
+    clear.each(lines.push);
+    lines.push("  return skrezult;");
+  };
+  lines.push("}\n")
+}
+
+fun collectFunction(
+  name: String,
+  signature: Java.Signature,
+  base: Array<String>,
+  lines: mutable Vector<String>,
+): void {
+  owner = signature.owner.fromSome("Java function must have an owner");
+  rtype = signature.returnType match {
+  | Some(rt) -> rt.toCType()
+  | _ -> "void"
+  };
+  lines.push(
+    `${rtype} ${name}(${signature.parameters
+      .map(p -> `${p.type.toCType()} ${p.name}`)
+      .join(", ")}) {`,
+  );
+  lines.push("  if (env == nullptr) {\n    SKIP_throwJVMNotLoaded();\n  }");
+  lines.push(
+    `  jclass clazz = env->FindClass("${owner
+      .getName(base)
+      .replace(".", "/")}");`,
+  );
+  lines.push("  checkException(env);");
+  lines.push("  jmethodID method =");
+  lines.push(`  env->GetStaticMethodID(clazz, "${signature.name}",`);
+  lines.push(`                         "${signature.toString(base)}");`);
+  lines.push("  checkException(env);");
+  jparams = mutable Vector["clazz", "method"];
+  for (param in signature.parameters) {
+    if (param.type.isArray()) {
+      aType = param.type.getArrayType();
+      fType = param.type.getLeafType();
+      tname = fType.skipname.replace(".", "_");
+      mname = fType.toMethodType();
+      lines.push(
+        `  ${param.type.toJNIType()} j${
+          param.name
+        } = create${mname}Array(env, ${param.name}, "${aType.toSignature(
+          base,
+        )}", create_${tname});`,
+      );
+      jparams.push(`j${param.name}`)
+    } else if (param.type.isString()) {
+      lines.push(
+        `  jstring j${param.name} = env->NewStringUTF(${param.name});`,
+      );
+      jparams.push(`j${param.name}`)
+    } else if (!param.type.isPrimitive()) {
+      tname = param.type.skipname.replace(".", "_");
+      lines.push(
+        `  jobject j${param.name} = create_${tname}(env, ${param.name});`,
+      );
+      jparams.push(`j${param.name}`)
+    } else {
+      jparams.push(param.name)
+    }
+  };
+  (jtype, mtype, cast) = signature.returnType match {
+  | Some(rt) ->
+    cast = if (rt.isArray()) {
+      `(${rt.toJNIType()})`
+    } else {
+      ""
+    };
+    (`${rt.toJNIType()} jrez = `, rt.toMethodType(), cast)
+  | _ -> ("", "Void", "")
+  };
+  lines.push(
+    `  ${jtype}${cast}env->CallStatic${mtype}Method(${jparams.join(", ")});`,
+  );
+  lines.push("  checkException(env);");
+  clear = mutable Vector<String>[];
+  result = signature.returnType.map(rt -> {
+    if (rt.isArray()) {
+      aType = rt.getArrayType();
+      fType = rt.getLeafType();
+      tname = fType.skipname.replace(".", "_");
+      mname = fType.toMethodType();
+      if (aType.isArray() && fType.isPrimitive()) {
+        lines.push(
+          `  void* skrez = toObjectArray(env, jrez, to${mname}Array);`,
+        );
+      } else if (fType.isPrimitive()) {
+        lines.push(`  void* skrez = to${mname}Array(env, jrez);`);
+      } else {
+        lines.push(`  void* skrez = toObjectArray(env, jrez, check_${tname});`);
+      };
+      "skrez"
+    } else if (rt.isString()) {
+      lines.push(`  char* tmprez = env->GetStringUTFChars(jrez, NULL);`);
+      lines.push(`  char* skrez = sk_string_create_(tmpres, strlen(tmpres));`);
+      clear.push(`  env->ReleaseStringUTFChars(jrez, tmpres);`);
+      "skrez"
+    } else if (!rt.isPrimitive()) {
+      tname = rt.skipname.replace(".", "_");
+      lines.push(`  void* skrez = check_${tname}(env, jrez);`);
+      "skrez"
+    } else {
+      "jrez"
+    }
+  });
+  checkClear = (name, type) -> {
+    if (type.isArray()) {
+      fType = type.getLeafType();
+      if (!fType.isPrimitive()) {
+        lines.push(`  clearObjectArray(env, ${name});`);
+      }
+    } else if (!type.isPrimitive()) {
+      lines.push(`  clearPointers(env, ${name});`);
+    }
+  };
+  signature.parameters.each(p -> checkClear(`j${p.name}`, p.type));
+  signature.returnType.each(rt -> checkClear(`jrez`, rt));
+  clear.each(lines.push);
+  result.map(r -> `  return ${r};`).each(lines.push);
+  lines.push("}\n")
+}
+
+fun checkFunction(name: String, className: String): Array<String> {
+  Array[
+    `void* check_${name}(JNIEnv* env, jobject object) {`,
+    `  jclass clazz = env->FindClass("${className}");`,
+    "  checkException(env);",
+    "  if (env->IsInstanceOf(object, clazz)) {",
+    "    return getPointer(env, object);",
+    "  } else {",
+    `    return copy_${name}(env, object);`,
+    "  }",
+    "}\n",
+  ]
+}
+
+fun createFunction(name: String, className: String): Array<String> {
+  Array[
+    `jobject create_${name}(JNIEnv* env, void* handle) {`,
+    `  jclass clazz = env->FindClass("${className}");`,
+    "  checkException(env);",
+    "  jmethodID constructor = env->GetMethodID(clazz, \"<init>\", \"(J)V\");",
+    "  checkException(env);",
+    "  jobject obj =",
+    "      env->NewObject(clazz, constructor, reinterpret_cast<jlong>(handle));",
+    "  checkException(env);",
+    "  return obj;",
+    "}\n",
+  ]
+}
+
+fun collectJavaCreateFunction(
+  cname: String,
+  params: Array<Java.Parameter>,
+  lines: mutable Vector<String>,
+): void {
+  cparams = params.map(p -> `${p.type.toJNIType()} ${p.name}`);
+  lines.push(
+    `jobject Java_create_${cname}(JNIEnv*${if (!cparams.isEmpty()) ", " else {
+      ""
+    }}${cparams.join(", ")}) {`,
+  );
+  clear = mutable Vector<String>[];
+  ps = params.map(p -> {
+    if (!p.type.isPrimitive()) {
+      tname = p.type.skipname.replace(".", "_");
+      var = `sk${p.name}`;
+      lines.push(`  void* ${var} = check_${tname}(env, ${p.name});`);
+      var
+    } else if (p.type.isString()) {
+      tmp = `tmp${p.name}`;
+      var = `sk${p.name}`;
+      lines.push(`  char* ${tmp} = env->GetStringUTFChars(${p.name}, NULL);`);
+      lines.push(`  char* ${var} = sk_string_create_(${tmp}, strlen(${tmp}));`);
+      clear.push(`  env->ReleaseStringUTFChars(${p.name}, ${tmp});`);
+      var
+    } else {
+      p.name
+    }
+  });
+  if (clear.isEmpty()) {
+    lines.push(
+      `  return create_${cname}(env, SKIP_create_${cname}(${ps.join(", ")}));`,
+    );
+  } else {
+    lines.push(
+      `  jobject result = create_${cname}(env, SKIP_create_${cname}(${ps.join(
+        ", ",
+      )}));`,
+    );
+    clear.each(lines.push);
+    lines.push("  return result;");
+  };
+  lines.push("}\n");
+}
+
+fun collectJavaGetter(
+  cname: String,
+  p: Java.Parameter,
+  lines: mutable Vector<String>,
+): void {
+  jniType = p.type.toJNIType();
+  name = p.name.uppercaseFirst();
+  lines.push(
+    `${jniType} Java_${cname}__get${name}(JNIEnv* env, jobject object) {`,
+  );
+  if (p.type.isArray()) {
+    aType = p.type.getArrayType();
+    fType = p.type.getLeafType();
+    tname = fType.skipname.replace(".", "_");
+    mname = fType.toMethodType();
+    if (aType.isArray() && fType.isPrimitive()) {
+      lines.push(`  return toObjectArray(env, jrez, to${mname}Array);`);
+    } else if (fType.isPrimitive()) {
+      lines.push(`  return to${mname}Array(env, jrez);`);
+    } else {
+      lines.push(`  return toObjectArray(env, jrez, check_${tname});`);
+    }
+  } else if (p.type.isString()) {
+    lines.push(
+      `  return env->NewStringUTF(SKIP_${cname}__get${name}(getPointer(env, object)));`,
+    )
+  } else if (p.type.isPrimitive()) {
+    lines.push(`  return SKIP_${cname}__get${name}(getPointer(env, object));`)
+  } else {
+    tname = p.type.skipname.replace(".", "_");
+    lines.push(
+      `  return create_${tname}(env, SKIP_${cname}__get${name}(getPointer(env, object)));`,
+    )
+  };
+  lines.push("}\n");
+}
+
+fun collectCreateObject(
+  def: Java.Class_,
+  params: Array<Java.Parameter>,
+  base: Array<String>,
+  lines: mutable Vector<String>,
+): void {
+  cname = def.skipname.replace(".", "_");
+  className = def.getName(base, "/");
+  checkFunction(cname, className).each(lines.push);
+  createFunction(cname, className).each(lines.push);
+  collectCopyFunction(cname, params, base, lines);
+  collectJavaCreateFunction(cname, params, lines);
+  params.each(p -> collectJavaGetter(cname, p, lines));
+}
+
+fun loadJVM(jc: Config, jniInits: readonly Vector<String>): Array<String> {
+  lines = mutable Vector[
+    "void SKIP_loadJVM(const char* classpath, bool verboseClass, bool verbodeJNI) {",
+    "  if (vm != nullptr || env != nullptr) {",
+    "    SKIP_throwJVMAlreadyLoaded();",
+    "  }",
+    "  jint idx = 1;",
+    "  jint nb = idx + (verboseClass ? 1 : 0) + (verbodeJNI ? 1 : 0);",
+    "  JavaVMOption options[nb];",
+    "  JavaVMInitArgs vm_args;",
+    "  vm_args.version = JNI_VERSION_1_8;",
+    `  options[0].optionString = const_cast<char*>(classpath);`,
+    "  if (verboseClass) {",
+    "    options[idx++].optionString = const_cast<char*>(\"-verbose:class\");",
+    "  }",
+    "  if (verbodeJNI) {",
+    "    options[idx++].optionString = const_cast<char*>(\"-verbose:jni\");",
+    "  }",
+    "  vm_args.options = options;",
+    "  vm_args.nOptions = nb;",
+    "  jint res = JNI_CreateJavaVM(&vm, (void**)&env, &vm_args);",
+    "  if (res != JNI_OK) {",
+    "    SKIP_throwUnableToLoadJVM();",
+    "  }",
+    `  jclass loaderClass = env->FindClass(\"${jc
+      .getLoaderClass()
+      .join("/")}\");`,
+    "  checkException(env);",
+    "  jmethodID methodID =",
+    "      env->GetStaticMethodID(loaderClass, \"load\", \"(Ljava/lang/String;)V\");",
+    "  checkException(env);",
+    "  env->CallStaticVoidMethod(loaderClass, methodID,",
+    `                            env->NewStringUTF(\"${jc.libname}\"));`,
+    "  checkException(env);",
+  ];
+  jniInits.each(lines.push);
+  lines.push("}\n");
+  lines.toArray()
+}
+
+module end;

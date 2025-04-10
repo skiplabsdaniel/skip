@@ -1,0 +1,898 @@
+module Java;
+
+base class Visibility uses Show {
+  children =
+  | Public()
+  | Protected()
+  | Private()
+
+  fun toString(): String
+  | Public _ -> "public"
+  | Protected _ -> "protected"
+  | Private _ -> "private"
+}
+
+base class Named{name: String}
+base class Typed{type: Type}
+base class Observable{visibility: Visibility = Public()}
+base class Staticable{static_: Bool = false}
+
+class Field{
+  final_: Bool = false,
+  attributes: Array<String> = Array[],
+  value: ?Expression = None(),
+} extends Named, Typed, Observable, Staticable {
+  //
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String,
+  ): Result<void, Exception> {
+    for (attribute in this.attributes) {
+      printer(`${tab}${attribute}\n`)?;
+    };
+    printer(tab)?;
+    printer(this.visibility.toString())?;
+    printer(" ")?;
+    if (this.final_) {
+      printer("final ")?
+    };
+    if (this.static_) {
+      printer("static ")?
+    };
+    this.type.print(printer, relative, base)?;
+    printer(" ")?;
+    printer(this.name)?;
+    this.value match {
+    | Some(value) ->
+      printer(" = ")?;
+      value.print(printer, relative, base)?
+    | _ -> void
+    };
+    printer(";")
+  }
+
+  fun toGetter(attributes: Array<String> = Array[]): Signature {
+    Signature{
+      attributes,
+      name => `get${this.name.uppercaseFirst()}`,
+      returnType => Some(this.type),
+      static_ => false,
+    }
+  }
+
+  fun ptrName(): String {
+    `skPtrGet${this.name.uppercaseFirst()}`
+  }
+
+  fun toPtrField(): Field {
+    Field{
+      name => this.ptrName(),
+      type => Type::long(),
+      visibility => this.visibility,
+    }
+  }
+
+  fun sub(p: Array<String>): Field {
+    !this.type = this.type.sub(p);
+    this
+  }
+
+  fun toParameter(): Parameter {
+    Parameter{name => this.name, type => this.type}
+  }
+}
+
+class Parameter extends Named, Typed {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+  ): Result<void, Exception> {
+    this.type.print(printer, relative, base)?;
+    printer(` ${this.name}`);
+  }
+}
+
+base class SignatureBase{
+  parameters: Array<Parameter> = Array[],
+  typeParameters: Array<Type> = Array[],
+  attributes: Array<String> = Array[],
+} extends Named, Observable {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String,
+  ): Result<void, Exception>;
+}
+
+class Signature{
+  native_: Bool = false,
+  returnType: ?Type = None(),
+  owner: ?Type = None(),
+} extends Staticable, SignatureBase {
+  //
+  fun getName(base: Array<String> = Array[]): String {
+    prefix = this.owner match {
+    | Some(owner) -> `${owner.getName(base)}.`
+    | None() -> ""
+    };
+    `${prefix}${this.name}`
+  }
+
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String,
+  ): Result<void, Exception> {
+    for (attribute in this.attributes) {
+      printer(`${tab}${attribute}\n`)?;
+    };
+    printer(tab)?;
+    printer(this.visibility.toString())?;
+    if (this.static_) {
+      printer(" static")?
+    };
+    if (this.native_) {
+      printer(" native")?
+    };
+    printer(" ")?;
+    this.returnType match {
+    | Some(type) -> type.print(printer, relative, base)?
+    | _ -> printer("void")?
+    };
+    printer(` ${this.name}`)?;
+    tpsize = this.typeParameters.size();
+    for (i in Range(0, tpsize)) {
+      if (i == 0) {
+        printer("<")?
+      };
+      this.typeParameters[i].print(printer, relative, base)?;
+      if (i == tpsize - 1) {
+        printer(">")?
+      } else {
+        printer(", ")?
+      }
+    };
+    printer("(")?;
+    tsize = this.parameters.size();
+    for (i in Range(0, tsize)) {
+      this.parameters[i].print(printer, relative, base)?;
+      if (i < tsize - 1) {
+        printer(", ")?
+      }
+    };
+    printer(")")
+  }
+
+  fun toString(base: Array<String>): String {
+    rt = this.returnType match {
+    | Some(rt) -> rt.toSignature(base)
+    | _ -> "V"
+    };
+    `(${this.parameters.map(p -> p.type.toSignature(base)).join("")})${rt}`
+  }
+}
+
+class Constructor extends SignatureBase {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String,
+  ): Result<void, Exception> {
+    for (attribute in this.attributes) {
+      printer(`${tab}${attribute}\n`)?
+    };
+    printer(tab)?;
+    printer(this.visibility.toString())?;
+    printer(` ${this.name}`)?;
+    tpsize = this.typeParameters.size();
+    for (i in Range(0, tpsize)) {
+      if (i == 0) {
+        printer("<")?;
+      };
+      this.typeParameters[i].print(printer, relative, base)?;
+      if (i == tpsize - 1) {
+        printer(">")?
+      } else {
+        printer(", ")?
+      }
+    };
+    printer("(")?;
+    tsize = this.parameters.size();
+    for (i in Range(0, tsize)) {
+      this.parameters[i].print(printer, relative, base)?;
+      if (i < tsize - 1) {
+        printer(", ")?
+      }
+    };
+    printer(")")
+  }
+}
+
+class Block{
+  equations: Array<Equation> = Array[],
+  return_: ?Expression = None(),
+} {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String = "  ",
+  ): Result<void, Exception> {
+    for (e in this.equations) {
+      e.print(printer, relative, base, tab)?;
+      printer("\n")?
+    };
+
+    this.return_ match {
+    | Some(return_) ->
+      printer(`${tab}return `)?;
+      return_.print(printer, relative, base)?;
+      printer(";\n")
+    | _ -> Success(void)
+    }
+  }
+}
+
+class Method{signature: SignatureBase, body: Block} {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String,
+  ): Result<void, Exception> {
+    this.signature.print(printer, relative, base, tab)?;
+    printer(" {\n")?;
+    this.body.print(printer, relative, base, `${tab}  `)?;
+    printer(`${tab}}`)
+  }
+}
+
+base class ClassBase{
+  fields: Array<Field> = Array[],
+  package: Array<String> = Array[],
+  imports: SortedSet<String> = SortedSet[],
+  types: Array<Type> = Array[],
+  methods: Array<Method> = Array[],
+  signatures: Array<Signature> = Array[],
+  skipname: String,
+} extends Named, Observable {
+  //
+  fun getPackageName(base: Array<String> = Array[], sep: String = "."): String {
+    base.concat(this.package).join(sep)
+  }
+
+  fun getName(base: Array<String> = Array[], sep: String = "."): String {
+    `${this.getPackageName(base, sep)}${sep}${this.name}`
+  }
+
+  fun toType(): Type {
+    Java.Type{
+      name => this.name,
+      package => Some(PackageInfo(this.package)),
+      types => this.types,
+      skipname => this.skipname,
+    }
+  }
+
+  fun withMethod(method: Method): this {
+    !this.methods = this.methods.concat(Array[method]);
+    this
+  }
+
+  fun printHeader(
+    name: String,
+    printer: String -> Result<void, Exception>,
+    base: Array<String>,
+  ): Result<void, Exception> {
+    package = base.concat(this.package);
+    if (!package.isEmpty()) {
+      printer(`package ${package.join(".")};\n\n`)?
+    };
+    if (!this.imports.isEmpty()) {
+      for (import in this.imports) {
+        printer(`import ${import};\n`)?;
+        printer("\n")?
+      }
+    };
+    printer(`${this.visibility} ${name} ${this.name}`)?;
+    tsize = this.types.size();
+    for (i in Range(0, tsize)) {
+      if (i == 0) {
+        printer("<")?
+      };
+      this.types[i].print(printer, this.package, base)?;
+      if (i == tsize - 1) {
+        printer(">")?
+      } else {
+        printer(", ")?
+      }
+    };
+    Success(void)
+  }
+
+  fun print(
+    printer: String -> Result<void, Exception>,
+    base: Array<String>,
+  ): Result<void, Exception>;
+}
+
+class Class_{
+  implements: Array<Type> = Array[],
+  static_: Array<Expression> = Array[],
+  extends_: ?Type = None(),
+} extends ClassBase {
+  //
+  fun print(
+    printer: String -> Result<void, Exception>,
+    base: Array<String>,
+  ): Result<void, Exception> {
+    this.printHeader("class", printer, base)?;
+    relative = this.package;
+    isize = this.implements.size();
+    for (i in Range(0, isize)) {
+      if (i == 0) {
+        printer("\n  implements ")?
+      };
+      this.implements[i].print(printer, relative, base)?;
+      if (i < isize - 1) {
+        printer(", ")?
+      }
+    };
+
+    this.extends_ match {
+    | Some(e) ->
+      printer("\n  extends ")?;
+      e.print(printer, relative, base)?
+    | _ -> void
+    };
+    printer(" {\n")?;
+    fsize = this.fields.size();
+    msize = this.methods.size();
+    ssize = this.signatures.size();
+    if (fsize + msize + ssize > 0) printer("\n")?;
+    for (field in this.fields) {
+      field.print(printer, relative, base, "  ")?;
+      printer("\n")?
+    };
+    for (method in this.methods) {
+      if (fsize > 0) printer("\n")?;
+      method.print(printer, relative, base, "  ")?;
+      printer("\n")?
+    };
+    for (signature in this.signatures) {
+      printer(`\n`)?;
+      signature.print(printer, relative, base, "  ")?;
+      printer(";\n")?
+    };
+    if (fsize + msize + ssize > 0) printer("\n")?;
+    printer("}")
+  }
+}
+
+class Interface{extends_: Array<Type> = Array[]} extends ClassBase {
+  //
+  fun print(
+    printer: String -> Result<void, Exception>,
+    base: Array<String>,
+  ): Result<void, Exception> {
+    this.printHeader("interface", printer, base)?;
+    relative = this.package;
+    esize = this.extends_.size();
+    for (i in Range(0, esize)) {
+      if (i == 0) {
+        printer(`\n  extends `)?
+      };
+      this.extends_[i].print(printer, relative, base)?;
+      if (i < esize - 1) {
+        printer(", ")?
+      }
+    };
+    printer(" {")?;
+    fsize = this.methods.size();
+    msize = this.methods.size();
+    ssize = this.signatures.size();
+    if (fsize + msize + ssize > 0) printer("\n")?;
+    for (method in this.methods) {
+      printer("\n")?;
+      method.print(printer, relative, base, "  ")?;
+      printer("\n")?
+    };
+    for (field in this.fields) {
+      printer("\n")?;
+      field.toGetter().print(printer, relative, base, "  ")?;
+      printer(";\n")?
+    };
+    for (signature in this.signatures) {
+      printer(`\n`)?;
+      signature.print(printer, relative, base, "  ")?;
+      printer(";\n")?
+    };
+    if (msize + ssize > 0) printer("\n")?;
+    printer(`}`)
+  }
+}
+
+class PackageInfo(package: Array<String>, absolute: Bool = false) {
+  fun sub(p: Array<String>): PackageInfo {
+    !this.package = this.package.concat(p);
+    this
+  }
+}
+
+fun stringPrinter(): (String -> Result<void, Exception>, () -> String) {
+  buffer = mutable Vector[];
+  (
+    str -> {
+      buffer.push(str);
+      Success(void)
+    },
+    () -> buffer.join(""),
+  )
+}
+
+class Type{
+  skipname: String,
+  types: Array<Type> = Array[],
+  package: ?PackageInfo = None(),
+} extends Named {
+  //
+  static fun long(): Type {
+    Type{name => "long", skipname => "Int"}
+  }
+
+  fun getName(base: Array<String> = Array[]): String {
+    buffer = stringPrinter();
+    this.print(buffer.i0, Array[], base).fromSuccess();
+    buffer.i1()
+  }
+
+  fun sub(p: Array<String>): Type {
+    !this.package = this.package match {
+    | Some(package) -> Some(package.sub(p))
+    | _ -> None()
+    };
+    this
+  }
+
+  fun isPrimitive(): Bool {
+    this.package.isNone()
+  }
+
+  fun isValuePrimitive(): Bool {
+    this.isPrimitive() && !this.isString() && !this.isArray()
+  }
+
+  fun isString(): Bool {
+    this.isPrimitive() && this.name == "String"
+  }
+
+  fun isArray(): Bool {
+    this.isPrimitive() && this.name == "[]"
+  }
+
+  fun getArrayType(): Type {
+    invariant(this.types.size() == 1, "Array must have one type parameter");
+    this.types[0]
+  }
+
+  fun getLeafType(): Type {
+    type = this;
+    while (type.isArray()) {
+      !type = this.getArrayType()
+    };
+    type
+  }
+
+  fun toJNIType(): String {
+    if (this.isArray()) {
+      invariant(this.types.size() == 1, "Array must have one type parameter");
+      if (this.types[0].isValuePrimitive()) {
+        `j${this.name.lowercase()}Array`
+      } else {
+        "jobjectArray"
+      }
+    } else if (this.isPrimitive()) {
+      `j${this.name.lowercase()}`
+    } else {
+      "jobject"
+    }
+  }
+
+  fun toMethodType(): String {
+    if (this.isPrimitive() && !this.isArray()) {
+      this.name.uppercaseFirst()
+    } else {
+      "Object"
+    }
+  }
+
+  fun toCType(): String {
+    if (this.isArray()) {
+      "void*"
+    } else if (this.isString()) {
+      "char*"
+    } else if (this.isPrimitive()) {
+      this.toJNIType()
+    } else {
+      "void*"
+    }
+  }
+
+  fun toSignature(base: Array<String>): String {
+    if (this.isPrimitive()) {
+      this.name match {
+      | "long" -> "J"
+      | "int" -> "I"
+      | "short" -> "S"
+      | "float" -> "F"
+      | "double" -> "D"
+      | "boolean" -> "Z"
+      | "String" -> "Ljava/lang/String;"
+      | "[]" ->
+        invariant(this.types.size() == 1, "Array must have one type parameter");
+        `[${this.types[0].toSignature(base)}`
+      | _ -> invariant_violation("Unknonw Java primitive type.")
+      }
+    } else {
+      tmp = mutable Vector[];
+      pushElement: Array<String> -> void = (elems) -> {
+        for (e in elems) {
+          tmp.push(e);
+          tmp.push("/")
+        }
+      };
+      this.package match {
+      | Some(p) ->
+        if (p.absolute) {
+          pushElement(p.package)
+        } else {
+          pushElement(base);
+          pushElement(p.package)
+        }
+      | _ -> void
+      };
+      tmp.push(this.name);
+      `L${tmp.join("")};`
+    }
+  }
+
+  fun toSkipType(): String {
+    buffer = mutable Vector[];
+    this.printSkiplang(buffer.push);
+    buffer.join("");
+  }
+
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+  ): Result<void, Exception> {
+    printElements: Array<String> -> Result<void, Exception> = (elems) -> {
+      for (e in elems) {
+        printer(e)?;
+        printer(".")?
+      };
+      Success(void)
+    };
+    this.package match {
+    | Some(p) ->
+      if (p.absolute) {
+        printElements(p.package)?
+      } else if (p.package != relative) {
+        printElements(base)?;
+        printElements(p.package)?
+      }
+    | _ -> void
+    };
+    printer(this.name)?;
+    tsize = this.types.size();
+    for (i in Range(0, tsize)) {
+      if (i == 0) {
+        printer("<")?
+      };
+      this.types[i].print(printer, relative, base)?;
+      if (i == tsize - 1) {
+        printer(">")?
+      } else {
+        printer(", ")?
+      }
+    };
+    Success(void)
+  }
+
+  private fun printSkiplang(printer: String -> void): void {
+    printer(this.skipname);
+    tsize = this.types.size();
+    for (i in Range(0, tsize)) {
+      if (i == 0) {
+        printer("<")
+      };
+      this.types[i].printSkiplang(printer);
+      if (i == tsize - 1) {
+        printer(">")
+      } else {
+        printer(", ")
+      }
+    }
+  }
+}
+
+fun not(expr: Expression): Expression {
+  UnarityOp("!", expr);
+}
+
+fun binaryOp(op: String, first: Expression, second: Expression): Expression {
+  NArityOp(op, Array[first, second])
+}
+
+fun and(first: Expression, second: Expression): Expression {
+  binaryOp("&&", first, second);
+}
+
+fun or(first: Expression, second: Expression): Expression {
+  binaryOp("||", first, second);
+}
+
+fun equals(first: Expression, second: Expression): Expression {
+  binaryOp("==", first, second);
+}
+
+fun nEquals(first: Expression, second: Expression): Expression {
+  binaryOp("!=", first, second);
+}
+
+base class Expression {
+  children =
+  | UnarityOp(op: String, expr: Expression)
+  | NArityOp(op: String, exprs: Array<Expression>)
+  | Call(var: Expression, fn: String, exprs: Array<Expression>)
+  | StaticCall(type: Type, fn: String, exprs: Array<Expression>)
+  | Literal(value: String)
+  | Access(var: String, field: String)
+  | IfThenElse(condition: Expression, then: Expression, else_: Expression)
+  | Create(name: String, type: Type)
+  | InstanceOf(expr: Expression, type: Type)
+
+  protected fun needParent(): Bool
+  | NArityOp _ -> true
+  | IfThenElse _ -> true
+  | InstanceOf _ -> true
+  | _ -> false
+
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+  ): Result<void, Exception>
+  | UnarityOp(op, expr) ->
+    printer(op)?;
+    strE = expr.toString(relative, base);
+    printer(
+      if (expr.needParent()) `(${strE})` else {
+        strE
+      },
+    )
+  | NArityOp(op, exprs) ->
+    printer(
+      exprs
+        .map(e -> {
+          strE = e.toString(relative, base);
+          if (e.needParent()) `(${strE})` else {
+            strE
+          }
+        })
+        .join(` ${op} `),
+    )
+  | Call(var, fn, exprs) ->
+    var.print(printer, relative, base)?;
+    printer(`.${fn}(${exprs.map(e -> e.toString(relative, base)).join(", ")})`)
+  | StaticCall(type, fn, exprs) ->
+    type.print(printer, relative, base)?;
+    printer(`.${fn}(${exprs.map(e -> e.toString(relative, base)).join(", ")})`)
+  | Literal(value) -> printer(value)
+  | Access(var, field) -> printer(`${var}.${field}`)
+  | IfThenElse(condition, then, else_) ->
+    strCondition = condition.toString(relative, base);
+    if (condition.needParent()) {
+      !strCondition = `(${strCondition})`
+    };
+    strThen = then.toString(relative, base);
+    if (then.needParent()) {
+      !strThen = `(${strThen})`
+    };
+    strElse = else_.toString(relative, base);
+    if (else_.needParent()) {
+      !strElse = `(${strElse})`
+    };
+    printer(`${strCondition} ? ${strThen} : ${strElse}`)
+  | Create(name, type) ->
+    type.print(printer, relative, base)?;
+    printer(` ${name}`)
+  | InstanceOf(expr, type) ->
+    expr.print(printer, relative, base)?;
+    printer(" instanceof ")?;
+    type.print(printer, relative, base)
+
+  fun toString(
+    relative: Array<String> = Array[],
+    base: Array<String> = Array[],
+  ): String {
+    buffer = stringPrinter();
+    this.print(buffer.i0, relative, base).fromSuccess();
+    buffer.i1()
+  }
+}
+
+base class Equation {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String = " ",
+  ): Result<void, Exception>;
+}
+
+class LeftRigth{
+  left: ?Expression = None(),
+  right: Expression,
+} extends Equation {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String = " ",
+  ): Result<void, Exception> {
+    printer(tab)?;
+    this.left match {
+    | Some(left) ->
+      left.print(printer, relative, base)?;
+      printer(" = ")?
+    | _ -> void
+    };
+    this.right.print(printer, relative, base)?;
+    printer(";")
+  }
+}
+
+class Branch{condition: Expression, body: Block} {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String,
+    first: Bool,
+  ): Result<void, Exception> {
+    printer(
+      `${tab}${if (first) "" else " else "}if (${this.condition.toString(
+        relative,
+        base,
+      )}) {\n`,
+    )?;
+    this.body.print(printer, relative, base, `  ${tab}`)?;
+    printer(`${tab}}`)
+  }
+}
+
+class Decision{
+  branches: Array<Branch>,
+  else_: ?Block = None(),
+} extends Equation {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String = " ",
+  ): Result<void, Exception> {
+    first = true;
+    for (branch in this.branches) {
+      branch.print(printer, relative, base, tab, first)?;
+      !first = false;
+    };
+    this.else_ match {
+    | Some(e) ->
+      printer(` else {`)?;
+      e.print(printer, relative, base, tab)?;
+      printer(`${tab}}`)
+    | _ -> Success(void)
+    }
+  }
+}
+
+class Assert(expression: Expression) extends Equation {
+  fun print(
+    printer: String -> Result<void, Exception>,
+    relative: Array<String>,
+    base: Array<String>,
+    tab: String = " ",
+  ): Result<void, Exception> {
+    printer(`${tab}assert `)?;
+    this.expression.print(printer, relative, base)?;
+    printer(";")
+  }
+}
+
+class Package{elements: Array<ClassBase>} extends Named {
+  fun save(path: String, base: Array<String>): Result<void, Exception> {
+    sep = Path.separator;
+    targetDir = Path.join(path, Path.join("java", base.join(sep)));
+    for (e in this.elements) {
+      packageDir = Path.join(targetDir, e.package.join(sep));
+      Generator.checkDir(packageDir);
+      filePath = Path.join(packageDir, `${e.name}.java`);
+      javaFile = IO.File::open(
+        filePath,
+        IO.OpenOptions{write => true, create => true, truncate => true},
+      );
+      res = e.print(str -> javaFile.write_all(str.bytes()), base);
+      javaFile.close();
+      res?
+    };
+    Success(void)
+  }
+}
+
+fun loaderCode(name: String): Array<String> {
+  Array[
+    "import java.io.File;",
+    "import java.io.FileOutputStream;",
+    "import java.io.IOException;",
+    "import java.nio.channels.Channels;",
+    "import java.nio.channels.FileChannel;",
+    "import java.nio.channels.ReadableByteChannel;",
+    "",
+    `public class ${name} {`,
+    "",
+    "    public static void load(String name) {",
+    "        try {",
+    "            try {",
+    "                System.loadLibrary(name);",
+    "            } catch (UnsatisfiedLinkError e) {",
+    "                String filename = System.mapLibraryName(name);",
+    "                int pos = filename.lastIndexOf('.');",
+    "                File file = File.createTempFile(filename.substring(0, pos), filename.substring(pos));",
+    "                file.deleteOnExit();",
+    "                try (",
+    `                  final ReadableByteChannel src = Channels.newChannel(${name}.class.getClassLoader().getResourceAsStream(filename));`,
+    "                  final FileChannel dst = new FileOutputStream(file).getChannel())",
+    "                {",
+    "                    dst.transferFrom(src, 0, Long.MAX_VALUE);",
+    "                }",
+    "                System.load(file.getAbsolutePath());",
+    "            }",
+    "        } catch (IOException e) {",
+    "            throw new RuntimeException(e);",
+    "        }",
+    "    }",
+    "}",
+  ]
+}
+
+fun writeLoader(jc: Config): Result<void, Exception> {
+  sep = Path.separator;
+  targetDir = Path.join(jc.sources, Path.join("java", jc.package.join(sep)));
+  fileName = Path.join(targetDir, `${jc.loader}.java`);
+  if (!FileSystem.exists(fileName)) {
+    javaFile = IO.File::open(
+      fileName,
+      IO.OpenOptions{write => true, create => true, truncate => true},
+    );
+    res = Generator.write(
+      javaFile,
+      Array[
+        Array[`package ${jc.package.join(".")};`, ""],
+        loaderCode(jc.loader),
+      ],
+    );
+    javaFile.close();
+    res?
+  };
+  Success(void)
+}
+
+module end;

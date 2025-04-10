@@ -4,10 +4,11 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+module SKC;
 
-fun main(): void {
-  results = Cli.Command("skc")
-    .about("Skip compiler")
+fun command(name: String, about: String): Cli.Command {
+  Cli.Command(name)
+    .about(about)
     .help()
     .arg(Cli.Arg::bool("disasm-all"))
     .arg(Cli.Arg::bool("disasm-annotated"))
@@ -88,8 +89,12 @@ fun main(): void {
       ),
     )
     .arg(Cli.Arg::string("files").positional().repeatable())
-    .parseArgs();
+}
 
+module end;
+
+fun main(): void {
+  results = SKC.command("skc", "Skip compiler").parseArgs();
   results.error match {
   | Some(exn) ->
     print_error_ln(exn.getMessage().trim());

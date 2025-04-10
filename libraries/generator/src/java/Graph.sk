@@ -1,0 +1,861 @@
+module Java;
+
+const kTypesPackage: Array<String> = Array["types"];
+
+class ClassFile(value: SkipTypedAst.Class_def) extends SKStore.File
+
+base class Def(parameters: Array<Parameter>) extends SKStore.File {
+  children =
+  | InterfaceDef(value: Interface)
+  | ClassDef(value: Class_)
+
+  fun getName(): String
+  | InterfaceDef(i, _) -> i.name
+  | ClassDef(c, _) -> c.name
+
+  fun getPackageName(base: Array<String> = Array[], sep: String = "."): String
+  | InterfaceDef(i, _) -> i.getPackageName(base, sep)
+  | ClassDef(c, _) -> c.getPackageName(base, sep)
+
+  fun getClassBase(): ClassBase
+  | InterfaceDef(i, _) -> i
+  | ClassDef(c, _) -> c
+}
+
+class FunctionDef(value: Signature, name: String) extends SKStore.File
+
+class PackageDef(package: Package, context: Config) extends SKStore.File {
+  fun save(): Result<void, Exception> {
+    this.package.save(this.context.sources, this.context.package)
+  }
+}
+
+fun convDefType(file: SKStore.File): Def {
+  file match {
+  | x @ Def _ -> x
+  | _ -> invariant_violation("Must be a JavaGenerator.Def")
+  }
+}
+
+fun javaDefMap<T: Def>(
+  _context: mutable SKStore.Context,
+  writer: mutable SKStore.TWriter<SKStore.SID, Def>,
+  key: SKStore.SID,
+  it: mutable SKStore.NonEmptyIterator<T>,
+): void {
+  writer.setArray(key, Array[it.first]);
+}
+
+fun identityMap<K: SKStore.Key, V: SKStore.File>(
+  _context: mutable SKStore.Context,
+  writer: mutable SKStore.TWriter<K, V>,
+  key: K,
+  it: mutable SKStore.NonEmptyIterator<V>,
+): void {
+  writer.setArray(key, Array::createFromIterator(it.values())); // TODO: use it.toArray()
+}
+
+const kDirName: SKStore.DirName = SKStore.DirName::create("/java/");
+const kJavaContextDirName: SKStore.DirName = kDirName.sub("context");
+
+const kDir: SKStore.EHandle<SKStore.SID, SkipTyping.DefFile> = SKStore.EHandle(
+  SKStore.SID::keyType,
+  SkipTyping.DefFile::type,
+  kDirName,
+);
+
+const kJavaContextDir: SKStore.EHandle<SKStore.IID, Config> = SKStore.EHandle(
+  SKStore.IID::keyType,
+  Config::type,
+  kJavaContextDirName,
+);
+
+const kJavaPackagesDir: SKStore.EHandle<
+  SKStore.SID,
+  PackageDef,
+> = SKStore.EHandle(
+  SKStore.SID::keyType,
+  PackageDef::type,
+  kDirName.sub("packages"),
+);
+
+const kDefinitionsDir: SKStore.EHandle<SKStore.SID, Def> = SKStore.EHandle(
+  SKStore.SID::keyType,
+  convDefType,
+  kDirName.sub("all/defs"),
+);
+
+const kFunctionDefsDir: SKStore.EHandle<
+  SKStore.SID,
+  FunctionDef,
+> = SKStore.EHandle(
+  SKStore.SID::keyType,
+  FunctionDef::type,
+  kDirName.sub("functions"),
+);
+
+const kJavaProxiesDir: SKStore.EHandle<SKStore.SID, ClassDef> = SKStore.EHandle(
+  SKStore.SID::keyType,
+  ClassDef::type,
+  kDirName.sub("proxies"),
+);
+
+const kAnnotation: String = "@java";
+const kAnnotationSize: Int = kAnnotation.chars().size();
+
+fun isAnnotation(ann: String, name: String): Bool {
+  ann == name || ann.startsWith(`${name}(`);
+}
+
+fun supplier(): Generator.Supplier {
+  Generator.Supplier(
+    Array[
+      Cli.Arg::string("java-package")
+        .short("jpck")
+        .default("io.skiplabs")
+        .value_name("PACKAGE")
+        .about("The generated package target"),
+      Cli.Arg::string("java-dir")
+        .short("jd")
+        .default("target/java")
+        .value_name("PATH")
+        .about("Directory for all generated artifacts"),
+      Cli.Arg::string("java-output")
+        .short("jo")
+        .value_name("PATH")
+        .about("Copy final artifacts to this directory"),
+      Cli.Arg::string("java-loader")
+        .default("SkLoader")
+        .value_name("NAME")
+        .about("The name of generated loader class"),
+      Cli.Arg::string("java-libname")
+        .default("skiplinks")
+        .value_name("NAME")
+        .about("The name of generated jni loadabled librairy"),
+    ],
+    init,
+    update,
+    updated,
+  )
+}
+
+fun init(context: mutable SKStore.Context): void {
+  jctx = context.mkdir(SKStore.IID::keyType, Config::type, kJavaContextDirName);
+  exported = SkipTyping.dir.map(
+    SKStore.SID::keyType,
+    SkipTyping.DefFile::type,
+    context,
+    kDirName,
+    (_context, writer, key, values) ~> {
+      def = values.first;
+      anns = annotations(def);
+      if (!anns.filter(a -> isAnnotation(a, kAnnotation)).isEmpty()) {
+        writer.set(key, def);
+      }
+    },
+  );
+  collected = exported.map(
+    SKStore.SID::keyType,
+    ClassFile::type,
+    context,
+    kDirName.sub("collect"),
+    (context, writer, key, values) ~> {
+      def = values.first;
+      collect(context, key, def.value, writer)
+    },
+  );
+  _ = exported.map(
+    SKStore.SID::keyType,
+    FunctionDef::type,
+    context,
+    kFunctionDefsDir.dirName,
+    (context, writer, _key, values) ~> {
+      values.first.value match {
+      | SkipTypedAst.DFun(funDef) ->
+        (signature, name) = toJavaSignature(
+          sid -> SkipTyping.dir.maybeGet(context, sid),
+          funDef,
+        );
+        writer.set(
+          SKStore.SID(signature.getName()),
+          FunctionDef(signature, name),
+        )
+      | SkipTypedAst.DClass _
+      | SkipTypedAst.DConst _ ->
+        void
+      }
+    },
+  );
+  inferfaces = collected.map(
+    SKStore.SID::keyType,
+    InterfaceDef::type,
+    context,
+    kDirName.sub("types"),
+    (context, writer, _key, values) ~> {
+      toJavaType(
+        sid -> SkipTyping.dir.maybeGet(context, sid),
+        values.first.value,
+      ).each(i ->
+        writer.set(SKStore.SID(i.i0.getName()), InterfaceDef(i.i0, i.i1))
+      )
+    },
+  );
+  proxies = inferfaces.map(
+    SKStore.SID::keyType,
+    ClassDef::type,
+    context,
+    kJavaProxiesDir.dirName,
+    (context, writer, _, values) ~> {
+      toJavaProxy(
+        name ->
+          inferfaces.maybeGet(context, SKStore.SID(name)).map(v -> v.value),
+        values.first.value,
+      ).each(c -> {
+        writer.set(
+          SKStore.SID(c.getName()),
+          ClassDef(c, values.first.parameters),
+        )
+      })
+    },
+  );
+  idefs = inferfaces.map(
+    SKStore.SID::keyType,
+    convDefType,
+    context,
+    kDirName.sub("types/defs"),
+    javaDefMap,
+  );
+  iproxies = proxies.map(
+    SKStore.SID::keyType,
+    convDefType,
+    context,
+    kDirName.sub("proxies/defs"),
+    javaDefMap,
+  );
+  _ = SKStore.EHandle::multiMap(
+    SKStore.SID::keyType,
+    convDefType,
+    context,
+    Array[(idefs, (identityMap, None())), (iproxies, (identityMap, None()))],
+    kDefinitionsDir.dirName,
+  )
+    .map(
+      SKStore.SID::keyType,
+      convDefType,
+      context,
+      kDirName.sub("packages/defs"),
+      (_, writer, _, values) ~> {
+        writer.set(SKStore.SID(values.first.getPackageName()), values.first);
+      },
+    )
+    .map(
+      SKStore.SID::keyType,
+      PackageDef::type,
+      context,
+      kJavaPackagesDir.dirName,
+      (context, writer, key, values) ~> {
+        aValues = values.toArray();
+        javaContext = jctx.get(context, SKStore.IID(0)).minimal();
+        writer.set(
+          key,
+          PackageDef(
+            Package{
+              elements => aValues.map(v -> v.getClassBase()),
+              name => key.value,
+            },
+            javaContext,
+          ),
+        );
+      },
+    )
+}
+
+fun update(
+  context: mutable SKStore.Context,
+  config: Config.Config,
+  results: Cli.ParseResults,
+): void {
+  kJavaContextDir.writeArray(
+    context,
+    SKStore.IID(0),
+    Array[Config::create(config, results)],
+  );
+}
+
+fun updated(
+  context: mutable SKStore.Context,
+  start: SKStore.Tick,
+): Result<void, Exception> {
+  context.unsafeMaybeGetDir(kJavaPackagesDir.dirName) match {
+  | Some(dir @ SKStore.EagerDir _) ->
+    (_, changedKeys) = dir.getChangesAfter(start);
+    for (key in changedKeys) {
+      values = dir.getArrayRaw(key).map(PackageDef::type);
+      for (def in values) {
+        def.save()?
+      }
+    }
+  | _ -> void
+  };
+  if (kJavaPackagesDir.size(context) > 0) {
+    kJavaContextDir.maybeGet(context, SKStore.IID(0)) match {
+    | Some(jc) ->
+      sep = Path.separator;
+      targetDir = Path.join(
+        jc.sources,
+        Path.join("java", jc.package.join(sep)),
+      );
+      fileName = Path.join(targetDir, `${jc.loader}.java`);
+      if (!FileSystem.exists(fileName)) {
+        javaFile = IO.File::open(
+          fileName,
+          IO.OpenOptions{write => true, create => true, truncate => true},
+        );
+        res = Generator.write(
+          javaFile,
+          Array[
+            Array[`package ${jc.package.join(".")};`, ""],
+            loaderCode(jc.loader),
+          ],
+        );
+        javaFile.close();
+        res?
+      };
+      cExterns = mutable Vector<String>[];
+      jniInits = mutable Vector<String>[];
+      creations = mutable Vector<String>[];
+      context.unsafeMaybeGetDir(kJavaProxiesDir.dirName) match {
+      | Some(dir @ SKStore.EagerDir _) ->
+        keys = dir.keys();
+        skipExports = mutable Vector<String>[];
+        for (key in keys) {
+          kJavaProxiesDir.maybeGet(context, SKStore.SID::keyType(key)) match {
+          | Some(def) ->
+            writeJNILibFile(def.value, def.parameters, jc.package, jc.sources)?;
+            collectExports(def.value, def.parameters, skipExports, cExterns);
+            collectJNIInits(def.value, def.parameters, jc.package, jniInits);
+            collectCreateObject(
+              def.value,
+              def.parameters,
+              jc.package,
+              creations,
+            )
+          | _ -> void
+          }
+        };
+        writeMakefile(jc)?;
+        writeSkiplang(jc, skipExports)?
+      | _ -> void
+      };
+      context.unsafeMaybeGetDir(kFunctionDefsDir.dirName) match {
+      | Some(dir @ SKStore.EagerDir _) ->
+        keys = dir.keys();
+        for (key in keys) {
+          kFunctionDefsDir.maybeGet(context, SKStore.SID::keyType(key)) match {
+          | Some(FunctionDef(signature, name)) ->
+            collectFunction(name, signature, jc.package, creations)
+          | _ -> void
+          }
+        }
+      | _ -> void
+      };
+      writeCpp(jc, cExterns, jniInits, creations)?
+    | _ -> void
+    };
+  };
+  Success(void)
+}
+
+fun checkedWriteAndCollect(
+  context: mutable SKStore.Context,
+  name: String,
+  writer: mutable SKStore.TWriter<SKStore.SID, ClassFile>,
+): void {
+  id = SKStore.SID(name);
+  if (!writer.containsKey(id)) {
+    SkipTyping.dir.maybeGet(context, id) match {
+    | Some(symbol) -> collect(context, id, symbol.value, writer)
+    | _ -> throw Generator.Error(`Unable to find symbol ${name}`)
+    }
+  }
+}
+
+fun collectType(
+  context: mutable SKStore.Context,
+  type_: SkipTypedAst.Type__,
+  writer: mutable SKStore.TWriter<SKStore.SID, ClassFile>,
+): void {
+  type_ match {
+  | SkipNamedAst.Tapply(_, tname, types) ->
+    if (tname.i1 != "Void") {
+      types.each(type -> collectType(context, type.i1, writer));
+      checkedWriteAndCollect(context, tname.i1, writer)
+    }
+  | SkipNamedAst.Tfun _ ->
+    void // Skipped
+  | _ ->
+    throw Generator.Error(`Symbol of type ${type_.getClassName()} not managed`)
+  }
+}
+
+fun collectClass(
+  context: mutable SKStore.Context,
+  classDef: SkipTypedAst.Class_def,
+  writer: mutable SKStore.TWriter<SKStore.SID, ClassFile>,
+): void {
+  assertNotTrait(classDef);
+  for (extends_ in classDef.extends_.keys()) {
+    checkedWriteAndCollect(context, extends_.i1, writer)
+  };
+  for (field in classDef.fields.values()) {
+    field.visibility.i1 match {
+    | SkipNamedAst.VPublic() ->
+      field.eltk match {
+      | SkipNamedAst.EConst() -> void
+      | _ -> collectType(context, field.type.i1, writer)
+      }
+    | _ -> void
+    }
+  }
+}
+
+fun collectFun(
+  context: mutable SKStore.Context,
+  funDef: SkipTypedAst.Fun_def,
+  writer: mutable SKStore.TWriter<SKStore.SID, ClassFile>,
+): void {
+  for (param in funDef.params) {
+    collectType(context, param.type.i1, writer)
+  };
+  collectType(context, funDef.return_.i1, writer)
+}
+
+fun collect(
+  context: mutable SKStore.Context,
+  id: SKStore.SID,
+  def: SkipTypedAst.Def,
+  writer: mutable SKStore.TWriter<SKStore.SID, ClassFile>,
+): void {
+  def match {
+  | SkipTypedAst.DClass(classDef) ->
+    writer.set(id, ClassFile(classDef));
+    collectClass(context, classDef, writer)
+  | SkipTypedAst.DFun(funDef) -> collectFun(context, funDef, writer)
+  | SkipTypedAst.DConst _ -> void
+  }
+}
+
+fun getJavaTypeForName(
+  getter: SKStore.SID -> ?SkipTyping.DefFile,
+  name: String,
+  package: Array<String>,
+  types: Array<SkipNamedAst.Type_> = Array[],
+): Type {
+  id = SKStore.SID(name);
+  getter(id) match {
+  | Some(symbol) ->
+    symbol.value match {
+    | SkipTypedAst.DClass(classDef) ->
+      ptypes = types.map(t ->
+        getJavaType(getter, t.i1, package).fromSome(
+          "Type in type parameter cannot be void",
+        )
+      );
+      typeForClass(classDef, package, ptypes)
+    | SkipTypedAst.DFun _
+    | SkipTypedAst.DConst _ ->
+      throw Generator.Error("Only classes can be exported to ")
+    }
+  | _ -> throw Generator.Error(`Unable to find symbol ${id}`)
+  }
+}
+
+fun getJavaType(
+  getter: SKStore.SID -> ?SkipTyping.DefFile,
+  type_: SkipTypedAst.Type__,
+  package: Array<String>,
+  ignoreFun: Bool = false,
+): ?Type {
+  type_ match {
+  | SkipNamedAst.Tapply(_, tname, types) ->
+    if (tname.i1 != "Void") {
+      Some(getJavaTypeForName(getter, tname.i1, package, types))
+    } else {
+      None()
+    }
+  | SkipNamedAst.Tfun _ if (ignoreFun) -> None()
+  | SkipNamedAst.Tfun _
+  | _ ->
+    throw Generator.Error(`Symbol of type ${type_.getClassName()} not managed`)
+  }
+}
+
+fun toJavaSignature(
+  getter: SKStore.SID -> ?SkipTyping.DefFile,
+  funDef: SkipTypedAst.Fun_def,
+): (Signature, String) {
+  anns = funDef.annotations.filter(a -> isAnnotation(a, kAnnotation)).toArray();
+  if (anns.size() != 1) {
+    throw Generator.Error(`Must have only one @java annotation.`)
+  };
+  externs = funDef.annotations
+    .filter(a -> isAnnotation(a, "@cpp_extern"))
+    .toArray();
+  if (externs.size() != 1) {
+    throw Generator.Error(`@java function must define one @cpp_extern`)
+  };
+  externName = externName(externs[0]).default(`SKIP_${funDef.name.i1}`);
+  Annotation::fromString(anns[0]) match {
+  | Success(annotation) ->
+    if (!funDef.tparams.isEmpty()) {
+      throw Generator.Error(`Cannot call generic java static methods`);
+    };
+    methodName = annotation.method.default(funDef.name.i1);
+    jparams = funDef.params.map(param -> {
+      if (param.mutable_.isSome()) {
+        throw Generator.Error(
+          "Mutable parameters ${param.name.i1} cannot be exported to ",
+        );
+      };
+      type = getJavaType(getter, param.type.i1, kTypesPackage).fromSome(
+        "Type of function parameter cannot be void",
+      );
+      Parameter{name => param.name.i1, type}
+    });
+    returnType = getJavaType(getter, funDef.return_.i1, kTypesPackage);
+    (
+      Signature{
+        name => methodName,
+        returnType,
+        parameters => jparams.toArray(),
+        owner => Some(
+          Type{
+            name => annotation.clazz,
+            skipname => annotation.clazz,
+            package => if (annotation.package.isEmpty()) None() else {
+              Some(PackageInfo(annotation.package, true))
+            },
+          },
+        ),
+      },
+      externName,
+    )
+  | Failure(ex) -> throw ex
+  }
+}
+
+fun annotations(def: SkipTyping.DefFile): SortedSet<String> {
+  def.value match {
+  | SkipTypedAst.DFun(funDef) -> funDef.annotations
+  | SkipTypedAst.DClass _
+  | SkipTypedAst.DConst _ ->
+    SortedSet[]
+  }
+}
+
+fun addNew(interface: Interface, parameters: Array<Parameter>): Interface {
+  if (parameters.isEmpty()) return interface;
+  type = interface.toType();
+  name = `new${interface.name.uppercaseFirst()}`;
+  signature = Signature{
+    name,
+    returnType => Some(type),
+    static_ => true,
+    parameters,
+  };
+  method = Method{
+    signature,
+    body => Block{
+      return_ => Some(
+        StaticCall(
+          type.sub(Array["proxies"]),
+          name,
+          parameters.map(p -> Literal(p.name)),
+        ),
+      ),
+    },
+  };
+  interface.withMethod(method)
+}
+
+fun toJavaType(
+  getter: SKStore.SID -> ?SkipTyping.DefFile,
+  classDef: SkipTypedAst.Class_def,
+): ?(Interface, Array<Parameter>) {
+  className = classDef.name.i1;
+  if (isPrimitive(className)) return None();
+  elems = className.split(".");
+  size = elems.size();
+  invariant(size == 1 || size == 2, "Invalid class name.");
+  (package, name) = if (elems.size() == 2) {
+    (kTypesPackage.concat(Array[elems[0].lowercase()]), elems[1])
+  } else {
+    (kTypesPackage, elems[0])
+  };
+  //
+  extends_ = classDef.extends_
+    .keys()
+    .map(extends_ -> getJavaTypeForName(getter, extends_.i1, kTypesPackage))
+    .collect(Array);
+  fields = mutable Vector<>[];
+  for (field in classDef.fields.items()) {
+    field.i1.visibility.i1 match {
+    | SkipNamedAst.VPublic() ->
+      field.i1.eltk match {
+      | SkipNamedAst.EConst() -> void
+      | _ ->
+        field.i1.kind match {
+        | SkipNamedAst.FKMutable _ ->
+          throw Generator.Error(
+            "Mutable fields ${field.name.i1} cannot be exported to ",
+          )
+        | _ -> void
+        };
+        // ?? tparams
+        getJavaType(getter, field.i1.type.i1, kTypesPackage, true).each(type ->
+          fields.push(Field{name, type, visibility => Private()})
+        )
+      }
+    | _ -> void
+    }
+  };
+  ffield = fields.toArray();
+  i = Interface{
+    package,
+    name,
+    extends_,
+    fields => ffield,
+    skipname => className,
+  };
+  parameters = ffield.map(f -> f.toParameter());
+  !i = addNew(i, parameters);
+  Some((i, parameters))
+}
+
+fun collectProxyMethods(
+  getter: String -> ?Interface,
+  interface: Interface,
+  methods: mutable Vector<Method>,
+  signatures: mutable Vector<Signature>,
+  clearObjects: mutable Vector<Equation>,
+  clearFields: mutable Vector<Equation>,
+): void {
+  for (extends_ in interface.extends_) {
+    name = extends_.getName();
+    getter(name) match {
+    | Some(i) ->
+      collectProxyMethods(
+        getter,
+        i,
+        methods,
+        signatures,
+        clearObjects,
+        clearFields,
+      )
+    | _ ->
+      throw Generator.Error(`collectProxyMethods: Symbol ${name} not found`)
+    }
+  };
+
+  ptr = Access("this", "skPtr");
+  nullPtr = Literal("0L");
+  null = Literal("null");
+  thisAcces = Literal("this");
+
+  interface.fields.each(tf -> {
+    f = tf.sub(Array["proxies"]);
+    fPtrName = f.ptrName();
+    fAcces = Access("this", f.name);
+    body = if (f.type.isPrimitive()) {
+      Block{
+        equations => Array[Assert(nEquals(ptr, nullPtr))],
+        return_ => Some(Call(thisAcces, fPtrName, Array[])),
+      }
+    } else {
+      clearBranch = Branch{
+        condition => nEquals(fAcces, null),
+        body => Block{
+          equations => Array[
+            LeftRigth{right => Call(fAcces, "skPtrClear", Array[])},
+            LeftRigth{left => Some(fAcces), right => null},
+          ],
+        },
+      };
+      clearObjects.push(Decision{branches => Array[clearBranch]});
+      branch = Branch{
+        condition => equals(fAcces, null),
+        body => Block{
+          equations => Array[
+            Assert(nEquals(ptr, nullPtr)),
+            LeftRigth{
+              left => Some(fAcces),
+              right => Call(thisAcces, fPtrName, Array[]),
+            },
+          ],
+        },
+      };
+      Block{
+        equations => Array[Decision{branches => Array[branch]}],
+        return_ => Some(fAcces),
+      }
+    };
+    methods.push(Method{signature => tf.toGetter(Array["@Override"]), body});
+
+    signatures.push(
+      Signature{
+        visibility => Private(),
+        name => fPtrName,
+        returnType => Some(f.type),
+        native_ => true,
+      },
+    );
+
+    signatures.push(
+      Signature{
+        attributes => Array["@SuppressWarnings(\"unused\")"],
+        visibility => Public(),
+        name => `set${fPtrName.uppercaseFirst()}`,
+        returnType => None(),
+        native_ => true,
+        parameters => Array[Parameter{name => fPtrName, type => Type::long()}],
+      },
+    );
+  });
+}
+
+fun toJavaProxy(getter: String -> ?Interface, interface: Interface): ?Class_ {
+  if (interface.methods.isEmpty()) {
+    return None()
+  };
+  ptrFields = Array[
+    Field{name => "skPtr", type => Type::long(), visibility => Private()},
+  ];
+  fields = mutable Vector[];
+  proxies = Array["proxies"];
+  interface.fields.each(f -> {
+    if (!f.type.isPrimitive()) fields.push(f.sub(proxies));
+  });
+  ptrFields.each(fields.push);
+  implements = Array[interface.toType()];
+  constructor = Constructor{
+    visibility => Private(),
+    name => interface.name,
+    attributes => Array["@SuppressWarnings(\"unused\")"],
+    parameters => ptrFields.map(f -> f.toParameter()),
+  };
+  methods = mutable Vector[
+    Method{
+      signature => constructor,
+      body => Block{
+        equations => ptrFields.map(f ->
+          LeftRigth{
+            left => Some(Access("this", f.name)),
+            right => Literal(f.name),
+          }
+        ),
+      },
+    },
+  ];
+  clearObjects = mutable Vector<Equation>[];
+  clearFields = mutable Vector<Equation>[
+    LeftRigth{left => Some(Access("this", "skPtr")), right => Literal("0L")},
+  ];
+  signatures = mutable Vector[
+    Signature{
+      visibility => Public(),
+      name => `new${interface.name}`,
+      returnType => Some(interface.toType()),
+      native_ => true,
+      static_ => true,
+      parameters => interface.fields.map(f -> f.toParameter()),
+    },
+    Signature{
+      attributes => Array["@SuppressWarnings(\"unused\")"],
+      visibility => Public(),
+      name => "setSkPtrNew",
+      returnType => None(),
+      native_ => true,
+      parameters => Array[
+        Parameter{name => `new${interface.name}`, type => Type::long()},
+      ],
+    },
+  ];
+  collectProxyMethods(
+    getter,
+    interface,
+    methods,
+    signatures,
+    clearObjects,
+    clearFields,
+  );
+
+  clearFields.each(clearObjects.push);
+  methods.push(
+    Method{
+      signature => Signature{
+        visibility => Protected(),
+        name => "skPtrClear",
+        returnType => None(),
+      },
+      body => Block{equations => clearObjects.toArray()},
+    },
+  );
+  Some(
+    Class_{
+      skipname => interface.skipname,
+      package => interface.package.concat(proxies),
+      name => interface.name,
+      implements,
+      fields => fields.toArray(),
+      methods => methods.toArray(),
+      signatures => signatures.toArray(),
+    },
+  )
+}
+
+fun assertNotTrait(classDef: SkipTypedAst.Class_def): void {
+  classDef.kind match {
+  | SkipAst.KClass()
+  | SkipAst.KBase() ->
+    void
+  | SkipAst.KTrait() -> invariant_violation("trait not managed.")
+  };
+}
+
+fun typeForClass(
+  classDef: SkipTypedAst.Class_def,
+  package: Array<String>,
+  types: Array<Type> = Array[],
+): Type {
+  (name, packageInfo): (String, ?PackageInfo) = classDef.name.i1 match {
+  | "Int" -> ("long", None())
+  | "Float" -> ("double", None())
+  | "String" -> ("String", None())
+  | "Array" -> ("[]", None())
+  | "Bool" -> ("boolean", None())
+  | "UInt32" | "Int32" -> ("int", None())
+  | "UInt16" | "Int16" -> ("short", None())
+  | "UInt8" | "Int8" -> ("byte", None())
+  | n ->
+    elems = n.split(".");
+    size = elems.size();
+    invariant(size == 1 || size == 2, "Invalid class name.");
+    if (elems.size() == 2) {
+      (elems[1], Some(PackageInfo(package.concat(Array[elems[0].lowercase()]))))
+    } else {
+      (elems[0], Some(PackageInfo(package)))
+    }
+  };
+  Type{name, package => packageInfo, skipname => classDef.name.i1, types}
+}
+
+fun isPrimitive(name: String): Bool {
+  name match {
+  | "Int" | "Float" | "String" | "Bool" | "Int32" | "Int16" | "Int8" | "UInt32"
+  | "UInt16" | "UInt8" | "Array" ->
+    true
+  | _ -> false
+  }
+}
+
+module end;

@@ -1,0 +1,114 @@
+module Generator;
+
+const kName: String = "skgen";
+const kKeyConv: SKStore.Key ~> SKStore.Key = x ~> x;
+const kFileConv: SKStore.File ~> SKStore.File = x ~> x;
+
+class Error(message: String) extends Exception {
+  fun getMessage(): String {
+    this.message
+  }
+}
+
+class Supplier(
+  args: Array<Cli.Arg>,
+  init: mutable SKStore.Context ~> void,
+  update: (mutable SKStore.Context, Config.Config, Cli.ParseResults) ~> void,
+  updated: (mutable SKStore.Context, tick: SKStore.Tick) ~> Result<
+    void,
+    Exception,
+  >,
+)
+
+fun initContext(context: mutable SKStore.Context): void {
+  _ = context.mkdir(kKeyConv, kFileConv, FileCache.fileDirName);
+  _ = context.mkdir(kKeyConv, kFileConv, FileCache.packageDirName);
+  _ = SkipMain.type_program(context);
+}
+
+fun initCtx(
+  generators: Array<mutable SKStore.Context ~> void>,
+): SKStore.Context {
+  context = mutable SKStore.Context{};
+  initContext(context);
+  generators.each(init -> init(context));
+  context.clone();
+}
+
+fun error(message: String, code: Int): void {
+  print_error(message);
+  skipExit(code)
+}
+
+fun checkDir(dir: String): void {
+  _ = System.subprocess(Array["mkdir", "-p", dir]).fromSuccess();
+}
+
+fun main(): void {
+  obstack = SKStore.newObstack();
+  cmd = SKC.command(kName, "Skip code generator");
+  suppliers = Array[Java.supplier].map(fn -> fn());
+  for (supplier in suppliers) {
+    !cmd = cmd.args(supplier.args);
+  };
+  results = cmd.parseArgs();
+  code = if (results.getBool("version")) {
+    // FIXME
+    print_string(kName + " FIXME");
+    0;
+  } else {
+    if (SKStore.gHasContext() == 0) {
+      SKStore.gContextInit(initCtx(suppliers.map(s -> s.init)));
+    };
+    config = Config.Config::make(results);
+    SKStore.runWithResult(
+      context ~> {
+        check = result ~>
+          result match {
+          | Success _ -> void
+          | Failure(e) -> throw e
+          };
+        start = context.tick;
+        updateContext(context, config);
+        suppliers.each(s -> s.update(context, config, results));
+        context.update();
+        for (s in suppliers) {
+          check(s.updated(context, start))
+        }
+      },
+      Some(SKStore.Synchronizer(SKStore.import, SKStore.export, _ ~> void)),
+    ) match {
+    | Success _ -> 0
+    | Failure(Error(message)) ->
+      print_error(message);
+      5
+    | Failure(exn) ->
+      print_error(exn.getMessage());
+      1
+    }
+  };
+  SKStore.destroyObstack(obstack);
+  if (code != 0) skipExit(code);
+}
+
+fun updateContext(
+  context: mutable SKStore.Context,
+  config: Config.Config,
+): void {
+  make_input_source_path = (pkg_base_dir, src_path) ~> {
+    res = Path.join(pkg_base_dir, src_path);
+    if (config.canonize_paths) {
+      !res = config.cwd.makeRelative(res);
+    };
+    res
+  };
+  FileCache.writeFiles(
+    context,
+    config.input_files,
+    config.dependencies,
+    None(),
+    make_input_source_path,
+  )
+}
+
+module end;

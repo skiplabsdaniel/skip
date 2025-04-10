@@ -1,0 +1,177 @@
+module Java;
+
+base class Kind uses Show {
+  children =
+  | KPackage()
+  | KClass()
+  | KMethod()
+
+  fun toString(): String
+  | KPackage() -> "package"
+  | KClass() -> "class"
+  | KMethod() -> "method"
+}
+
+mutable class NameValidator(
+  toParse: String,
+  chars: Vector<Char>,
+  mutable idx: Int,
+  kind: Kind = KPackage(),
+) {
+  readonly fun error(msg: String): void {
+    throw Generator.Error(`Invalid ${this.kind} name ${this.toParse}: ${msg}`)
+  }
+
+  readonly fun current(): Char {
+    this.chars[this.idx]
+  }
+
+  readonly fun reachedEnd(): Bool {
+    this.idx >= this.chars.size()
+  }
+
+  mutable fun next(): void {
+    this.!idx = this.idx + 1
+  }
+
+  mutable fun go(): void {
+    if (this.reachedEnd()) {
+      this.error("path is empty");
+    };
+    while (this.idx < this.chars.size() - 1) {
+      if (this.idx > 0) this.mustBeDot();
+      this.mustBeKey();
+    };
+    if (!this.reachedEnd()) {
+      this.error("Unexpected characters at the end of the path");
+    };
+  }
+
+  mutable fun mustBeDot(): void {
+    if (this.reachedEnd()) {
+      this.error(
+        `Expected a dot, reached the end of the path instead (${this.toParse})`,
+      );
+    };
+    c = this.current();
+    if (c == '.') {
+      this.next()
+    } else {
+      this.error(`Expected a dot, found '${c}' instead (${this.toParse})`);
+    }
+  }
+
+  mutable fun mustBeKey(): void {
+    if (this.reachedEnd() || this.current() == '.') {
+      this.error(`Empty element ${this.toParse}`);
+    };
+    c = this.current();
+    this.kind match {
+    | KPackage _
+    | KMethod _ ->
+      if (!(c >= 'a' && c <= 'z')) {
+        this.error(
+          `The first char of ${
+            this.kind
+          } must be a lowercase letter, found '${c}' instead (${this.toParse})`,
+        )
+      }
+    | KClass _ ->
+      if (!(c >= 'A' && c <= 'Z')) {
+        this.error(
+          `The first char of class must be a uppercase letter, found '${c}' instead (${
+            this.toParse
+          })`,
+        );
+      }
+    };
+    this.next();
+    while (!this.reachedEnd()) {
+      !c = this.current();
+      this.kind match {
+      | KPackage _ ->
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) this.next() else {
+          break void
+        }
+
+      | KClass _
+      | KMethod _ ->
+        if (
+          (c >= 'a' && c <= 'z') ||
+          (c >= '0' && c <= '9') ||
+          (c >= 'A' && c <= 'Z') ||
+          c == '_'
+        ) this.next() else {
+          break void
+        }
+      }
+    }
+  }
+}
+
+fun isValidPackageName(package: String): Bool {
+  try {
+    validatePackageName(package);
+    true
+  } catch {
+  | _ -> false
+  }
+}
+
+fun isValidClassName(package: String): Bool {
+  try {
+    validator = mutable NameValidator(package, package.chars(), 0, KClass());
+    validator.go();
+    true
+  } catch {
+  | _ -> false
+  }
+}
+
+fun isValidMethodName(package: String): Bool {
+  try {
+    validator = mutable NameValidator(package, package.chars(), 0, KMethod());
+    validator.go();
+    true
+  } catch {
+  | _ -> false
+  }
+}
+
+fun validatePackageName(package: String): void {
+  validator = mutable NameValidator(package, package.chars(), 0);
+  validator.go()
+}
+
+class Config{
+  package: Array<String>,
+  root: String,
+  sources: String,
+  loader: String,
+  libname: String,
+  output: ?String,
+} extends SKStore.File {
+  //
+  static fun create(_config: Config.Config, args: Cli.ParseResults): Config {
+    nvPackage = args.getString("java-package");
+    validatePackageName(nvPackage);
+    package = nvPackage.split(".").toArray();
+    root = args.getString("java-dir");
+    sources = Path.join(root, Path.join("src", "main"));
+    output = args.maybeGetString("java-output");
+    loader = args.getString("java-loader");
+    libname = args.getString("java-libname");
+    Config{package, root, sources, output, loader, libname}
+  }
+
+  fun minimal(): Config {
+    !this.output = None();
+    this
+  }
+
+  fun getLoaderClass(): Array<String> {
+    this.package.concat(Array[this.loader]);
+  }
+}
+
+module end;
