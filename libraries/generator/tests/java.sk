@@ -1,0 +1,304 @@
+module alias T = SKTest;
+
+module TestJava;
+
+fun expectBuffer(
+  buffer: (String -> Result<void, Exception>, () -> String),
+  expected: Vector<String>,
+): void {
+  T.expectEq(buffer.i1().split("\n"), expected);
+}
+
+@test
+fun literal1(): void {
+  buffer = Java.stringPrinter();
+  i = Java.Literal("0L");
+  i.print(buffer.i0, Array[], Array[]).fromSuccess();
+  expectBuffer(buffer, Vector["0L"]);
+}
+
+@test
+fun narity1(): void {
+  buffer = Java.stringPrinter();
+  i = Java.NArityOp("+", Array[Java.Literal("x"), Java.Literal("2L")]);
+  i.print(buffer.i0, Array[], Array[]).fromSuccess();
+  expectBuffer(buffer, Vector["x + 2L"]);
+}
+
+@test
+fun narity2(): void {
+  buffer = Java.stringPrinter();
+  i = Java.NArityOp(
+    "+",
+    Array[
+      Java.Literal("x"),
+      Java.NArityOp("*", Array[Java.Literal("y"), Java.Literal("z")]),
+    ],
+  );
+  i.print(buffer.i0, Array[], Array[]).fromSuccess();
+  expectBuffer(buffer, Vector["x + (y * z)"]);
+}
+
+@test
+fun call1(): void {
+  buffer = Java.stringPrinter();
+  i = Java.Call(
+    Java.Literal("c"),
+    "foo",
+    Array[
+      Java.Literal("x"),
+      Java.NArityOp("*", Array[Java.Literal("y"), Java.Literal("z")]),
+    ],
+  );
+  i.print(buffer.i0, Array[], Array[]).fromSuccess();
+  expectBuffer(buffer, Vector["c.foo(x, y * z)"]);
+}
+
+@test
+fun ifthenelse(): void {
+  buffer = Java.stringPrinter();
+  i = Java.IfThenElse(
+    Java.Literal("c"),
+    Java.NArityOp("+", Array[Java.Literal("x"), Java.Literal("y")]),
+    Java.IfThenElse(
+      Java.Literal("b"),
+      Java.Literal("1.0"),
+      Java.Literal("2.0"),
+    ),
+  );
+  i.print(buffer.i0, Array[], Array[]).fromSuccess();
+  expectBuffer(buffer, Vector["c ? (x + y) : (b ? 1.0 : 2.0)"]);
+}
+
+@test
+fun equation1(): void {
+  buffer = Java.stringPrinter();
+  i = Java.LeftRigth{
+    left => Some(
+      Java.Create("d", Java.Type{name => "int", skipname => "Int32"}),
+    ),
+    right => Java.Call(
+      Java.Literal("c"),
+      "foo",
+      Array[
+        Java.Literal("x"),
+        Java.NArityOp("*", Array[Java.Literal("y"), Java.Literal("z")]),
+      ],
+    ),
+  };
+  i.print(buffer.i0, Array[], Array[], "").fromSuccess();
+  expectBuffer(buffer, Vector["int d = c.foo(x, y * z);"]);
+}
+
+@test
+fun asser1(): void {
+  buffer = Java.stringPrinter();
+  a = Java.Assert(
+    Java.Call(
+      Java.Literal("c"),
+      "foo",
+      Array[
+        Java.Literal("x"),
+        Java.NArityOp("*", Array[Java.Literal("y"), Java.Literal("z")]),
+      ],
+    ),
+  );
+  a.print(buffer.i0, Array[], Array[], "").fromSuccess();
+  expectBuffer(buffer, Vector["assert c.foo(x, y * z);"]);
+}
+
+@test
+fun interface1(): void {
+  buffer = Java.stringPrinter();
+  i = Java.Interface{
+    name => "A",
+    skipname => "A",
+    signatures => Array[
+      Java.Signature{
+        name => "getField1",
+        returnType => Some(Java.Type{name => "int", skipname => "Int32"}),
+        static_ => false,
+      },
+    ],
+  };
+  i.print(buffer.i0, Array["io", "skiplabs"]).fromSuccess();
+  expectBuffer(
+    buffer,
+    Vector[
+      "package io.skiplabs;",
+      "",
+      "public interface A {",
+      "",
+      "  public int getField1();",
+      "",
+      "}",
+    ],
+  );
+}
+
+@test
+fun interface2(): void {
+  buffer = Java.stringPrinter();
+  i = Java.Interface{
+    imports => SortedSet["java.util.*"],
+    name => "B",
+    skipname => "B",
+    extends_ => Array[Java.Type{name => "C", skipname => "C"}],
+    types => Array[Java.Type{name => "T", skipname => "T"}],
+    signatures => Array[
+      Java.Signature{
+        name => "getField1",
+        returnType => Some(Java.Type{name => "int", skipname => "Int32"}),
+        static_ => false,
+      },
+      Java.Signature{
+        name => "getField2",
+        returnType => Some(
+          Java.Type{
+            name => "A",
+            skipname => "A",
+            types => Array[Java.Type{name => "T", skipname => "T"}],
+          },
+        ),
+        static_ => false,
+      },
+    ],
+  };
+  i.print(buffer.i0, Array["io", "skiplabs"]).fromSuccess();
+  expectBuffer(
+    buffer,
+    Vector[
+      "package io.skiplabs;",
+      "",
+      "import java.util.*;",
+      "",
+      "public interface B<T>",
+      "  extends C {",
+      "",
+      "  public int getField1();",
+      "",
+      "  public A<T> getField2();",
+      "",
+      "}",
+    ],
+  );
+}
+
+@test
+fun class1(): void {
+  buffer = Java.stringPrinter();
+  i = Java.Class_{
+    imports => SortedSet["java.util.*"],
+    name => "B",
+    skipname => "B",
+    extends_ => Some(Java.Type{name => "C", skipname => "C"}),
+    implements => Array[Java.Type{name => "A", skipname => "A"}],
+    types => Array[Java.Type{name => "T", skipname => "T"}],
+    fields => Array[
+      Java.Field{
+        name => "field1",
+        type => Java.Type{name => "int", skipname => "Int32"},
+      },
+      Java.Field{
+        name => "field2",
+        type => Java.Type{
+          name => "A",
+          skipname => "A",
+          types => Array[Java.Type{name => "T", skipname => "T"}],
+        },
+      },
+    ],
+    methods => Array[
+      Java.Method{
+        signature => Java.Signature{
+          name => "getField1",
+          returnType => Some(Java.Type{name => "int", skipname => "Int32"}),
+          static_ => false,
+        },
+        body => Java.Block{return_ => Some(Java.Access("this", "field1"))},
+      },
+      Java.Method{
+        signature => Java.Signature{
+          name => "getField2",
+          returnType => Some(
+            Java.Type{
+              name => "A",
+              skipname => "A",
+              types => Array[Java.Type{name => "T", skipname => "T"}],
+            },
+          ),
+          attributes => Array["@Override"],
+          static_ => false,
+        },
+        body => Java.Block{return_ => Some(Java.Access("this", "field2"))},
+      },
+    ],
+  };
+  i.print(buffer.i0, Array["io", "skiplabs"]).fromSuccess();
+  expectBuffer(
+    buffer,
+    Vector[
+      "package io.skiplabs;",
+      "",
+      "import java.util.*;",
+      "",
+      "public class B<T>",
+      "  implements A",
+      "  extends C {",
+      "",
+      "  public int field1;",
+      "  public A<T> field2;",
+      "",
+      "  public int getField1() {",
+      "    return this.field1;",
+      "  }",
+      "",
+      "  @Override",
+      "  public A<T> getField2() {",
+      "    return this.field2;",
+      "  }",
+      "",
+      "}",
+    ],
+  );
+}
+
+@test
+fun annotation1(): void {
+  Java.Annotation::fromString("@java(\"java.lang.String\")") match {
+  | Success(ann) ->
+    T.expectEq(
+      ann,
+      Java.Annotation(Array["java", "lang"], "String", None()),
+    )
+  | Failure(err) -> throw err
+  }
+}
+
+@test
+fun annotation2(): void {
+  Java.Annotation::fromString("@java(\"java.utils.Math.log\")") match {
+  | Success(ann) ->
+    T.expectEq(
+      ann,
+      Java.Annotation(Array["java", "utils"], "Math", Some("log")),
+    )
+  | Failure(err) -> throw err
+  }
+}
+
+@test
+fun annotation3(): void {
+  Java.Annotation::fromString(
+    "@java(\"java.utiLs.Math.log.res\")",
+  ) match {
+  | Success _ -> invariant_violation("Should failed")
+  | Failure(err) ->
+    T.expectEq(
+      err.getMessage(),
+      "Invalid annotation '@java(\"java.utiLs.Math.log.res\")' must be a valid Java class name with or not method name.",
+    )
+  }
+}
+
+module end;
