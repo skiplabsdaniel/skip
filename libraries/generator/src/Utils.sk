@@ -1,0 +1,16 @@
+module Generator;
+
+fun write(
+  file: mutable IO.File,
+  mlines: Array<Array<String>>,
+): Result<void, Exception> {
+  for (lines in mlines) {
+    for (line in lines) {
+      file.write_all(line.bytes())?;
+      file.write_all("\n".bytes())?
+    }
+  };
+  Success(void)
+}
+
+module end;
