@@ -1,0 +1,113 @@
+module GeneratedExports;
+
+@export("SKIP_A__getField1")
+fun skA__getField1(skobject: A): Int {
+  skobject.field1
+}
+
+@export("SKIP_A__getField2")
+fun skA__getField2(skobject: A): B {
+  skobject.field2
+}
+
+@export("SKIP_create_A")
+fun create_A(field1: Int, field2: B): A {
+  A(field1, field2)
+}
+
+@export("SKIP_B__getField1")
+fun skB__getField1(skobject: B): Float {
+  skobject.field1
+}
+
+@export("SKIP_create_B")
+fun create_B(field1: Float): B {
+  B(field1)
+}
+
+@export("SKIP_C__getField1")
+fun skC__getField1(skobject: C): B {
+  skobject.field1
+}
+
+@export("SKIP_create_C")
+fun create_C(field1: B): C {
+  C(field1)
+}
+
+// Utils
+
+class LibraryException(
+  type: String,
+  message: String,
+  trace: ?String = None(),
+) extends .Exception
+
+@export("SKIP_throwLibraryException")
+fun throwLibraryException(type: String, message: String, trace: ?String): void {
+  throw LibraryException(type, message, trace)
+}
+
+@cpp_export("SKIP_create_vector")
+fun createVector(): mutable Vector<Runtime.GCPointer> {
+  mutable Vector<Runtime.GCPointer>[];
+}
+
+@cpp_export("SKIP_push_into_vector")
+fun pushIntoVector(
+  vector: mutable Vector<Runtime.GCPointer>,
+  t: Runtime.GCPointer,
+): void {
+  vector.push(t)
+}
+
+@cpp_export("SKIP_vector_to_array")
+fun vectorToArray(
+  vector: mutable Vector<Runtime.GCPointer>,
+): Array<Runtime.GCPointer> {
+  vector.toArray()
+}
+
+@cpp_export("SKIP_get_array_size")
+fun getSkArraySize(array: Array<Runtime.GCPointer>): Int {
+  array.size()
+}
+
+@cpp_export("SKIP_get_array_value_at")
+fun getSkArrayValueAt(
+  array: Array<Runtime.GCPointer>,
+  index: Int,
+): Runtime.GCPointer {
+  array.get(index)
+}
+
+@cpp_export("SKIP_create_long_array")
+fun create_long_array(size: Int): Array<Int> {
+  Array::fill(size, 0)
+}
+
+@cpp_export("SKIP_create_int_array")
+fun create_int_array(size: Int): Array<Int32> {
+  Array::fill(size, Int32::truncate(0))
+}
+
+@cpp_export("SKIP_create_short_array")
+fun create_short_array(size: Int): Array<Int16> {
+  Array::fill(size, Int16::truncate(0))
+}
+
+@cpp_export("SKIP_create_byte_array")
+fun create_byte_array(size: Int): Array<Int8> {
+  Array::fill(size, Int8::truncate(0))
+}
+
+@cpp_export("SKIP_create_double_array")
+fun create_double_array(size: Int): Array<Float> {
+  Array::fill(size, 0.0)
+}
+
+@cpp_export("SKIP_create_boolean_array")
+fun create_boolean_array(size: Int): Array<Bool> {
+  Array::fill(size, false)
+}
+module end;
