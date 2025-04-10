@@ -1,0 +1,112 @@
+module Java;
+
+fun writeJNILibFile(
+  def: Java.Class_,
+  params: Array<Java.Parameter>,
+  base: Array<String>,
+  directory: String,
+): Result<void, Exception> {
+  targetDir = Path.join(directory, "cpp");
+  Generator.checkDir(targetDir);
+  name = `${def.getName(base, "_")}`;
+  fileName = Path.join(targetDir, `${name}.c`);
+  lines = mutable Vector["#include <jni.h>", ""];
+  newParams = mutable Vector["JNIEnv*"];
+  for (p in params) {
+    ctype = p.type.toJNIType();
+    lines.push(
+      `typedef ${ctype} (*SKIP__${name}__F_get${p.name.uppercaseFirst()})(JNIEnv*, jobject);`,
+    );
+    newParams.push(ctype);
+  };
+  lines.push(`typedef jobject (*SKIP__${name}_new)(${newParams.join(", ")});`);
+  lines.push("");
+  for (p in params) {
+    fname = `${name}__F_get${p.name.uppercaseFirst()}`;
+    lines.push(`static SKIP__${fname} ptr__${fname};`);
+  };
+  lines.push(`static SKIP__${name}_new ptr__${name}__new;`);
+  lines.push("");
+  callParams = mutable Vector[
+    Array["JNIEnv*", "env"],
+    Array["jclass", "clazz"],
+  ];
+  for (p in params) {
+    ctype = p.type.toJNIType();
+    fname = `${name}__F_get${p.name.uppercaseFirst()}`;
+    lines.push(
+      `JNIEXPORT ${ctype} JNICALL Java_${name}_skPtrGet${p.name.uppercaseFirst()}(`,
+    );
+    lines.push("    JNIEnv* env, jobject thisObject) {");
+    lines.push(`  return ptr__${fname}(env, thisObject);`);
+    lines.push("}");
+    lines.push("");
+    callParams.push(Array[ctype, p.name]);
+  };
+  lines.push(`JNIEXPORT jobject JNICALL Java_${name}_new${def.name}(`);
+  lines.push(`    ${callParams.map(p -> p.join(" ")).join(", ")}) {`);
+  lines.push("(void)clazz;");
+  callParams.delete(1);
+  lines.push(
+    `  return ptr__${name}__new(${callParams.map(p -> p[1]).join(", ")});`,
+  );
+  lines.push("}");
+  lines.push("");
+
+  for (p in params) {
+    fname = `${name}__F_get${p.name.uppercaseFirst()}`;
+    lines.push(
+      `JNIEXPORT void JNICALL Java_${name}_setSkPtrGet${p.name.uppercaseFirst()}(`,
+    );
+    lines.push("    JNIEnv* env, jclass clazz, jlong fnPtr) {");
+    lines.push("  (void)env;");
+    lines.push("  (void)clazz;");
+    lines.push(`  ptr__${fname} = (SKIP__${fname})fnPtr;`);
+    lines.push("}");
+    lines.push("");
+  };
+  lines.push(`JNIEXPORT void JNICALL Java_${name}_setSkPtrNew(`);
+  lines.push("    JNIEnv* env, jclass clazz, jlong fnPtr) {");
+  lines.push("  (void)env;");
+  lines.push("  (void)clazz;");
+  lines.push(`  ptr__${name}__new = (SKIP__${name}_new)fnPtr;`);
+  lines.push("}");
+  lines.push("");
+
+  cFile = IO.File::open(
+    fileName,
+    IO.OpenOptions{write => true, create => true, truncate => true},
+  );
+  res = Generator.write(cFile, Array[lines.toArray()]);
+  cFile.close();
+  res
+}
+
+fun writeMakefile(jc: Config): Result<void, Exception> {
+  fileName = Path.join(jc.root, `Makefile`);
+  if (FileSystem.exists(fileName)) return Success(void);
+  lines = Array[
+    "SOURCES_DIR=src/main/cpp",
+    "SOURCES=$(shell find '$(SOURCES_DIR)' -type f -name '*.c')",
+    `LIBRARY=target/classes/lib${jc.libname}.so`,
+    "",
+    ".PHONY: all",
+    "all: $(LIBRARY)",
+    "",
+    "$(LIBRARY): $(SOURCES)",
+    "	mkdir -p $(shell dirname $(LIBRARY))",
+    "	$(CC) -shared -o $@ -I\"$(JAVA_HOME)/include\" -I\"$(JAVA_HOME)/include/linux\" $(SOURCES)",
+    "",
+    ".PHONY: clean",
+    "clean: rm $(LIBRARY)",
+  ];
+  file = IO.File::open(
+    fileName,
+    IO.OpenOptions{write => true, create => true, truncate => true},
+  );
+  res = Generator.write(file, Array[lines]);
+  file.close();
+  res
+}
+
+module end;
