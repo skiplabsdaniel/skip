@@ -1,0 +1,14 @@
+[package]
+name = "skgen"
+version = "0.1.0"
+
+[dependencies]
+skc = { path = "../../skiplang/compiler" }
+
+[dev-dependencies]
+sktest = { path = "../../skiplang/sktest" }
+
+[[bin]]
+name = "skgen"
+main = "Generator.main"
+
