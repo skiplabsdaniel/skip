@@ -1,4 +1,4 @@
-import { expect } from "earl";
+import { expect, isEqual } from "earl";
 import type {
   Context,
   Json,
@@ -13,6 +13,8 @@ import type {
   Entry,
   ExternalService,
   ServiceInstance,
+  Nullable,
+  SubscriptionID,
   CollectionUpdate,
   NamedCollections,
 } from "@skipruntime/core";
@@ -37,24 +39,69 @@ async function withAlternateConsoleError(
   console.error = systemConsoleError;
 }
 
-async function withRetries(
-  f: () => Promise<void>,
-  maxRetries: number = 5,
-  init: number = 100,
-  exponent: number = 1.5,
+async function waitForInInstance(
+  service: ServiceInstance,
+  instance: string,
+  predicate: (updates: CollectionUpdate<Json, Json>[]) => boolean,
+  timeout: number = 1000,
 ): Promise<void> {
-  let retries = 0;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  while (true) {
+  const updates: CollectionUpdate<Json, Json>[] = [];
+  let sid: Nullable<SubscriptionID> = null;
+  await new Promise<void>((resolve, reject) => {
     try {
-      await timeout(init * exponent ** retries);
-      await f();
-      break;
+      let rejected = false;
+      const timeoutHdl = setTimeout(() => {
+        rejected = true;
+        reject(new Error("Timeout"));
+      }, timeout);
+      sid = service.subscribe(instance, {
+        subscribed: () => {},
+        notify: (update) => {
+          if (rejected) return;
+          updates.push(update);
+          if (predicate(updates)) {
+            clearTimeout(timeoutHdl);
+            resolve();
+          }
+        },
+        close: () => {},
+      });
     } catch (e: unknown) {
-      if (retries < maxRetries) retries++;
-      else throw e;
+      reject(e as Error);
+    }
+  });
+  service.unsubscribe(sid!);
+}
+
+function mergeEntries(values: Entry<Json, Json>[][]) {
+  const merged: { [key: string]: Json } = {};
+  for (const value of values) {
+    for (const entry of value) {
+      merged[JSON.stringify(entry[0])] = entry[1];
     }
   }
+  return merged;
+}
+
+async function waitForValuesInInstance(
+  resource: string,
+  service: ServiceInstance,
+  instance: string,
+  values: Entry<Json, Json>[],
+  timeout: number = 1000,
+): Promise<void> {
+  await waitForInInstance(
+    service,
+    instance,
+    (updates) => {
+      return isEqual(
+        mergeEntries(updates.map((u) => u.values)),
+        mergeEntries([values]),
+      );
+    },
+    timeout,
+  );
+  expect(await service.getAll(resource)).toEqual(values);
 }
 
 //// testMap1
@@ -1407,22 +1454,34 @@ export function initTests(
         [2, [20]],
         [3, [30]],
       ]);
-
-      await withRetries(async () =>
-        expect(await service.getAll("resource")).toEqual([
-          [1, [111]],
-          [2, [222]],
-          [3, [333]],
-        ]),
+      await service.instantiateResource(
+        "unsafe.fixed.resource.ident.1",
+        "resource",
+        {},
+      );
+      let expected: Entry<Json, Json>[] = [
+        [1, [111]],
+        [2, [222]],
+        [3, [333]],
+      ];
+      await waitForValuesInInstance(
+        "resource",
+        service,
+        "unsafe.fixed.resource.ident.1",
+        expected,
       );
       await pgClient.query("UPDATE skip_test SET x = 1000 WHERE id = 1;");
       await pgClient.query("DELETE FROM skip_test WHERE id = 2;");
-      await withRetries(async () =>
-        expect(await service.getAll("resource")).toEqual([
-          [1, [1110]],
-          [2, [220]],
-          [3, [333]],
-        ]),
+      expected = [
+        [1, [1110]],
+        [2, [220]],
+        [3, [333]],
+      ];
+      await waitForValuesInInstance(
+        "resource",
+        service,
+        "unsafe.fixed.resource.ident.1",
+        expected,
       );
       await service.instantiateResource(
         "unsafe.fixed.resource.ident.3",
@@ -1430,14 +1489,30 @@ export function initTests(
         {},
       );
 
-      await withRetries(async () =>
-        expect(await service.getAll("streamingResource")).toEqual([]),
+      await waitForInInstance(
+        service,
+        "unsafe.fixed.resource.ident.3",
+        (updates) => {
+          return (
+            updates.length > 0 &&
+            updates[0]!.values.length == 0 &&
+            updates[0]!.isInitial!
+          );
+        },
       );
 
       await pgClient.query("INSERT INTO skip_test (id, x) VALUES (5, 5);");
 
-      await withRetries(async () =>
-        expect(await service.getAll("streamingResource")).toEqual([[5, [5]]]),
+      await waitForInInstance(
+        service,
+        "unsafe.fixed.resource.ident.3",
+        (updates) => {
+          return (
+            updates.length == 2 &&
+            isEqual(updates[1]!.values, [[5, [5]]]) &&
+            !updates[1]!.isInitial
+          );
+        },
       );
       await service.instantiateResource(
         "unsafe.fixed.resource.ident.2",
@@ -1502,20 +1577,24 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
       this.skip();
     }
     try {
-      await service.instantiateResource(resourceId, "resource", {});
-      expect(await service.getAll("resource")).toEqual([]);
-
       const messages = Array.from({ length: 5 }, () => {
         const noise = Math.floor(Math.random() * 1_000_000_000);
         return { key: String(noise), value: String(1 + (noise % 5)) };
       });
       await producer.send({ topic: "skip-test-topic", messages });
-      await withRetries(async () => {
-        for (const { key, value } of messages) {
-          const expected = 10 * Number(value) ** 2;
-          expect(await service.getArray("resource", key)).toEqual([expected]);
-        }
-      }, 10);
+      await service.instantiateResource(resourceId, "resource", {});
+      expect(await service.getAll("resource")).toEqual([]);
+      await waitForInInstance(
+        service,
+        resourceId,
+        (updates) =>
+          updates.length > 0 &&
+          (updates[updates.length - 1]?.values?.length ?? 0) > 0,
+      );
+      for (const { key, value } of messages) {
+        const expected = 10 * Number(value) ** 2;
+        expect(await service.getArray("resource", key)).toEqual([expected]);
+      }
     } finally {
       await producer.disconnect();
       service.closeResourceInstance(resourceId);
