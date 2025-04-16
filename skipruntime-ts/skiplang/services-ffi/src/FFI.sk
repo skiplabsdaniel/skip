@@ -1,0 +1,82 @@
+module SkipRuntime;
+
+@cpp_export("SkipRuntime_instantiateResource")
+fun instantiateResource(
+  identifier: String,
+  resource: String,
+  params: String,
+): String {
+  parameters = ServiceInstance.getResourceBuilder(resource) match {
+  | Failure(ex) -> return ex.getMessage()
+  | Success(builder) -> builder.parseParameters(params)
+  };
+  ServiceInstance.instantiateResource(identifier, resource, parameters) match {
+  | Failure(ex) -> ex.getMessage()
+  | _ -> ""
+  }
+}
+
+@cpp_export("SkipRuntime_closeResourceInstance")
+fun closeResourceInstance(identifier: String): String {
+  ServiceInstance.closeResource(identifier) match {
+  | Failure(ex) -> ex.getMessage()
+  | _ -> ""
+  }
+}
+
+/************  Notifier ****************/
+
+class NotifierException(message: String) extends .Exception {
+  fun getMessage(): String {
+    this.message
+  }
+}
+
+@export("SkipRuntime_checkNotifierException")
+fun throwNotifierException(message: String): void {
+  if (!message.isEmpty()) throw NotifierException(message)
+}
+
+@cpp_extern("SkipRuntime_Notifier__notify")
+@debug
+native fun notifyOfNotifier(
+  notifier: UInt32,
+  values: String,
+  watermark: String,
+  updates: Bool,
+): void;
+
+@cpp_extern("SkipRuntime_Notifier__close")
+@debug
+native fun closeOfNotifier(notifier: UInt32): void;
+
+@cpp_extern("SkipRuntime_deleteNotifier")
+@debug
+native fun deleteNotifier(notifier: UInt32): void;
+
+@export("SkipRuntime_createNotifier")
+fun createNotifier(notifier: UInt32): ExternNotifier {
+  ExternNotifier(SKStore.ExternalPointer::create(notifier, deleteNotifier))
+}
+
+class ExternNotifier(
+  eptr: SKStore.ExternalPointer,
+) extends Notifier<SKStore.Key, SKStore.File> {
+  fun subscribed(): void {
+    void
+  }
+
+  fun notify(
+    _values: Array<(SKStore.Key, Array<SKStore.File>)>,
+    watermark: String,
+    updates: Bool,
+  ): void {
+    notifyOfNotifier(this.eptr.value, "TODO", watermark, updates)
+  }
+
+  fun close(): void {
+    closeOfNotifier(this.eptr.value)
+  }
+}
+
+module end;
