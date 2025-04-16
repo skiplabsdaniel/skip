@@ -40,6 +40,9 @@ export type Exception = T<typeof _Exception>;
 declare const _Obstack: unique symbol;
 export type Obstack = T<typeof _Obstack>;
 
+declare const _Bytes: unique symbol;
+export type Bytes = T<typeof _Bytes>;
+
 declare const p: unique symbol;
 
 declare const _Array: unique symbol;
