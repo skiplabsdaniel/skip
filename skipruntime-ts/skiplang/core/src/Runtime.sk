@@ -911,16 +911,16 @@ class Collection<K: frozen & Orderable, V: frozen>(
     }
   }
 
-  fun getAll(context: mutable SKStore.Context): Array<(K, Array<V>)> {
-    values = mutable Vector<(K, Array<V>)>[];
+  fun getAll(context: mutable SKStore.Context): Array<Entry> {
+    values = mutable Vector<Entry>[];
     dir = context.unsafeGetEagerDir(this.hdl.dirName);
     for (kv in dir.unsafeGetFileIter()) {
       (key, files) = kv;
       values.push(
-        (
-          this.converters.key.fromKey(key),
-          files.collect(Array).map(this.converters.value.fromFile),
-        ),
+        TEntry{
+          key => Some(this.converters.key.fromKey(key)),
+          values => files.collect(Array).map(this.converters.value.fromFile),
+        },
       );
     };
     values.toArray();

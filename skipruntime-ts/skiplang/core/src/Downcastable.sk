@@ -1,0 +1,22 @@
+module SkipRuntime;
+
+@cpp_extern("SKIP_is_same_type")
+native fun isSameType<T, F: T>(t: T, f: F): Bool;
+
+@cpp_extern("SKIP_unsafe_cast")
+native fun unsafeCast<T, F: T>(t: T): F;
+
+trait Downcastable {
+  static fun instance(): inst;
+}
+
+fun cast<T: Downcastable, F: T>(v: T, c: Concrete<F>): F {
+  invariant(instanceOf(v, c), "invalid cast");
+  unsafeCast<T, F>(v);
+}
+
+fun instanceOf<T: Downcastable, F: T>(v: T, c: Concrete<F>): Bool {
+  isSameType(v, c::instance())
+}
+
+module end;

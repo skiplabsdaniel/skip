@@ -94,18 +94,42 @@ base class ResourceBuilder {
   fun produce(params: Parameters): Resource;
 }
 
+base class Entry uses Downcastable
+
+class TEntry<K: frozen & Orderable, V: frozen>{
+  key: ?K = None(),
+  values: Array<V> = Array[],
+} extends Entry {
+  @always_inline
+  static fun instance(): TEntry<K, V> {
+    TEntry<K, V>{};
+  }
+}
+
+fun castEntry<K: frozen & Orderable, V: frozen>(dir: Entry): TEntry<K, V> {
+  cast(dir, TEntry<K, V>);
+}
+
+fun instanceOfEntry<K: frozen & Orderable, V: frozen>(dir: Entry): Bool {
+  instanceOf(dir, TEntry<K, V>);
+}
+
 base class Data {
   fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)>;
 }
 
 class InitialData<K: frozen & Orderable, V: frozen>(
-  values: Array<(K, Array<V>)>,
+  entries: Array<TEntry<K, V>>,
   converters: ConverterPair<K, V>,
 ) extends Data {
   fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)> {
-    this.values.map(v ->
-      (this.converters.key.toKey(v.i0), v.i1.map(this.converters.value.toFile))
-    )
+    this.entries.map(v -> {
+      entry = castEntry<K, V>(v);
+      (
+        this.converters.key.toKey(entry.key.fromSome()),
+        entry.values.map(this.converters.value.toFile),
+      )
+    })
   }
 }
 
@@ -125,10 +149,7 @@ base class Service {
   ): Map<String, Collection<SKStore.Key, SKStore.File>>;
 }
 
-value class Values(
-  values: Array<(SKStore.Key, Array<SKStore.File>)>,
-  watermark: String,
-)
+value class Values(entries: Array<Entry>, watermark: String)
 
 base class Executor {
   fun resolve(): void;

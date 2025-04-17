@@ -339,7 +339,7 @@ fun createService(
         InitialData(
           SKJSON.expectArray(field).map(v -> {
             e = SKJSON.expectArray(v);
-            (e[0], SKJSON.expectArray(e[1]))
+            TEntry{key => Some(e[0]), values => SKJSON.expectArray(e[1])}
           }),
           kJSON_CONVERTERS,
         ),
@@ -669,11 +669,15 @@ fun getAllOfRuntime(resource: String, params: SKJSON.CJSON): SKJSON.CJSON {
       (
         "payload",
         SKJSON.CJArray(
-          result.values.values.map(v ->
+          result.values.entries.map(v -> {
+            entry = castEntry<SKStore.Key, SKStore.File>(v);
             SKJSON.CJArray(
-              Array[jsonFromKey(v.i0), SKJSON.CJArray(v.i1.map(jsonFromFile))],
+              Array[
+                jsonFromKey(entry.key.fromSome()),
+                SKJSON.CJArray(entry.values.map(jsonFromFile)),
+              ],
             )
-          ),
+          }),
         ),
       ),
       ("errors", SKJSON.CJArray(result.errors.map(jsonFromError))),

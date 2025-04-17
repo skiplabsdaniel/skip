@@ -248,7 +248,7 @@ class FileValueConverter<V: SKStore.File>(
 }
 
 class ServiceData{
-  initialData: Map<String, Data>,
+  initialData: Map<String, Array<Entry>>,
   resourceBuilders: Map<String, ResourceBuilder>,
   externalServices: Map<String, ExternalService>,
 }
@@ -270,7 +270,7 @@ class NoParamsBuilder(resource: Resource) extends ResourceBuilder {
 }
 
 trait WithServiceData {
-  macro fun initialData(): Map<String, Data> {
+  macro fun initialData(): Map<String, Array<Entry>> {
     static::data.initialData
   }
 
