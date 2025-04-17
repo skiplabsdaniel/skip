@@ -1,4 +1,3 @@
-#[warn(dead_code)]
 use std::{sync::Arc, time::Duration};
 
 use crate::ffi;
@@ -18,7 +17,6 @@ pub struct Clients {
     inner: Mutex<ClientsInner>,
 }
 
-#[allow(dead_code)]
 pub struct SseNotifier {
     sender: sse::Sender,
 }

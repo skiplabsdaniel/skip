@@ -1,28 +1,48 @@
-#![allow(dead_code)]
 use crate::clients::SseNotifier;
 use actix_web_lab::sse::SendError;
+use futures::channel::oneshot;
 use lazy_static::lazy_static;
 use libc::free;
 use log;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::sync::Mutex;
-use std::{thread, time};
+use uuid::Uuid;
 
 lazy_static! {
-    static ref CALLBACKS: Mutex<HashMap<u32, Box<dyn MutNotifier + Send + Sync>>> =
+    static ref NOTIFIERS: Mutex<HashMap<u32, Box<dyn MutNotifier + Send + Sync>>> =
         Mutex::new(HashMap::new());
-    static ref COUNTER: Mutex<u32> = Mutex::new(0);
+    static ref NCOUNTER: Mutex<u32> = Mutex::new(0);
+    static ref EXECUTORS: Mutex<HashMap<u32, Box<dyn Executor + Send + Sync>>> =
+        Mutex::new(HashMap::new());
+    static ref ECOUNTER: Mutex<u32> = Mutex::new(0);
+}
+
+#[repr(C)]
+pub struct SnapshotResult {
+    is_ok: c_int,
+    value: *mut c_char,
 }
 
 pub fn register_notifier(notifier: Box<dyn MutNotifier + Send + Sync>) -> u32 {
-    let mut counter = COUNTER.lock().unwrap();
-    let mut callbacks = CALLBACKS.lock().unwrap();
+    let mut counter = NCOUNTER.lock().unwrap();
+    let mut notifiers = NOTIFIERS.lock().unwrap();
 
     *counter += 1;
     let id = *counter;
 
-    callbacks.insert(id, notifier);
+    notifiers.insert(id, notifier);
+    id
+}
+
+pub fn register_executor(executor: Box<dyn Executor + Send + Sync>) -> u32 {
+    let mut counter = ECOUNTER.lock().unwrap();
+    let mut executors = EXECUTORS.lock().unwrap();
+
+    *counter += 1;
+    let id = *counter;
+
+    executors.insert(id, executor);
     id
 }
 
@@ -38,8 +58,8 @@ pub extern "C" fn free_string(s: *mut c_char) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn Skip_unregister_notifier(id: u32) {
-    let mut callbacks = CALLBACKS.lock().unwrap();
-    callbacks.remove(&id);
+    let mut notifiers = NOTIFIERS.lock().unwrap();
+    notifiers.remove(&id);
 }
 
 #[unsafe(no_mangle)]
@@ -51,8 +71,8 @@ pub extern "C" fn Skip_notifier__notify(
 ) -> *mut c_char {
     let values = copy_c_string(skvalues);
     let watermark = copy_c_string(skwatermark);
-    let mut callbacks = CALLBACKS.lock().unwrap();
-    let result = if let Some(callback) = callbacks.get_mut(&id) {
+    let mut notifiers = NOTIFIERS.lock().unwrap();
+    let result = if let Some(callback) = notifiers.get_mut(&id) {
         match callback.update(values, watermark, is_initial != 0) {
             Ok(()) => "".to_string(),
             Err(e) => e.to_string(),
@@ -66,8 +86,8 @@ pub extern "C" fn Skip_notifier__notify(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn Skip_notifier__close(id: u32) -> *mut c_char {
-    let mut callbacks = CALLBACKS.lock().unwrap();
-    let result = if let Some(callback) = callbacks.get_mut(&id) {
+    let mut notifiers = NOTIFIERS.lock().unwrap();
+    let result = if let Some(callback) = notifiers.get_mut(&id) {
         callback.close();
         "".to_string()
     } else {
@@ -78,13 +98,61 @@ pub extern "C" fn Skip_notifier__close(id: u32) -> *mut c_char {
 }
 
 fn init_notifier(id: u32, notifier: SseNotifier) -> () {
-    let mut callbacks = CALLBACKS.lock().unwrap();
-    if let Some(callback) = callbacks.get_mut(&id) {
+    let mut notifiers = NOTIFIERS.lock().unwrap();
+    if let Some(callback) = notifiers.get_mut(&id) {
         callback.init(notifier)
     }
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn Skip_unregister_executor(id: u32) {
+    let mut executors = EXECUTORS.lock().unwrap();
+    executors.remove(&id);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn Skip_executor_resolve(id: u32) {
+    let mut executors = EXECUTORS.lock().unwrap();
+    if let Some(executor) = executors.get_mut(&id) {
+        executor.resolve()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn Skip_executor_reject(id: u32, skerror: *const c_char) {
+    let mut executors = EXECUTORS.lock().unwrap();
+    if let Some(executor) = executors.get_mut(&id) {
+        let msg = copy_c_string(skerror);
+        executor.reject(error::SkipError {
+            msg: msg.to_string(),
+        })
+    }
+}
+
 use crate::error;
+
+pub trait Executor {
+    fn resolve(&mut self) -> ();
+    fn reject(&mut self, error: error::SkipError) -> ();
+}
+
+pub struct ExecutorImpl {
+    sender: Option<oneshot::Sender<Result<(), error::SkipError>>>,
+}
+
+impl Executor for ExecutorImpl {
+    fn resolve(&mut self) -> () {
+        if let Some(sender) = self.sender.take() {
+            let _ = sender.send(Ok(()));
+        }
+    }
+
+    fn reject(&mut self, error: error::SkipError) -> () {
+        if let Some(sender) = self.sender.take() {
+            let _ = sender.send(Err(error));
+        }
+    }
+}
 
 struct Update {
     values: String,
@@ -175,6 +243,7 @@ unsafe extern "C" {
         identifier: *const c_char,
         resource: *const c_char,
         parameters: *const c_char,
+        executor: u32,
     ) -> *mut c_char;
     fn Skip_close_resource_instance(identifier: *const c_char) -> *mut c_char;
     fn Skip_subscribe(
@@ -183,17 +252,13 @@ unsafe extern "C" {
         watermark: *const c_char,
     ) -> *mut c_char;
     fn Skip_unsubscribe(identifier: *const c_char) -> *mut c_char;
-    fn Skip_get_all(
-        resource: *const c_char,
-        parameters: *const c_char,
-        request: *const c_char,
-    ) -> *mut c_char;
+    fn Skip_get_all(resource: *const c_char, parameters: *const c_char) -> SnapshotResult;
     fn Skip_get_array(
         resource: *const c_char,
-        key_parameters: *const c_char,
-        request: *const c_char,
-    ) -> *mut c_char;
-    fn Skip_set_input(input: *const c_char, data: *const c_char) -> *mut c_char;
+        parameters: *const c_char,
+        key: *const c_char,
+    ) -> SnapshotResult;
+    fn Skip_set_input(input: *const c_char, data: *const c_char, executor: u32) -> *mut c_char;
 }
 
 fn copy_c_string(s: *const c_char) -> String {
@@ -220,6 +285,10 @@ pub fn instantiate_resource(
     resource: String,
     parameters: String,
 ) -> Result<(), error::SkipError> {
+    let (sender, receiver) = oneshot::channel();
+    let handle = register_executor(Box::new(ExecutorImpl {
+        sender: Some(sender),
+    }));
     unsafe {
         let c_identifier = CString::new(identifier).expect("CString::new failed");
         let c_resource = CString::new(resource).expect("CString::new failed");
@@ -228,14 +297,16 @@ pub fn instantiate_resource(
             c_identifier.as_ptr(),
             c_resource.as_ptr(),
             c_parameters.as_ptr(),
+            handle,
         );
-        let owned = copy_c_string_and_free(result);
-        if owned.is_empty() {
-            return Ok(());
-        } else {
-            return Err(error::SkipError { msg: owned });
+        if !result.is_null() {
+            let owned = copy_c_string_and_free(result);
+            if !owned.is_empty() {
+                return Err(error::SkipError { msg: owned });
+            }
         }
-    };
+    }
+    actix_web::rt::System::new().block_on(async { receiver.await.unwrap() })
 }
 
 pub fn close_resource_instance(identifier: String) -> Result<(), error::SkipError> {
@@ -300,77 +371,65 @@ pub fn unsubscribe(identifier: String) -> Result<(), error::SkipError> {
     }
 }
 
-pub fn resource_snapshot_<F>(
+fn resource_snapshot_<F>(
     resource: String,
-    data: String,
+    parameters: String,
     f: F,
 ) -> Result<String, error::SkipError>
 where
-    F: Fn(*const c_char, *const c_char, *const c_char) -> *mut c_char,
+    F: Fn(*const c_char, *const c_char) -> SnapshotResult,
 {
-    let ten_millis = time::Duration::from_millis(10);
-    let mut request: Option<String> = None;
+    let uuid = Uuid::new_v4().to_string();
+    instantiate_resource(uuid.clone(), resource.clone(), parameters.clone())?;
     unsafe {
         let c_resource = CString::new(resource).expect("CString::new failed");
-        let c_data = CString::new(data).expect("CString::new failed");
-        loop {
-            let c_request = match request {
-                Some(v) => Some(CString::new(v).expect("CString::new failed")),
-                _ => None,
-            };
-            let c_request_ptr = match c_request {
-                Some(v) => v.as_ptr(),
-                _ => 0x0 as *const u8,
-            };
-            let result = f(c_resource.as_ptr(), c_data.as_ptr(), c_request_ptr);
-            // Supposed to free the result mut char *
-            let c_str = CString::from_raw(result);
-            let rust_str = c_str.to_str().expect("Bad encoding");
-            let owned = rust_str.to_owned();
-            if owned.is_empty() {
-                return Err(error::SkipError {
-                    msg: "resource_snapshot_lookup: Unknown result.".to_string(),
-                });
-            } else if owned.starts_with("OK:") {
-                return Ok(owned[3..].to_string());
-            } else if owned.starts_with("ID:") {
-                request = Some(owned[3..].to_string());
-                thread::sleep(ten_millis);
-            } else {
-                return Err(error::SkipError { msg: owned });
-            }
-        }
-    };
+        let c_parameters = CString::new(parameters).expect("CString::new failed");
+        let result = f(c_resource.as_ptr(), c_parameters.as_ptr());
+        let c_str = CString::from_raw(result.value);
+        let rust_str = c_str.to_str().expect("Bad encoding");
+        let owned = rust_str.to_owned();
+        let res = if result.is_ok != 0 {
+            Ok(owned)
+        } else {
+            Err(error::SkipError { msg: owned })
+        };
+        _ = close_resource_instance(uuid);
+        res
+    }
 }
 
 pub fn resource_snapshot(resource: String, parameters: String) -> Result<String, error::SkipError> {
-    resource_snapshot_(resource, parameters, |p1, p2, p3| unsafe {
-        Skip_get_all(p1, p2, p3)
+    resource_snapshot_(resource, parameters, |p1, p2| unsafe {
+        Skip_get_all(p1, p2)
     })
 }
 
 pub fn resource_snapshot_lookup(
     resource: String,
-    key_parameters: String,
+    parameters: String,
+    key: String,
 ) -> Result<String, error::SkipError> {
-    resource_snapshot_(resource, key_parameters, |p1, p2, p3| unsafe {
-        Skip_get_array(p1, p2, p3)
+    resource_snapshot_(resource, parameters, |p1, p2| unsafe {
+        let c_key = CString::new(key.clone()).expect("CString::new failed");
+        Skip_get_array(p1, p2, c_key.as_ptr())
     })
 }
 
 pub fn set_input(input: String, data: String) -> Result<(), error::SkipError> {
+    let (sender, receiver) = oneshot::channel();
+    let handle = register_executor(Box::new(ExecutorImpl {
+        sender: Some(sender),
+    }));
     unsafe {
         let c_input = CString::new(input).expect("CString::new failed");
         let c_data = CString::new(data).expect("CString::new failed");
-        let result = Skip_set_input(c_input.as_ptr(), c_data.as_ptr());
-        // Supposed to free the result mut char *
-        let c_str = CString::from_raw(result);
-        let rust_str = c_str.to_str().expect("Bad encoding");
-        let owned = rust_str.to_owned();
-        if owned.is_empty() {
-            return Ok(());
-        } else {
-            return Err(error::SkipError { msg: owned });
+        let result = Skip_set_input(c_input.as_ptr(), c_data.as_ptr(), handle);
+        if !result.is_null() {
+            let owned = copy_c_string_and_free(result);
+            if !owned.is_empty() {
+                return Err(error::SkipError { msg: owned });
+            }
         }
     }
+    actix_web::rt::System::new().block_on(async { receiver.await.unwrap() })
 }

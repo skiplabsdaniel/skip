@@ -3,6 +3,18 @@
 
 #include "string.h"
 
+typedef struct {
+  int is_ok;                  // 1 = Ok, 0 = Err
+  const char* error_message;  // si err
+} result_t;
+
+typedef void (*executor_cb)(result_t result, void* user_data);
+
+typedef struct {
+  executor_cb callback;
+  void* user_data;
+} executor_t;
+
 void free_string(char* str);
 const void* SKIP_new_Obstack();
 void SKIP_destroy_Obstack(const void* obstack);

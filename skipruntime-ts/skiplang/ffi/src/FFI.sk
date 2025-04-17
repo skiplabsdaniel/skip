@@ -645,18 +645,15 @@ fun createResourceOfRuntime(
   params: SKJSON.CJSON,
   executor: Executor,
 ): Float {
-  SKStore.runWithResult(context ~> {
-    createReactiveResource(
-      context,
-      identifier,
-      resource,
-      JSONParams(params),
-      executor,
-    )
-  }) match {
+  ServiceInstance.instantiateResource(
+    identifier,
+    resource,
+    JSONParams(params),
+    executor,
+  ) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
-  };
+  }
 }
 
 @export("SkipRuntime_Runtime__getAll")

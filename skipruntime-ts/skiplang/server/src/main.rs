@@ -126,7 +126,8 @@ pub async fn resource_snapshot_lookup(
 ) -> impl Responder {
     if check_content_type("application/json", req) {
         match state.worker.submit::<_, _>(move || {
-            ffi::resource_snapshot_lookup(resource.to_string(), data.to_string())
+            // TODO json parameters / key
+            ffi::resource_snapshot_lookup(resource.to_string(), data.to_string(), "".to_string())
         }) {
             Ok(data) => HttpResponse::Ok()
                 .content_type(ContentType::json())

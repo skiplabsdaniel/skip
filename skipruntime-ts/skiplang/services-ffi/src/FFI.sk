@@ -5,6 +5,7 @@ fun instantiateResource(
   identifier: String,
   resource: String,
   params: String,
+  executor: Executor,
 ): String {
   parameters = ServiceInstance.getResourceBuilder(resource) match {
   | Failure(ex) -> return ex.getMessage()

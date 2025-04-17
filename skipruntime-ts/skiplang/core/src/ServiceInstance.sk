@@ -1,0 +1,22 @@
+module alias SR = SkipRuntime;
+
+module ServiceInstance;
+
+fun instantiateResource(
+  identifier: String,
+  resource: String,
+  params: SR.Parameters,
+  executor: SR.Executor,
+): Result<void, .Exception> {
+  SKStore.runWithResult(context ~> {
+    _ = SR.createReactiveResource(
+      context,
+      identifier,
+      resource,
+      params,
+      executor,
+    )
+  })
+}
+
+module end;
