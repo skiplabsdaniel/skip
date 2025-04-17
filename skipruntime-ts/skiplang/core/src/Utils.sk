@@ -51,6 +51,9 @@ class JSONKeyConverter() extends KeyConverter<SKJSON.CJSON> {
   fun toKey(k: SKJSON.CJSON): SKStore.Key {
     JSONID(k)
   }
+  fun fromString(k: String): SKJSON.CJSON {
+    SKJSON.decode(k, x ~> x)
+  }
 }
 
 const kJSON_CONVERTERS: ConverterPair<
@@ -73,6 +76,9 @@ class NOOPKeyConverter() extends KeyConverter<SKStore.Key> {
   }
   fun toKey(k: SKStore.Key): SKStore.Key {
     k
+  }
+  fun fromString(_k: String): SKStore.Key {
+    invariant_violation("Unable to convert untyped file")
   }
 }
 
@@ -216,6 +222,9 @@ class IntKeyConverter() extends KeyConverter<Int> {
   fun toKey(k: Int): SKStore.Key {
     SKStore.IID(k)
   }
+  fun fromString(k: String): Int {
+    k.toInt()
+  }
 }
 
 class StringValueConverter() extends ValueConverter<String> {
@@ -233,6 +242,9 @@ class StringKeyConverter() extends KeyConverter<String> {
   }
   fun toKey(k: String): SKStore.Key {
     SKStore.SID(k)
+  }
+  fun fromString(k: String): String {
+    k
   }
 }
 
@@ -259,13 +271,20 @@ class EmptyParameters() extends Parameters {
   }
 }
 
-class NoParamsBuilder(resource: Resource) extends ResourceBuilder {
+class NoParamsBuilder(
+  resource: Resource,
+  snapshot_: Snapshot,
+) extends ResourceBuilder {
   fun parseParameters(_params: String): Parameters {
     EmptyParameters()
   }
 
   fun produce(_params: Parameters): Resource {
     this.resource
+  }
+
+  fun snapshot(): Snapshot {
+    this.snapshot_
   }
 }
 
@@ -305,6 +324,16 @@ trait SKJSONParameters {
 
   fun parseParameters(params: String): Parameters {
     JSONParams(SKJSON.decode(params, x ~> x))
+  }
+}
+
+class UnusedSnapshot() extends Snapshot {
+  fun snapshot(_entries: Array<Entry>): String {
+    invariant_violation("snapshot function should not be called.")
+  }
+
+  fun snapshotLookup(_entry: Entry): String {
+    invariant_violation("snapshot function should not be called.")
   }
 }
 

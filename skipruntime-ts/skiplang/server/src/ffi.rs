@@ -20,7 +20,7 @@ lazy_static! {
 
 #[repr(C)]
 pub struct SnapshotResult {
-    is_ok: c_int,
+    is_ok: u8,
     value: *mut c_char,
 }
 
@@ -252,8 +252,8 @@ unsafe extern "C" {
         watermark: *const c_char,
     ) -> *mut c_char;
     fn Skip_unsubscribe(identifier: *const c_char) -> *mut c_char;
-    fn Skip_get_all(resource: *const c_char, parameters: *const c_char) -> SnapshotResult;
-    fn Skip_get_array(
+    fn Skip_resource_snapshot(resource: *const c_char, parameters: *const c_char) -> SnapshotResult;
+    fn Skip_resource_snapshot_lookup(
         resource: *const c_char,
         parameters: *const c_char,
         key: *const c_char,
@@ -400,7 +400,7 @@ where
 
 pub fn resource_snapshot(resource: String, parameters: String) -> Result<String, error::SkipError> {
     resource_snapshot_(resource, parameters, |p1, p2| unsafe {
-        Skip_get_all(p1, p2)
+        Skip_resource_snapshot(p1, p2)
     })
 }
 
@@ -411,7 +411,7 @@ pub fn resource_snapshot_lookup(
 ) -> Result<String, error::SkipError> {
     resource_snapshot_(resource, parameters, |p1, p2| unsafe {
         let c_key = CString::new(key.clone()).expect("CString::new failed");
-        Skip_get_array(p1, p2, c_key.as_ptr())
+        Skip_resource_snapshot_lookup(p1, p2, c_key.as_ptr())
     })
 }
 

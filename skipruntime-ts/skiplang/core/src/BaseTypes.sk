@@ -7,6 +7,7 @@ base class Collections
 base class KeyConverter<K: frozen & Orderable> {
   fun fromKey(SKStore.Key): K;
   fun toKey(K): SKStore.Key;
+  fun fromString(String): K;
 }
 
 base class ValueConverter<V: frozen> {
@@ -89,9 +90,15 @@ base class Resource {
   ): Collection<SKStore.Key, SKStore.File>;
 }
 
+base class Snapshot {
+  fun snapshot(entries: Array<Entry>): String;
+  fun snapshotLookup(entry: Entry): String;
+}
+
 base class ResourceBuilder {
   fun parseParameters(params: String): Parameters;
   fun produce(params: Parameters): Resource;
+  fun snapshot(): Snapshot;
 }
 
 base class Entry uses Downcastable

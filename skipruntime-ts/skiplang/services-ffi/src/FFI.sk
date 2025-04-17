@@ -1,27 +1,38 @@
-module SkipRuntime;
+module alias SR = SkipRuntime;
+
+module SkipRuntimeFFI;
 
 @cpp_export("SkipRuntime_instantiateResource")
 fun instantiateResource(
   identifier: String,
   resource: String,
   params: String,
-  executor: Executor,
-): String {
-  parameters = ServiceInstance.getResourceBuilder(resource) match {
-  | Failure(ex) -> return ex.getMessage()
-  | Success(builder) -> builder.parseParameters(params)
+  executor: SR.Executor,
+): ?String {
+  builder = ServiceInstance.getResourceBuilder(resource) match {
+  | Failure(ex) -> return Some(ex.getMessage())
+  | Success(builder) -> builder
   };
-  ServiceInstance.instantiateResource(identifier, resource, parameters) match {
-  | Failure(ex) -> ex.getMessage()
-  | _ -> ""
+  parameters = Result::guard(() ~> builder.parseParameters(params)) match {
+  | Failure(ex) -> return Some(ex.getMessage())
+  | Success(parameters) -> parameters
+  };
+  ServiceInstance.instantiateResource(
+    identifier,
+    resource,
+    parameters,
+    executor,
+  ) match {
+  | Failure(ex) -> Some(ex.getMessage())
+  | _ -> None()
   }
 }
 
 @cpp_export("SkipRuntime_closeResourceInstance")
-fun closeResourceInstance(identifier: String): String {
-  ServiceInstance.closeResource(identifier) match {
-  | Failure(ex) -> ex.getMessage()
-  | _ -> ""
+fun closeResourceInstance(identifier: String): ?String {
+  ServiceInstance.closeResourceInstance(identifier) match {
+  | Failure(ex) -> Some(ex.getMessage())
+  | _ -> None()
   }
 }
 
@@ -34,8 +45,11 @@ class NotifierException(message: String) extends .Exception {
 }
 
 @export("SkipRuntime_checkNotifierException")
-fun throwNotifierException(message: String): void {
-  if (!message.isEmpty()) throw NotifierException(message)
+fun throwNotifierException(message: ?String): void {
+  message match {
+  | Some(msg) if (!msg.isEmpty()) -> throw NotifierException(msg)
+  | _ -> void
+  }
 }
 
 @cpp_extern("SkipRuntime_Notifier__notify")
@@ -62,7 +76,7 @@ fun createNotifier(notifier: UInt32): ExternNotifier {
 
 class ExternNotifier(
   eptr: SKStore.ExternalPointer,
-) extends Notifier<SKStore.Key, SKStore.File> {
+) extends SR.Notifier<SKStore.Key, SKStore.File> {
   fun subscribed(): void {
     void
   }
@@ -77,6 +91,78 @@ class ExternNotifier(
 
   fun close(): void {
     closeOfNotifier(this.eptr.value)
+  }
+}
+
+/************  Executor ****************/
+
+@cpp_extern("SkipRuntime_Executor__resolve")
+@debug
+native fun resolveOfExecutor(executor: UInt32): void;
+
+@cpp_extern("SkipRuntime_Executor__reject")
+@debug
+native fun rejectOfExecutor(executor: UInt32, message: String): void;
+
+@cpp_extern("SkipRuntime_deleteExecutor")
+@debug
+native fun deleteExecutor(mapper: UInt32): void;
+
+@export("SkipRuntime_createExecutor")
+fun createExecutor(executor: UInt32): ExternExecutor {
+  ExternExecutor(SKStore.ExternalPointer::create(executor, deleteExecutor))
+}
+
+class ExternExecutor(eptr: SKStore.ExternalPointer) extends SR.Executor {
+  fun resolve(): void {
+    resolveOfExecutor(this.eptr.value)
+  }
+
+  fun reject(exc: .Exception): void {
+    rejectOfExecutor(this.eptr.value, exc.getMessage())
+  }
+}
+
+/************  Snapshot ****************/
+
+value class SnapshotResult(is_ok: Bool, value: String)
+
+// TODO use a printer instead of returning the result
+
+@export("SkipRuntime_resourceSnapshot")
+fun resourceSnapshot(resource: String, params: String): SnapshotResult {
+  builder = ServiceInstance.getResourceBuilder(resource) match {
+  | Failure(ex) -> return SnapshotResult(false, ex.getMessage())
+  | Success(builder) -> builder
+  };
+  parameters = Result::guard(() ~> builder.parseParameters(params)) match {
+  | Failure(ex) -> return SnapshotResult(false, ex.getMessage())
+  | Success(parameters) -> parameters
+  };
+  ServiceInstance.resourceSnapshot(resource, parameters) match {
+  | Failure(ex) -> SnapshotResult(false, ex.getMessage())
+  | Success(value) -> SnapshotResult(true, builder.snapshot().snapshot(value))
+  }
+}
+
+@export("SkipRuntime_resourceSnapshotLookup")
+fun resourceSnapshotLookup(
+  resource: String,
+  params: String,
+  key: String,
+): SnapshotResult {
+  builder = ServiceInstance.getResourceBuilder(resource) match {
+  | Failure(ex) -> return SnapshotResult(false, ex.getMessage())
+  | Success(builder) -> builder
+  };
+  parameters = Result::guard(() ~> builder.parseParameters(params)) match {
+  | Failure(ex) -> return SnapshotResult(false, ex.getMessage())
+  | Success(parameters) -> parameters
+  };
+  ServiceInstance.resourceSnapshotLookup(resource, parameters, key) match {
+  | Failure(ex) -> SnapshotResult(false, ex.getMessage())
+  | Success(value) ->
+    SnapshotResult(true, builder.snapshot().snapshotLookup(value))
   }
 }
 

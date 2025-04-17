@@ -4,16 +4,9 @@
 #include "string.h"
 
 typedef struct {
-  int is_ok;                  // 1 = Ok, 0 = Err
-  const char* error_message;  // si err
+  uint8_t is_ok;      // 1 = Ok, 0 = Err
+  const char* value;  // si err
 } result_t;
-
-typedef void (*executor_cb)(result_t result, void* user_data);
-
-typedef struct {
-  executor_cb callback;
-  void* user_data;
-} executor_t;
 
 void free_string(char* str);
 const void* SKIP_new_Obstack();
@@ -29,20 +22,24 @@ char* SkipRuntime_closeResourceInstance(const char* identifier);
 char* SkipRuntime_subscribe(const char* identifier, const void* notifier,
                             const char* watermark);
 char* SkipRuntime_unsubscribe(const char* identifier);
-char* SkipRuntime_getAll(const char* resource, const char* parameters,
-                         const char* request);
-char* SkipRuntime_getArray(const char* resource, const char* data,
-                           const char* request);
+result_t SkipRuntime_resourceSnapshot(const char* resource,
+                                      const char* parameters);
+result_t SkipRuntime_resourceSnapshotLookup(const char* resource,
+                                            const char* parameters,
+                                            const char* key);
 char* SkipRuntime_update(const char* input, const char* data);
-char* SkipRuntime_createNotifier(uint32_t handle);
+const void* SkipRuntime_createNotifier(uint32_t handle);
 void SkipRuntime_checkNotifierException(const char* msg);
-
 char* Skip_notifier__notify(uint32_t id, const char* values,
                             const char* watermark, int32_t is_initial);
 
 char* Skip_notifier__close(uint32_t id);
-
 void Skip_unregister_notifier(uint32_t id);
+
+const void* SkipRuntime_createExecutor(uint32_t handle);
+void Skip_unregister_executor(uint32_t id);
+void Skip_executor_resolve(uint32_t id);
+void Skip_executor_reject(uint32_t id, const char* value);
 
 char* Skip_instantiate_resource(const char* identifier, const char* resource,
                                 const char* parameters) {
@@ -52,8 +49,11 @@ char* Skip_instantiate_resource(const char* identifier, const char* resource,
   const char* skparameters = sk_string_create(parameters, strlen(parameters));
   const char* skresult =
       SkipRuntime_instantiateResource(skidentifier, skresource, skparameters);
-  sk_string_check_c_safe(skresult);
-  char* result = strdup(skresult);
+  char* result = NULL;
+  if (skresult != NULL) {
+    sk_string_check_c_safe(skresult);
+    result = strdup(skresult);
+  }
   SKIP_destroy_Obstack(obstack);
   return result;
 }
@@ -62,8 +62,11 @@ char* Skip_close_resource_instance(const char* identifier) {
   const void* obstack = SKIP_new_Obstack();
   const char* skidentifier = sk_string_create(identifier, strlen(identifier));
   const char* skresult = SkipRuntime_closeResourceInstance(skidentifier);
-  sk_string_check_c_safe(skresult);
-  char* result = strdup(skresult);
+  char* result = NULL;
+  if (skresult != NULL) {
+    sk_string_check_c_safe(skresult);
+    result = strdup(skresult);
+  }
   SKIP_destroy_Obstack(obstack);
   return result;
 };
@@ -77,8 +80,11 @@ char* Skip_subscribe(const char* identifier, uint32_t notifier,
       watermark ? sk_string_create(watermark, strlen(watermark)) : NULL;
   const char* skresult =
       SkipRuntime_subscribe(skidentifier, sknotifier, skwatermark);
-  sk_string_check_c_safe(skresult);
-  char* result = strdup(skresult);
+  char* result = NULL;
+  if (skresult != NULL) {
+    sk_string_check_c_safe(skresult);
+    result = strdup(skresult);
+  }
   SKIP_destroy_Obstack(obstack);
   return result;
 }
@@ -87,39 +93,40 @@ char* Skip_unsubscribe(const char* identifier) {
   const void* obstack = SKIP_new_Obstack();
   const char* skidentifier = sk_string_create(identifier, strlen(identifier));
   const char* skresult = SkipRuntime_unsubscribe(skidentifier);
-  sk_string_check_c_safe(skresult);
-  char* result = strdup(skresult);
+  char* result = NULL;
+  if (skresult != NULL) {
+    sk_string_check_c_safe(skresult);
+    result = strdup(skresult);
+  }
   SKIP_destroy_Obstack(obstack);
   return result;
 }
 
-char* Skip_get_all(const char* resource, const char* parameters,
-                   const char* request) {
+result_t Skip_resource_snapshot(const char* resource, const char* parameters) {
   const void* obstack = SKIP_new_Obstack();
   const char* skresource = sk_string_create(resource, strlen(resource));
   const char* skparameters = sk_string_create(parameters, strlen(parameters));
-  const char* skrequest =
-      request ? sk_string_create(request, strlen(request)) : NULL;
-  const char* skresult =
-      SkipRuntime_getAll(skresource, skparameters, skrequest);
-  sk_string_check_c_safe(skresult);
-  char* result = strdup(skresult);
+  result_t skresult = SkipRuntime_resourceSnapshot(skresource, skparameters);
+  sk_string_check_c_safe(skresult.value);
+  char* result = strdup(skresult.value);
   SKIP_destroy_Obstack(obstack);
-  return result;
+  result_t res = {skresult.is_ok, result};
+  return res;
 }
 
-char* Skip_get_array(const char* resource, const char* data,
-                     const char* request) {
+result_t Skip_resource_snapshot_lookup(const char* resource, const char* params,
+                                       const char* key) {
   const void* obstack = SKIP_new_Obstack();
   const char* skresource = sk_string_create(resource, strlen(resource));
-  const char* skdata = sk_string_create(data, strlen(data));
-  const char* skrequest =
-      request ? sk_string_create(request, strlen(request)) : NULL;
-  const char* skresult = SkipRuntime_getArray(skresource, skdata, skrequest);
-  sk_string_check_c_safe(skresult);
-  char* result = strdup(skresult);
+  const char* skparams = sk_string_create(params, strlen(params));
+  const char* skkey = sk_string_create(key, strlen(key));
+  result_t skresult =
+      SkipRuntime_resourceSnapshotLookup(skresource, skparams, skkey);
+  sk_string_check_c_safe(skresult.value);
+  char* result = strdup(skresult.value);
   SKIP_destroy_Obstack(obstack);
-  return result;
+  result_t res = {skresult.is_ok, result};
+  return res;
 }
 
 char* Skip_set_input(const char* input, const char* data) {
@@ -127,8 +134,11 @@ char* Skip_set_input(const char* input, const char* data) {
   const char* skinput = sk_string_create(input, strlen(input));
   const char* skdata = sk_string_create(data, strlen(data));
   const char* skresult = SkipRuntime_update(skinput, skdata);
-  sk_string_check_c_safe(skresult);
-  char* result = strdup(skresult);
+  char* result = NULL;
+  if (skresult != NULL) {
+    sk_string_check_c_safe(skresult);
+    result = strdup(skresult);
+  }
   SKIP_destroy_Obstack(obstack);
   return result;
 }
@@ -150,4 +160,16 @@ void SkipRuntime_Notifier__close(uint32_t id) {
 
 void SkipRuntime_deleteNotifier(uint32_t id) {
   Skip_unregister_notifier(id);
+}
+
+void SkipRuntime_Executor__resolve(uint32_t id) {
+  Skip_executor_resolve(id);
+}
+
+void SkipRuntime_Executor__reject(uint32_t id, const char* message) {
+  Skip_executor_reject(id, message);
+}
+
+void SkipRuntime_deleteExecutor(uint32_t id) {
+  Skip_unregister_executor(id);
 }

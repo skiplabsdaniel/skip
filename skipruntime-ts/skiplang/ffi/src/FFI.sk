@@ -287,8 +287,13 @@ fun createResourceBuilder(resourceBuilder: UInt32): ExternResourceBuilder {
 class ExternResourceBuilder(
   eptr: SKStore.ExternalPointer,
 ) extends TResourceBuilder<SKJSON.CJSON> uses SKJSONParameters {
+  //
   fun build(params: SKJSON.CJSON): Resource {
     buildOfResourceBuilder(this.eptr.value, params)
+  }
+
+  fun snapshot(): Snapshot {
+    UnusedSnapshot()
   }
 }
 
@@ -715,9 +720,7 @@ fun getForKeyOfRuntime(
 
 @export("SkipRuntime_Runtime__closeResource")
 fun closeResourceOfRuntime(identifier: String): Float {
-  SKStore.runWithResult(context ~> {
-    closeReactiveResource(context, identifier)
-  }) match {
+  ServiceInstance.closeResourceInstance(identifier) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   };

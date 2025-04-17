@@ -743,6 +743,25 @@ class Collection<K: frozen & Orderable, V: frozen>(
     }
   }
 
+  fun lookup(strKey: String): Entry {
+    getContext() match {
+    | Some(context) ->
+      dir = context.unsafeGetEagerDir(this.hdl.dirName);
+      if (dir.creator == context.currentArrow()) {
+        throw ReadInCreatorException()
+      };
+      keyConv = this.converters.key;
+      key = keyConv.fromString(strKey);
+      TEntry{
+        key => Some(key),
+        values => dir
+          .getArray(context, keyConv.toKey(key))
+          .map(this.converters.value.fromFile),
+      }
+    | _ -> invariant_violation("Store context must be specified.")
+    }
+  }
+
   /**
    * Get a value of an eager reactive collection, if one exists.
    * If multiple values are mapped to by the key, any of them can be returned.
@@ -1237,6 +1256,21 @@ fun getAll(
   );
 }
 
+fun resourceSnapshot(
+  context: mutable SKStore.Context,
+  resourceName: String,
+  params: Parameters,
+): Array<Entry> {
+  graphHdl = SKStore.EHandle(
+    ResourceDef::keyType,
+    ResourceInfo::type,
+    kResourceCollectionsDir,
+  );
+  resourceID = ResourceDef(resourceName, params);
+  resource = graphHdl.get(context, resourceID);
+  resource.collection.getAll(context)
+}
+
 fun getForKey(
   context: mutable SKStore.Context,
   resourceName: String,
@@ -1254,6 +1288,25 @@ fun getForKey(
   values = resource.collection.getArray(key);
   popContext();
   resource.getResult(context, values);
+}
+
+fun resourceSnapshotLookup(
+  context: mutable SKStore.Context,
+  resourceName: String,
+  params: Parameters,
+  key: String,
+): Entry {
+  graphHdl = SKStore.EHandle(
+    ResourceDef::keyType,
+    ResourceInfo::type,
+    kResourceCollectionsDir,
+  );
+  resourceID = ResourceDef(resourceName, params);
+  resource = graphHdl.get(context, resourceID);
+  pushContext(context);
+  entry = resource.collection.lookup(key);
+  popContext();
+  entry
 }
 
 fun destroyReactiveResource(
@@ -1510,6 +1563,24 @@ fun getReactiveResource(
   key = SKStore.SID(identifier);
   definition = resourceHdl.get(context, key);
   graphHdl.get(context, definition);
+}
+
+fun getResourceBuilder(
+  context: mutable SKStore.Context,
+  name: String,
+): ResourceBuilder {
+  sessionHdl = SKStore.EHandle(
+    SKStore.UnitID::keyType,
+    ServiceDefinition::type,
+    kSessionDir,
+  );
+  (sessionHdl.maybeGet(context, SKStore.UnitID::singleton) match {
+  | Some(def) -> def.service.resourceBuilders().maybeGet(name)
+  | _ -> None()
+  }) match {
+  | Some(builder) -> builder
+  | _ -> throw SKStore.Error(`Unable to find '${name}' resource.`)
+  }
 }
 
 fun checkGarbage(context: mutable SKStore.Context): void {

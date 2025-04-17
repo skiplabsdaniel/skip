@@ -19,4 +19,35 @@ fun instantiateResource(
   })
 }
 
+fun closeResourceInstance(identifier: String): Result<void, .Exception> {
+  SKStore.runWithResult(context ~> {
+    SR.closeReactiveResource(context, identifier)
+  })
+}
+
+fun getResourceBuilder(name: String): Result<SR.ResourceBuilder, .Exception> {
+  SKStore.runWithResult(context ~> {
+    SR.getResourceBuilder(context, name)
+  })
+}
+
+fun resourceSnapshot(
+  resource: String,
+  params: SR.Parameters,
+): Result<Array<SR.Entry>, .Exception> {
+  SKStore.runWithResult(context ~> {
+    SR.resourceSnapshot(context, resource, params)
+  })
+}
+
+fun resourceSnapshotLookup(
+  resource: String,
+  params: SR.Parameters,
+  key: String,
+): Result<SR.Entry, .Exception> {
+  SKStore.runWithResult(context ~> {
+    SR.resourceSnapshotLookup(context, resource, params, key)
+  })
+}
+
 module end;
