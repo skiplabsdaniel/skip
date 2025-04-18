@@ -333,15 +333,17 @@ fun buildResourcesGraph(
         collections = servicesHdl.get(context, SKStore.SID(runId)).value;
         collection = resource.materialize(collections);
         // Ensure the name of the resource result
-        resourceData = collection.hdl.map(
-          kNOTYPE_KEY,
-          kNOTYPE_VALUE,
-          context,
-          dDirname.sub(resourceId),
-          (_ctx, writer, key, it) ~> {
-            writer.setArray(key, Array::createFromIterator(it.values())); // TODO: use it.toArray()
-          },
-        );
+        resourceData = collection
+          .hdl
+          .map(
+            kNOTYPE_KEY,
+            kNOTYPE_VALUE,
+            context,
+            dDirname.sub(resourceId),
+            (_ctx, writer, key, it) ~> {
+              writer.setArray(key, Array::createFromIterator(it.values())); // TODO: use it.toArray()
+            },
+          );
         writer.set(
           key,
           ResourceInfo(

@@ -199,4 +199,16 @@ base class TResource<K: frozen & Orderable, V: frozen, CS: Collections> extends
   fun fromMap(Map<String, Collection<SKStore.Key, SKStore.File>>): CS;
 }
 
+base class TService<I: Collections, O: Collections> extends Service {
+  fun createGraph(
+    inputs: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  ): Map<String, Collection<SKStore.Key, SKStore.File>> {
+    this.toOutputsMap(this.createTypedGraph(this.fromInputsMap(inputs)))
+  }
+
+  fun createTypedGraph(I): O;
+  fun fromInputsMap(Map<String, Collection<SKStore.Key, SKStore.File>>): I;
+  fun toOutputsMap(O): Map<String, Collection<SKStore.Key, SKStore.File>>;
+}
+
 module end;
