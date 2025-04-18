@@ -198,7 +198,7 @@ fun lazyForName(name: String): LazyCollection<SKStore.Key, SKStore.File> {
   LazyCollection::forName(name, kNOTYPE_CONVERTERS)
 }
 
-fun collectionsByName(collections: Map<String, Collection>): SKJSON.CJObject {
+fun collectionsByName(collections: Collections): SKJSON.CJObject {
   fields = mutable Vector[];
   collections.each((k, v) -> fields.push((k, SKJSON.CJString(v.getId()))));
   SKJSON.CJObject(SKJSON.CJFields::create(fields.toArray(), x -> x));
@@ -332,6 +332,20 @@ class UnusedSnapshot() extends Snapshot {
 
   fun snapshotLookup(_entry: Entry): String {
     invariant_violation("snapshot function should not be called.")
+  }
+}
+
+class CollectionsMap(map: Map<String, Collection>) extends Collections {
+  fun get(name: String): Collection {
+    this.map.maybeGet(name) match {
+    | Some(collection) -> collection
+    | _ -> invariant_violation(`Unknown collection ${name}`)
+    }
+  }
+
+
+  fun each(fn: (String, Collection) -> void): void {
+    this.map.each(fn)
   }
 }
 

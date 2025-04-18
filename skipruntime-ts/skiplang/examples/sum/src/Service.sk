@@ -17,7 +17,20 @@ const kSTRING_INDEXED_TYPES: SR.ConverterPair<
 class Inputs{
   input1: SR.TCollection<String, Int>,
   input2: SR.TCollection<String, Int>,
-} extends SR.Collections
+} extends SR.Collections {
+  fun get(name: String): SR.Collection {
+    name match {
+    | "input1" -> this.input1
+    | "input2" -> this.input2
+    | _ -> invariant_violation(`Unknown collection ${name}`)
+    }
+  }
+
+  fun each(fn: (String, SR.Collection) -> void): void {
+    fn("input1", this.input1);
+    fn("input2", this.input2);
+  }
+}
 
 class Indexed(index: Int, value: Int) extends SKStore.File uses Orderable
 
@@ -73,10 +86,10 @@ class Minus() extends SR.Mapper<String, Indexed, String, Int> {
   }
 }
 
-fun fromMap(map: Map<String, SR.Collection>): Inputs {
+fun fromCollections(collections: SR.Collections): Inputs {
   Inputs{
-    input1 => map.get("input1").unsafeCast(kSTRING_INT_TYPES),
-    input2 => map.get("input2").unsafeCast(kSTRING_INT_TYPES),
+    input1 => collections.get("input1").unsafeCast(kSTRING_INT_TYPES),
+    input2 => collections.get("input2").unsafeCast(kSTRING_INT_TYPES),
   }
 }
 
@@ -85,8 +98,8 @@ class Add() extends SR.TResource<String, Int, Inputs> {
     cs.input1.merge(Array[cs.input2]).map(Plus())
   }
 
-  fun fromMap(map: Map<String, SR.Collection>): Inputs {
-    fromMap(map)
+  fun fromCollections(collections: SR.Collections): Inputs {
+    fromCollections(collections)
   }
 }
 
@@ -98,8 +111,8 @@ class Sub() extends SR.TResource<String, Int, Inputs> {
       .map(Minus())
   }
 
-  fun fromMap(map: Map<String, SR.Collection>): Inputs {
-    fromMap(map)
+  fun fromCollections(collections: SR.Collections): Inputs {
+    fromCollections(collections)
   }
 }
 
@@ -117,12 +130,8 @@ class Service() extends SR.TService<Inputs, Inputs> uses SR.WithServiceData {
     ics
   }
 
-  fun fromInputsMap(map: Map<String, SR.Collection>): Inputs {
-    fromMap(map)
-  }
-
-  fun toOutputsMap(inputs: Inputs): Map<String, SR.Collection> {
-    Map["input1" => inputs.input1, "input2" => inputs.input2]
+  fun fromCollections(inputs: SR.Collections): Inputs {
+    fromCollections(inputs)
   }
 }
 

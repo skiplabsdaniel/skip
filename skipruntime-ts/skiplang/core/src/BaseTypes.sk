@@ -2,7 +2,10 @@ module SkipRuntime;
 
 base class IError uses Show
 base class Parameters uses Orderable, Show
-base class Collections
+base class Collections {
+  fun get(name: String): Collection;
+  fun each((String, Collection) -> void): void;
+}
 
 base class KeyConverter<K: frozen & Orderable> {
   fun fromKey(SKStore.Key): K;
@@ -86,7 +89,7 @@ base class ExternalService {
 }
 
 base class Resource {
-  fun materialize(collections: Map<String, Collection>): Collection;
+  fun materialize(collections: Collections): Collection;
 }
 
 base class Snapshot {
@@ -159,9 +162,7 @@ base class Service {
   fun resourceBuilders(): Map<String, ResourceBuilder>;
   fun externalServices(): Map<String, ExternalService>;
 
-  fun createGraph(
-    inputCollections: Map<String, Collection>,
-  ): Map<String, Collection>;
+  fun createGraph(inputCollections: Collections): Collections;
 }
 
 value class Values(entries: Array<Entry>, watermark: String)
@@ -193,22 +194,21 @@ base class TResourceBuilder<P: frozen> extends ResourceBuilder {
 base class TResource<K: frozen & Orderable, V: frozen, CS: Collections> extends
   Resource,
 {
-  fun materialize(collections: Map<String, Collection>): Collection {
-    this.instantiate(this.fromMap(collections))
+  fun materialize(collections: Collections): Collection {
+    this.instantiate(this.fromCollections(collections))
   }
 
   fun instantiate(collections: CS): TCollection<K, V>;
-  fun fromMap(Map<String, Collection>): CS;
+  fun fromCollections(Collections): CS;
 }
 
 base class TService<I: Collections, O: Collections> extends Service {
-  fun createGraph(inputs: Map<String, Collection>): Map<String, Collection> {
-    this.toOutputsMap(this.createTypedGraph(this.fromInputsMap(inputs)))
+  fun createGraph(inputs: Collections): Collections {
+    this.createTypedGraph(this.fromCollections(inputs))
   }
 
   fun createTypedGraph(I): O;
-  fun fromInputsMap(Map<String, Collection>): I;
-  fun toOutputsMap(O): Map<String, Collection>;
+  fun fromCollections(Collections): I;
 }
 
 module end;

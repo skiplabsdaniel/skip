@@ -114,10 +114,7 @@ class ResourceStatus(
   status: Status<IError>,
 ) extends SKStore.File {}
 
-class ServiceFile(
-  value: Map<String, Collection>,
-  inputs: Map<String, Collection>,
-) extends SKStore.File
+class ServiceFile(value: Collections, inputs: Collections) extends SKStore.File
 
 base class Status<E: IError>(
   created: Int,
@@ -398,13 +395,11 @@ fun initService(
             mInputs.add(name, TCollection(iHdl, kNOTYPE_CONVERTERS))
           });
           inputCollections = mInputs.chill();
+          inputs = CollectionsMap(inputCollections);
           try {
             writer.set(
               SKStore.SID(serviceDef.runId),
-              ServiceFile(
-                serviceDef.service.createGraph(inputCollections),
-                inputCollections,
-              ),
+              ServiceFile(serviceDef.service.createGraph(inputs), inputs),
             );
             popContext()
           } catch {
