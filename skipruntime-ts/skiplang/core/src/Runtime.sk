@@ -97,9 +97,7 @@ class StatusHandle(
   value: SKStore.EHandle<SKStore.DirName, SKStore.IntFile>,
 ) extends SKStore.File
 
-class ResourceCollection(
-  value: Map<String, Collection<SKStore.Key, SKStore.File>>,
-) extends SKStore.File
+class ResourceCollection(value: Map<String, Collection>) extends SKStore.File
 
 class ResourceDef(
   name: String,
@@ -117,8 +115,8 @@ class ResourceStatus(
 ) extends SKStore.File {}
 
 class ServiceFile(
-  value: Map<String, Collection<SKStore.Key, SKStore.File>>,
-  inputs: Map<String, Collection<SKStore.Key, SKStore.File>>,
+  value: Map<String, Collection>,
+  inputs: Map<String, Collection>,
 ) extends SKStore.File
 
 base class Status<E: IError>(
@@ -216,7 +214,7 @@ class RemoteSpecifiers(
 
 class ResourceInfo(
   name: String,
-  collection: Collection<SKStore.Key, SKStore.File>,
+  collection: Collection,
   statusRef: SKStore.DirName,
   session: String,
 ) extends SKStore.File {
@@ -334,7 +332,7 @@ fun buildResourcesGraph(
         collection = resource.materialize(collections);
         // Ensure the name of the resource result
         resourceData = collection
-          .hdl
+          .handle()
           .map(
             kNOTYPE_KEY,
             kNOTYPE_VALUE,
@@ -348,7 +346,7 @@ fun buildResourcesGraph(
           key,
           ResourceInfo(
             resourceId,
-            collection with {hdl => resourceData},
+            collection.withHandle(resourceData),
             statusRef,
             runId,
           ),
@@ -397,7 +395,7 @@ fun initService(
             iDirName = SKStore.DirName::create(`/${name}/`);
             ctx.mkdirMulti(iDirName, initialData.keyValues());
             iHdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, iDirName);
-            mInputs.add(name, Collection(iHdl, kNOTYPE_CONVERTERS))
+            mInputs.add(name, TCollection(iHdl, kNOTYPE_CONVERTERS))
           });
           inputCollections = mInputs.chill();
           try {
@@ -614,7 +612,7 @@ fun useExternalCollection<K: frozen & Orderable, V: frozen>(
   resource: String,
   params: Parameters,
   converters: ConverterPair<K, V>,
-): Collection<K, V> {
+): TCollection<K, V> {
   getContext() match {
   | Some(context) ->
     context.currentArrow().each(a -> {
@@ -687,7 +685,7 @@ fun useExternalCollection<K: frozen & Orderable, V: frozen>(
         writer.set(key, Handle(store));
       },
     );
-    Collection(
+    TCollection(
       hdl.map(
         kNOTYPE_KEY,
         kNOTYPE_VALUE,
@@ -706,25 +704,54 @@ fun useExternalCollection<K: frozen & Orderable, V: frozen>(
   }
 }
 
-class Collection<K: frozen & Orderable, V: frozen>(
+base class Collection {
+  fun getId(): String;
+  fun handle(): SKStore.EHandle<SKStore.Key, SKStore.File>;
+  fun withHandle(SKStore.EHandle<SKStore.Key, SKStore.File>): Collection;
+  fun getAll(): Array<Entry>;
+  fun lookupValues(key: SKStore.Key): Array<SKStore.File>;
+  fun lookup(strKey: String): Entry;
+  fun subscribe(
+    identifier: String,
+    session: Int,
+    from: SKStore.Tick,
+    notify: (Array<Entry>, SKStore.Tick, Bool) ~> void,
+    close: () ~> void,
+  ): void;
+
+  fun unsafeCast<K: frozen & Orderable, V: frozen>(
+    converters: ConverterPair<K, V>,
+  ): TCollection<K, V>;
+}
+
+class TCollection<K: frozen & Orderable, V: frozen>(
   hdl: SKStore.EHandle<SKStore.Key, SKStore.File>,
   converters: ConverterPair<K, V>,
-) {
+) extends Collection {
   //
   static fun forName<K: frozen & Orderable, V: frozen>(
     name: String,
     converters: ConverterPair<K, V>,
-  ): Collection<K, V> {
+  ): TCollection<K, V> {
     hdl = SKStore.EHandle<SKStore.Key, SKStore.File>(
       kNOTYPE_KEY,
       kNOTYPE_VALUE,
       SKStore.DirName::create(name),
     );
-    Collection(hdl, converters)
+    TCollection(hdl, converters)
   }
 
   fun getId(): String {
     this.hdl.dirName.toString();
+  }
+
+  fun handle(): SKStore.EHandle<SKStore.Key, SKStore.File> {
+    this.hdl
+  }
+
+  fun withHandle(hdl: SKStore.EHandle<SKStore.Key, SKStore.File>): Collection {
+    !this.hdl = hdl;
+    this
   }
 
   /**
@@ -745,23 +772,23 @@ class Collection<K: frozen & Orderable, V: frozen>(
     }
   }
 
-  fun lookup(strKey: String): Entry {
+  fun lookupValues(key: SKStore.Key): Array<SKStore.File> {
     getContext() match {
     | Some(context) ->
       dir = context.unsafeGetEagerDir(this.hdl.dirName);
       if (dir.creator == context.currentArrow()) {
         throw ReadInCreatorException()
       };
-      keyConv = this.converters.key;
-      key = keyConv.fromString(strKey);
-      TEntry{
-        key => Some(key),
-        values => dir
-          .getArray(context, keyConv.toKey(key))
-          .map(this.converters.value.fromFile),
-      }
+      dir.getArray(context, key)
     | _ -> invariant_violation("Store context must be specified.")
     }
+  }
+
+  fun lookup(strKey: String): Entry {
+    keyConv = this.converters.key;
+    key = keyConv.fromString(strKey);
+    values = this.lookupValues(keyConv.toKey(key));
+    TEntry::create(key, values.map(this.converters.value.fromFile))
   }
 
   /**
@@ -781,7 +808,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
    */
   fun map<K2: frozen & Orderable, V2: frozen>(
     mapper: Mapper<K, V, K2, V2>,
-  ): Collection<K2, V2> {
+  ): TCollection<K2, V2> {
     this.map_(mapper, None())
   }
 
@@ -795,7 +822,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
   fun mapReduce<K2: frozen & Orderable, V2: frozen, V3: frozen>(
     mapper: Mapper<K, V, K2, V2>,
     reducer: Reducer<V2, V3>,
-  ): Collection<K2, V3> {
+  ): TCollection<K2, V3> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
@@ -809,24 +836,20 @@ class Collection<K: frozen & Orderable, V: frozen>(
         SKStoreMapper(mapper, this.converters).map,
         accReducer(reducer),
       );
-      Collection(hdl, ConverterPair(converters.key, reducer.accConverter()))
+      TCollection(hdl, ConverterPair(converters.key, reducer.accConverter()))
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
 
-  fun reduce<V2: frozen>(reducer: Reducer<V, V2>): Collection<K, V2> {
+  fun reduce<V2: frozen>(reducer: Reducer<V, V2>): TCollection<K, V2> {
     this.mapReduce(IdentityMapper(this.converters), reducer)
   }
 
   fun unsafeCast<K2: frozen & Orderable, V2: frozen>(
     converters: ConverterPair<K2, V2>,
-  ): Collection<K2, V2> {
+  ): TCollection<K2, V2> {
     hdl = SKStore.EHandle(kNOTYPE_KEY, kNOTYPE_VALUE, this.hdl.dirName);
-    Collection(hdl, converters)
-  }
-
-  fun unTyped(): Collection<SKStore.Key, SKStore.File> {
-    this.unsafeCast(kNOTYPE_CONVERTERS)
+    TCollection(hdl, converters)
   }
 
   fun nativeMapReduce<K2: frozen & Orderable, V2: frozen>(
@@ -834,7 +857,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
     reducer: String,
     value: V2 ~> Int,
     create: Int ~> V2,
-  ): Collection<K2, V2> {
+  ): TCollection<K2, V2> {
     converters = mapper.converters();
     this.nativeMapReduceImpl(
       mapper,
@@ -850,7 +873,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
     reducer: String,
     value: V ~> Int,
     create: Int ~> V,
-  ): Collection<K, V> {
+  ): TCollection<K, V> {
     this.nativeMapReduce(
       IdentityMapper(this.converters),
       reducer,
@@ -863,14 +886,14 @@ class Collection<K: frozen & Orderable, V: frozen>(
    * Create a new eager collection by keeping only the elements whose keys are in
    * the given ranges.
    */
-  fun sliced(ranges: Array<(K, K)>): Collection<K, V> {
+  fun sliced(ranges: Array<(K, K)>): TCollection<K, V> {
     this.map_(IdentityMapper(this.converters), Some(ranges))
   }
 
   /**
    * Create a new eager collection by keeping the given number of the first elements.
    */
-  fun take(limit: Int): Collection<K, V> {
+  fun take(limit: Int): TCollection<K, V> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
@@ -884,7 +907,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
         removeElementAsOne,
         None(),
       );
-      Collection(resHdl, this.converters)
+      TCollection(resHdl, this.converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -895,7 +918,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
    * @param others - some other eager collections of compatible type
    * @returns The resulting combination of all input key/value pairs
    */
-  fun merge(others: Array<Collection<K, V>>): Collection<K, V> {
+  fun merge(others: Array<TCollection<K, V>>): TCollection<K, V> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
@@ -906,12 +929,12 @@ class Collection<K: frozen & Orderable, V: frozen>(
         context,
         Array[this].concat(others).map(c ->
           c match {
-          | ci @ Collection _ -> (ci.hdl, (identityMap, None()))
+          | ci @ Collection _ -> (ci.handle(), (identityMap, None()))
           }
         ),
         dirName,
       );
-      Collection(hdl, this.converters)
+      TCollection(hdl, this.converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -932,65 +955,74 @@ class Collection<K: frozen & Orderable, V: frozen>(
     }
   }
 
-  fun getAll(context: mutable SKStore.Context): Array<Entry> {
-    values = mutable Vector<Entry>[];
-    dir = context.unsafeGetEagerDir(this.hdl.dirName);
-    for (kv in dir.unsafeGetFileIter()) {
-      (key, files) = kv;
-      values.push(
-        TEntry{
-          key => Some(this.converters.key.fromKey(key)),
-          values => files.collect(Array).map(this.converters.value.fromFile),
-        },
-      );
-    };
-    values.toArray();
+  fun getAll(): Array<Entry> {
+    getContext() match {
+    | Some(context) ->
+      values = mutable Vector<Entry>[];
+      dir = context.unsafeGetEagerDir(this.hdl.dirName);
+      for (kv in dir.unsafeGetFileIter()) {
+        (key, files) = kv;
+        values.push(
+          TEntry::create(
+            this.converters.key.fromKey(key),
+            files.collect(Array).map(this.converters.value.fromFile),
+          ),
+        );
+      };
+      values.toArray()
+    | _ -> invariant_violation("Store context must be specified.")
+    }
   }
 
-  fun items(
-    context: mutable SKStore.Context,
-  ): mutable Iterator<(K, mutable Iterator<V>)> {
-    this.hdl.items(context).map(v ->
-      (
-        this.converters.key.fromKey(v.i0),
-        v.i1.map(this.converters.value.fromFile),
+  fun items(): mutable Iterator<(K, mutable Iterator<V>)> {
+    getContext() match {
+    | Some(context) ->
+      this.hdl.items(context).map(v ->
+        (
+          this.converters.key.fromKey(v.i0),
+          v.i1.map(this.converters.value.fromFile),
+        )
       )
-    )
+    | _ -> invariant_violation("Store context must be specified.")
+    }
   }
 
   fun subscribe(
-    context: mutable SKStore.Context,
     identifier: String,
     session: Int,
     from: SKStore.Tick,
-    notify: (Array<(K, Array<V>)>, SKStore.Tick, Bool) ~> void,
+    notify: (Array<Entry>, SKStore.Tick, Bool) ~> void,
     close: () ~> void,
   ): void {
-    context.subscribe(
-      session,
-      SKStore.NWatch(
-        identifier,
-        from,
-        (_dirName, values, tick, update) ~> {
-          notify(values.map(this.converters.fromSKStore), tick, update)
-        },
-        close,
-        true,
-      ),
-      None(),
-      Array[
-        SKStore.DirSub(this.hdl.dirName, "", SKStore.OJSON(Array[]), (__) ~>
-          None()
+    getContext() match {
+    | Some(context) ->
+      context.subscribe(
+        session,
+        SKStore.NWatch(
+          identifier,
+          from,
+          (_dirName, values, tick, update) ~> {
+            notify(values.map(this.converters.fromSKStore), tick, update)
+          },
+          close,
+          true,
         ),
-      ],
-      Some(from),
-    )
+        None(),
+        Array[
+          SKStore.DirSub(this.hdl.dirName, "", SKStore.OJSON(Array[]), (__) ~>
+            None()
+          ),
+        ],
+        Some(from),
+      )
+    | _ -> invariant_violation("Store context must be specified.")
+    }
   }
 
   private fun map_<K2: frozen & Orderable, V2: frozen>(
     mapper: Mapper<K, V, K2, V2>,
     rangeOpt: ?Array<(K2, K2)> = None(),
-  ): Collection<K2, V2> {
+  ): TCollection<K2, V2> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
@@ -1011,7 +1043,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
           )
         ),
       );
-      Collection(hdl, converters)
+      TCollection(hdl, converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -1019,7 +1051,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
   private fun nativeMapReduceImpl<K2: frozen & Orderable, V2: frozen>(
     mapper: Mapper<K, V, K2, V2>,
     reducer: SKStore.EReducer<SKStore.File, SKStore.File>,
-  ): Collection<K2, V2> {
+  ): TCollection<K2, V2> {
     getContext() match {
     | Some(context) ->
       collectionId = `collection_${SKStore.genSym(0)}`;
@@ -1033,7 +1065,7 @@ class Collection<K: frozen & Orderable, V: frozen>(
         SKStoreMapper(mapper, this.converters).map,
         reducer,
       );
-      Collection(hdl, converters)
+      TCollection(hdl, converters)
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -1249,13 +1281,13 @@ fun getAll(
   );
   resourceID = ResourceDef(resourceName, params);
   resource = graphHdl.get(context, resourceID);
-  resource.getResult(
-    context,
-    Values(
-      resource.collection.getAll(context),
-      `${resource.session}/${context.tick}`,
-    ),
+  pushContext(context);
+  values = Values(
+    resource.collection.getAll(),
+    `${resource.session}/${context.tick}`,
   );
+  popContext();
+  resource.getResult(context, values);
 }
 
 fun resourceSnapshot(
@@ -1270,7 +1302,10 @@ fun resourceSnapshot(
   );
   resourceID = ResourceDef(resourceName, params);
   resource = graphHdl.get(context, resourceID);
-  resource.collection.getAll(context)
+  pushContext(context);
+  entries = resource.collection.getAll();
+  popContext();
+  entries
 }
 
 fun getForKey(
@@ -1287,7 +1322,7 @@ fun getForKey(
   resourceID = ResourceDef(resourceName, params);
   resource = graphHdl.get(context, resourceID);
   pushContext(context);
-  values = resource.collection.getArray(key);
+  values = resource.collection.lookupValues(key);
   popContext();
   resource.getResult(context, values);
 }
@@ -1365,7 +1400,7 @@ fun closeReactiveResource(
 fun subscribe(
   context: mutable SKStore.Context,
   identifier: String,
-  notifier: Notifier<SKStore.Key, SKStore.File>,
+  notifier: Notifier,
   optWatermark: ?String,
 ): Int {
   garbageHdl = SKStore.EHandle(
@@ -1399,8 +1434,8 @@ fun subscribe(
     | _ -> 0
     };
     notifier.subscribed();
+    pushContext(context);
     info.collection.subscribe(
-      context,
       identifier,
       session,
       SKStore.Tick(from),
@@ -1409,6 +1444,7 @@ fun subscribe(
       },
       notifier.close,
     );
+    popContext();
     context.setPersistent(subId, SKStore.IntFile(session));
     if (garbageHdl.maybeGet(context, sid).isSome()) {
       garbageHdl.writeArray(context, sid, Array[]);

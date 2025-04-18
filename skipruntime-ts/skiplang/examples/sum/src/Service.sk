@@ -15,8 +15,8 @@ const kSTRING_INDEXED_TYPES: SR.ConverterPair<
 );
 
 class Inputs{
-  input1: SR.Collection<String, Int>,
-  input2: SR.Collection<String, Int>,
+  input1: SR.TCollection<String, Int>,
+  input2: SR.TCollection<String, Int>,
 } extends SR.Collections
 
 class Indexed(index: Int, value: Int) extends SKStore.File uses Orderable
@@ -73,9 +73,7 @@ class Minus() extends SR.Mapper<String, Indexed, String, Int> {
   }
 }
 
-fun fromMap(
-  map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
-): Inputs {
+fun fromMap(map: Map<String, SR.Collection>): Inputs {
   Inputs{
     input1 => map.get("input1").unsafeCast(kSTRING_INT_TYPES),
     input2 => map.get("input2").unsafeCast(kSTRING_INT_TYPES),
@@ -83,28 +81,24 @@ fun fromMap(
 }
 
 class Add() extends SR.TResource<String, Int, Inputs> {
-  fun instantiate(cs: Inputs): SR.Collection<String, Int> {
+  fun instantiate(cs: Inputs): SR.TCollection<String, Int> {
     cs.input1.merge(Array[cs.input2]).map(Plus())
   }
 
-  fun fromMap(
-    map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
-  ): Inputs {
+  fun fromMap(map: Map<String, SR.Collection>): Inputs {
     fromMap(map)
   }
 }
 
 class Sub() extends SR.TResource<String, Int, Inputs> {
-  fun instantiate(cs: Inputs): SR.Collection<String, Int> {
+  fun instantiate(cs: Inputs): SR.TCollection<String, Int> {
     cs.input1
       .map(AddIndex(0))
       .merge(Array[cs.input2.map(AddIndex(1))])
       .map(Minus())
   }
 
-  fun fromMap(
-    map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
-  ): Inputs {
+  fun fromMap(map: Map<String, SR.Collection>): Inputs {
     fromMap(map)
   }
 }
@@ -123,19 +117,12 @@ class Service() extends SR.TService<Inputs, Inputs> uses SR.WithServiceData {
     ics
   }
 
-  fun fromInputsMap(
-    map: Map<String, SR.Collection<SKStore.Key, SKStore.File>>,
-  ): Inputs {
+  fun fromInputsMap(map: Map<String, SR.Collection>): Inputs {
     fromMap(map)
   }
 
-  fun toOutputsMap(
-    inputs: Inputs,
-  ): Map<String, SR.Collection<SKStore.Key, SKStore.File>> {
-    Map[
-      "input1" => inputs.input1.unTyped(),
-      "input2" => inputs.input2.unTyped(),
-    ]
+  fun toOutputsMap(inputs: Inputs): Map<String, SR.Collection> {
+    Map["input1" => inputs.input1, "input2" => inputs.input2]
   }
 }
 

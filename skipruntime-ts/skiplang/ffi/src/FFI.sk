@@ -253,9 +253,7 @@ fun createResource(resource: UInt32): ExternResource {
 }
 
 class ExternResource(eptr: SKStore.ExternalPointer) extends Resource {
-  fun materialize(
-    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
-  ): Collection<SKStore.Key, SKStore.File> {
+  fun materialize(collections: Map<String, Collection>): Collection {
     collectionName = instantiateOfResource(
       this.eptr.value,
       collectionsByName(collections),
@@ -344,7 +342,7 @@ fun createService(
         InitialData(
           SKJSON.expectArray(field).map(v -> {
             e = SKJSON.expectArray(v);
-            TEntry{key => Some(e[0]), values => SKJSON.expectArray(e[1])}
+            TEntry::create(e[0], SKJSON.expectArray(e[1]))
           }),
           kJSON_CONVERTERS,
         ),
@@ -388,9 +386,7 @@ class ExternService(
     this.externalServices_
   }
   //
-  fun createGraph(
-    inputs: Map<String, Collection<SKStore.Key, SKStore.File>>,
-  ): Map<String, Collection<SKStore.Key, SKStore.File>> {
+  fun createGraph(inputs: Map<String, Collection>): Map<String, Collection> {
     names = createGraphOfService(this.eptr.value, collectionsByName(inputs));
     map = mutable Map[];
     names match {
@@ -491,13 +487,13 @@ fun nativeReduceOfCollection(collection: String, reducer: String): String {
 
 @export("SkipRuntime_Collection__slice")
 fun sliceOfCollection(collection: String, ranges: SKJSON.CJArray): String {
-  collectionForName(collection)
+  collectionForNameJSON(collection)
     .sliced(
       ranges match {
       | SKJSON.CJArray(values) ->
         values.map(v -> {
           e = SKJSON.expectArray(v);
-          (JSONID(e[0]), JSONID(e[1]))
+          (e[0], e[1])
         })
       },
     )
@@ -506,16 +502,16 @@ fun sliceOfCollection(collection: String, ranges: SKJSON.CJArray): String {
 
 @export("SkipRuntime_Collection__take")
 fun takeOfCollection(collection: String, limit: Int): String {
-  collectionForName(collection).take(limit).getId()
+  collectionForNameJSON(collection).take(limit).getId()
 }
 
 @export("SkipRuntime_Collection__merge")
 fun mergeOfCollection(collection: String, others: SKJSON.CJArray): String {
-  collectionForName(collection)
+  collectionForNameJSON(collection)
     .merge(
       others match {
       | SKJSON.CJArray(values) ->
-        values.map(c -> collectionForName(SKJSON.asString(c)))
+        values.map(c -> collectionForNameJSON(SKJSON.asString(c)))
       },
     )
     .getId()
@@ -523,7 +519,7 @@ fun mergeOfCollection(collection: String, others: SKJSON.CJArray): String {
 
 @export("SkipRuntime_Collection__size")
 fun sizeOfCollection(collection: String): Int {
-  collectionForName(collection).size()
+  collectionForNameJSON(collection).size()
 }
 
 /************  LazyCollection ****************/
@@ -561,26 +557,24 @@ fun createNotifier(notifier: UInt32): ExternNotifier {
   ExternNotifier(SKStore.ExternalPointer::create(notifier, deleteNotifier))
 }
 
-class ExternNotifier(
-  eptr: SKStore.ExternalPointer,
-) extends Notifier<SKStore.Key, SKStore.File> {
+class ExternNotifier(eptr: SKStore.ExternalPointer) extends Notifier {
   fun subscribed(): void {
     subscribedOfNotifier(this.eptr.value)
   }
 
-  fun notify(
-    values: Array<(SKStore.Key, Array<SKStore.File>)>,
-    watermark: String,
-    updates: Bool,
-  ): void {
+  fun notify(values: Array<Entry>, watermark: String, updates: Bool): void {
     notifyOfNotifier(
       this.eptr.value,
       SKJSON.CJArray(
-        values.map(v ->
+        values.map(v -> {
+          entry = castEntry<SKStore.Key, SKStore.File>(v);
           SKJSON.CJArray(
-            Array[jsonFromKey(v.i0), SKJSON.CJArray(v.i1.map(jsonFromFile))],
+            Array[
+              jsonFromKey(entry.key()),
+              SKJSON.CJArray(entry.values.map(jsonFromFile)),
+            ],
           )
-        ),
+        }),
       ),
       watermark,
       Int32::truncate(if (updates) 1 else 0),
@@ -678,7 +672,7 @@ fun getAllOfRuntime(resource: String, params: SKJSON.CJSON): SKJSON.CJSON {
             entry = castEntry<SKStore.Key, SKStore.File>(v);
             SKJSON.CJArray(
               Array[
-                jsonFromKey(entry.key.fromSome()),
+                jsonFromKey(entry.key()),
                 SKJSON.CJArray(entry.values.map(jsonFromFile)),
               ],
             )

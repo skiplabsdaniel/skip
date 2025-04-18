@@ -182,12 +182,12 @@ fun toSuppliedResourceId(
 
 fun collectionForNameJSON(
   name: String,
-): Collection<SKJSON.CJSON, SKJSON.CJSON> {
-  Collection::forName(name, kJSON_CONVERTERS)
+): TCollection<SKJSON.CJSON, SKJSON.CJSON> {
+  TCollection::forName(name, kJSON_CONVERTERS)
 }
 
-fun collectionForName(name: String): Collection<SKStore.Key, SKStore.File> {
-  Collection::forName(name, kNOTYPE_CONVERTERS)
+fun collectionForName(name: String): Collection {
+  TCollection::forName(name, kNOTYPE_CONVERTERS)
 }
 
 fun lazyForNameJSON(name: String): LazyCollection<SKJSON.CJSON, SKJSON.CJSON> {
@@ -198,9 +198,7 @@ fun lazyForName(name: String): LazyCollection<SKStore.Key, SKStore.File> {
   LazyCollection::forName(name, kNOTYPE_CONVERTERS)
 }
 
-fun collectionsByName(
-  collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
-): SKJSON.CJObject {
+fun collectionsByName(collections: Map<String, Collection>): SKJSON.CJObject {
   fields = mutable Vector[];
   collections.each((k, v) -> fields.push((k, SKJSON.CJString(v.getId()))));
   SKJSON.CJObject(SKJSON.CJFields::create(fields.toArray(), x -> x));

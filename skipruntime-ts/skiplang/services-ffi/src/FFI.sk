@@ -76,13 +76,13 @@ fun createNotifier(notifier: UInt32): ExternNotifier {
 
 class ExternNotifier(
   eptr: SKStore.ExternalPointer,
-) extends SR.Notifier<SKStore.Key, SKStore.File> {
+) extends SR.Notifier {
   fun subscribed(): void {
     void
   }
 
   fun notify(
-    _values: Array<(SKStore.Key, Array<SKStore.File>)>,
+    _values: Array<SR.Entry>,
     watermark: String,
     updates: Bool,
   ): void {

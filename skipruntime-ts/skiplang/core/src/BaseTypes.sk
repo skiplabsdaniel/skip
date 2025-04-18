@@ -29,12 +29,13 @@ class ConverterPair<K: frozen & Orderable, V: frozen>(
   key: KeyConverter<K>,
   value: ValueConverter<V>,
 ) {
-  fun fromSKStore(values: (SKStore.Key, Array<SKStore.File>)): (K, Array<V>) {
-    (this.key.fromKey(values.i0), values.i1.map(this.value.fromFile))
+  fun fromSKStore(v: (SKStore.Key, Array<SKStore.File>)): Entry {
+    TEntry::create(this.key.fromKey(v.i0), v.i1.map(this.value.fromFile))
   }
 
-  fun toSKStore(values: (K, Array<V>)): (SKStore.Key, Array<SKStore.File>) {
-    (this.key.toKey(values.i0), values.i1.map(this.value.toFile))
+  fun toSKStore(v: Entry): (SKStore.Key, Array<SKStore.File>) {
+    entry = castEntry<K, V>(v);
+    (this.key.toKey(entry.key()), entry.values.map(this.value.toFile))
   }
 }
 
@@ -85,9 +86,7 @@ base class ExternalService {
 }
 
 base class Resource {
-  fun materialize(
-    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
-  ): Collection<SKStore.Key, SKStore.File>;
+  fun materialize(collections: Map<String, Collection>): Collection;
 }
 
 base class Snapshot {
@@ -103,22 +102,31 @@ base class ResourceBuilder {
 
 base class Entry uses Downcastable
 
-class TEntry<K: frozen & Orderable, V: frozen>{
-  key: ?K = None(),
+class TEntry<K: frozen & Orderable, V: frozen> private {
+  private key_: ?K = None(),
   values: Array<V> = Array[],
 } extends Entry {
+  //
+  static fun create(key: K, values: Array<V>): TEntry<K, V> {
+    TEntry{key_ => Some(key), values};
+  }
+
   @always_inline
   static fun instance(): TEntry<K, V> {
     TEntry<K, V>{};
   }
+
+  fun key(): K {
+    this.key_.fromSome()
+  }
 }
 
-fun castEntry<K: frozen & Orderable, V: frozen>(dir: Entry): TEntry<K, V> {
-  cast(dir, TEntry<K, V>);
+fun castEntry<K: frozen & Orderable, V: frozen>(entry: Entry): TEntry<K, V> {
+  cast(entry, TEntry<K, V>);
 }
 
-fun instanceOfEntry<K: frozen & Orderable, V: frozen>(dir: Entry): Bool {
-  instanceOf(dir, TEntry<K, V>);
+fun instanceOfEntry<K: frozen & Orderable, V: frozen>(entry: Entry): Bool {
+  instanceOf(entry, TEntry<K, V>);
 }
 
 base class Data {
@@ -133,7 +141,7 @@ class InitialData<K: frozen & Orderable, V: frozen>(
     this.entries.map(v -> {
       entry = castEntry<K, V>(v);
       (
-        this.converters.key.toKey(entry.key.fromSome()),
+        this.converters.key.toKey(entry.key()),
         entry.values.map(this.converters.value.toFile),
       )
     })
@@ -152,8 +160,8 @@ base class Service {
   fun externalServices(): Map<String, ExternalService>;
 
   fun createGraph(
-    inputCollections: Map<String, Collection<SKStore.Key, SKStore.File>>,
-  ): Map<String, Collection<SKStore.Key, SKStore.File>>;
+    inputCollections: Map<String, Collection>,
+  ): Map<String, Collection>;
 }
 
 value class Values(entries: Array<Entry>, watermark: String)
@@ -163,14 +171,10 @@ base class Executor {
   fun reject(exc: .Exception): void;
 }
 
-base class Notifier<K: frozen & Orderable, V: frozen> {
+base class Notifier {
   fun subscribed(): void;
 
-  fun notify(
-    values: Array<(K, Array<V>)>,
-    watermark: String,
-    updates: Bool,
-  ): void;
+  fun notify(values: Array<Entry>, watermark: String, updates: Bool): void;
 
   fun close(): void;
 }
@@ -189,26 +193,22 @@ base class TResourceBuilder<P: frozen> extends ResourceBuilder {
 base class TResource<K: frozen & Orderable, V: frozen, CS: Collections> extends
   Resource,
 {
-  fun materialize(
-    collections: Map<String, Collection<SKStore.Key, SKStore.File>>,
-  ): Collection<SKStore.Key, SKStore.File> {
-    this.instantiate(this.fromMap(collections)).unTyped()
+  fun materialize(collections: Map<String, Collection>): Collection {
+    this.instantiate(this.fromMap(collections))
   }
 
-  fun instantiate(collections: CS): Collection<K, V>;
-  fun fromMap(Map<String, Collection<SKStore.Key, SKStore.File>>): CS;
+  fun instantiate(collections: CS): TCollection<K, V>;
+  fun fromMap(Map<String, Collection>): CS;
 }
 
 base class TService<I: Collections, O: Collections> extends Service {
-  fun createGraph(
-    inputs: Map<String, Collection<SKStore.Key, SKStore.File>>,
-  ): Map<String, Collection<SKStore.Key, SKStore.File>> {
+  fun createGraph(inputs: Map<String, Collection>): Map<String, Collection> {
     this.toOutputsMap(this.createTypedGraph(this.fromInputsMap(inputs)))
   }
 
   fun createTypedGraph(I): O;
-  fun fromInputsMap(Map<String, Collection<SKStore.Key, SKStore.File>>): I;
-  fun toOutputsMap(O): Map<String, Collection<SKStore.Key, SKStore.File>>;
+  fun fromInputsMap(Map<String, Collection>): I;
+  fun toOutputsMap(O): Map<String, Collection>;
 }
 
 module end;
