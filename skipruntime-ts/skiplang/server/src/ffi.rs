@@ -266,6 +266,7 @@ unsafe extern "C" {
         key: *const c_char,
     ) -> SnapshotResult;
     fn Skip_update(input: *const c_char, data: *const c_char, executor: u32) -> *mut c_char;
+    fn Skip_init_service(executor: u32) -> *mut c_char;
 }
 
 fn copy_c_string(s: *const c_char) -> String {
@@ -287,6 +288,25 @@ fn copy_c_string_and_free(s: *mut c_char) -> String {
     }
 }
 
+fn check_result(e: *mut c_char) -> Result<(), error::SkipError> {
+    if !e.is_null() {
+        let error = copy_c_string_and_free(e);
+        if !error.is_empty() {
+            return Err(error::SkipError { msg: error });
+        }
+    }
+    Ok(())
+}
+
+pub fn init_service() -> Result<(), error::SkipError> {
+    let (sender, receiver) = oneshot::channel();
+    let handle = register_executor(Box::new(ExecutorImpl {
+        sender: Some(sender),
+    }));
+    unsafe { check_result(Skip_init_service(handle))? }
+    actix_web::rt::System::new().block_on(async { receiver.await.unwrap() })
+}
+
 pub fn instantiate_resource(
     identifier: String,
     resource: String,
@@ -300,18 +320,12 @@ pub fn instantiate_resource(
         let c_identifier = CString::new(identifier).expect("CString::new failed");
         let c_resource = CString::new(resource).expect("CString::new failed");
         let c_parameters = CString::new(parameters).expect("CString::new failed");
-        let result = Skip_instantiate_resource(
+        check_result(Skip_instantiate_resource(
             c_identifier.as_ptr(),
             c_resource.as_ptr(),
             c_parameters.as_ptr(),
             handle,
-        );
-        if !result.is_null() {
-            let owned = copy_c_string_and_free(result);
-            if !owned.is_empty() {
-                return Err(error::SkipError { msg: owned });
-            }
-        }
+        ))?
     }
     actix_web::rt::System::new().block_on(async { receiver.await.unwrap() })
 }
@@ -319,17 +333,8 @@ pub fn instantiate_resource(
 pub fn close_resource_instance(identifier: String) -> Result<(), error::SkipError> {
     unsafe {
         let c_identifier = CString::new(identifier).expect("CString::new failed");
-        let result = Skip_close_resource_instance(c_identifier.as_ptr());
-        // Supposed to free the result mut char *
-        let c_str = CString::from_raw(result);
-        let rust_str = c_str.to_str().expect("Bad encoding");
-        let owned = rust_str.to_owned();
-        if owned.is_empty() {
-            return Ok(());
-        } else {
-            return Err(error::SkipError { msg: owned });
-        }
-    };
+        check_result(Skip_close_resource_instance(c_identifier.as_ptr()))
+    }
 }
 
 pub fn subscribe(
@@ -349,12 +354,7 @@ pub fn subscribe(
         let handle = register_notifier(Box::new(Subscriber::new()));
         let result = Skip_subscribe(c_identifier.as_ptr(), handle, c_watermark_ptr);
         if result.id == 0 {
-            if !result.error.is_null() {
-                let error = copy_c_string_and_free(result.error);
-                if !error.is_empty() {
-                    return Err(error::SkipError { msg: error });
-                }
-            }
+            check_result(result.error)?;
             return Err(error::SkipError {
                 msg: "Unknown error".to_string(),
             });
@@ -367,16 +367,7 @@ pub fn subscribe(
 }
 
 pub fn unsubscribe(identifier: i64) -> Result<(), error::SkipError> {
-    unsafe {
-        let result = Skip_unsubscribe(identifier);
-        if !result.is_null() {
-            let error = copy_c_string_and_free(result);
-            if !error.is_empty() {
-                return Err(error::SkipError { msg: error });
-            }
-        };
-        return Ok(());
-    }
+    unsafe { check_result(Skip_unsubscribe(identifier)) }
 }
 
 fn resource_snapshot_<F>(
@@ -389,21 +380,19 @@ where
 {
     let uuid = Uuid::new_v4().to_string();
     instantiate_resource(uuid.clone(), resource.clone(), parameters.clone())?;
-    unsafe {
-        let c_resource = CString::new(resource).expect("CString::new failed");
-        let c_parameters = CString::new(parameters).expect("CString::new failed");
-        let result = f(c_resource.as_ptr(), c_parameters.as_ptr());
-        let c_str = CString::from_raw(result.value);
-        let rust_str = c_str.to_str().expect("Bad encoding");
-        let owned = rust_str.to_owned();
-        let res = if result.is_ok != 0 {
-            Ok(owned)
-        } else {
-            Err(error::SkipError { msg: owned })
-        };
-        _ = close_resource_instance(uuid);
-        res
-    }
+    let c_resource = CString::new(resource).expect("CString::new failed");
+    let c_parameters = CString::new(parameters).expect("CString::new failed");
+    let result = f(c_resource.as_ptr(), c_parameters.as_ptr());
+    let value_or_error = copy_c_string_and_free(result.value);
+    let res = if result.is_ok != 0 {
+        Ok(value_or_error)
+    } else {
+        Err(error::SkipError {
+            msg: value_or_error,
+        })
+    };
+    _ = close_resource_instance(uuid);
+    res
 }
 
 pub fn resource_snapshot(resource: String, parameters: String) -> Result<String, error::SkipError> {
@@ -431,13 +420,7 @@ pub fn update(input: String, data: String) -> Result<(), error::SkipError> {
     unsafe {
         let c_input = CString::new(input).expect("CString::new failed");
         let c_data = CString::new(data).expect("CString::new failed");
-        let result = Skip_update(c_input.as_ptr(), c_data.as_ptr(), handle);
-        if !result.is_null() {
-            let owned = copy_c_string_and_free(result);
-            if !owned.is_empty() {
-                return Err(error::SkipError { msg: owned });
-            }
-        }
+        check_result(Skip_update(c_input.as_ptr(), c_data.as_ptr(), handle))?
     }
     actix_web::rt::System::new().block_on(async { receiver.await.unwrap() })
 }

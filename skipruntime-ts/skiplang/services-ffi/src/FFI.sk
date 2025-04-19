@@ -165,4 +165,12 @@ fun update(input: String, values: String, executor: SR.Executor): ?String {
   }
 }
 
+@export("SkipRuntime_initService")
+fun initService(service: SR.Service, executor: SR.Executor): ?String {
+  ServiceInstance.init(service, executor) match {
+  | Failure(ex) -> Some(ex.getMessage())
+  | _ -> None()
+  }
+}
+
 module end;

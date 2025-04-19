@@ -84,4 +84,8 @@ fun update(
   })
 }
 
+fun init(service: SR.Service, executor: SR.Executor): Result<void, .Exception> {
+  SR.initService(service, executor)
+}
+
 module end;

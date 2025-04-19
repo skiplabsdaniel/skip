@@ -172,6 +172,13 @@ pub async fn input(
 async fn main() -> std::io::Result<()> {
     // First version limit runtime execution to one thread
     let worker = worker::ThreadWorker::new();
+    match worker.submit::<_, _>(move || ffi::init_service()) {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("Erreur : {}", e);
+            std::process::exit(1);
+        }
+    };
     let clients = clients::Clients::create();
     let worker1 = worker.clone();
     let s1 =
