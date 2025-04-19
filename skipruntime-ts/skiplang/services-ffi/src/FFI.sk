@@ -9,18 +9,10 @@ fun instantiateResource(
   params: String,
   executor: SR.Executor,
 ): ?String {
-  builder = ServiceInstance.getResourceBuilder(resource) match {
-  | Failure(ex) -> return Some(ex.getMessage())
-  | Success(builder) -> builder
-  };
-  parameters = Result::guard(() ~> builder.parseParameters(params)) match {
-  | Failure(ex) -> return Some(ex.getMessage())
-  | Success(parameters) -> parameters
-  };
   ServiceInstance.instantiateResource(
     identifier,
     resource,
-    parameters,
+    params,
     executor,
   ) match {
   | Failure(ex) -> Some(ex.getMessage())
@@ -74,18 +66,12 @@ fun createNotifier(notifier: UInt32): ExternNotifier {
   ExternNotifier(SKStore.ExternalPointer::create(notifier, deleteNotifier))
 }
 
-class ExternNotifier(
-  eptr: SKStore.ExternalPointer,
-) extends SR.Notifier {
+class ExternNotifier(eptr: SKStore.ExternalPointer) extends SR.Notifier {
   fun subscribed(): void {
     void
   }
 
-  fun notify(
-    _values: Array<SR.Entry>,
-    watermark: String,
-    updates: Bool,
-  ): void {
+  fun notify(_values: Array<SR.Entry>, watermark: String, updates: Bool): void {
     notifyOfNotifier(this.eptr.value, "TODO", watermark, updates)
   }
 
@@ -131,17 +117,9 @@ value class SnapshotResult(is_ok: Bool, value: String)
 
 @export("SkipRuntime_resourceSnapshot")
 fun resourceSnapshot(resource: String, params: String): SnapshotResult {
-  builder = ServiceInstance.getResourceBuilder(resource) match {
-  | Failure(ex) -> return SnapshotResult(false, ex.getMessage())
-  | Success(builder) -> builder
-  };
-  parameters = Result::guard(() ~> builder.parseParameters(params)) match {
-  | Failure(ex) -> return SnapshotResult(false, ex.getMessage())
-  | Success(parameters) -> parameters
-  };
-  ServiceInstance.resourceSnapshot(resource, parameters) match {
+  ServiceInstance.resourceSnapshot(resource, params) match {
   | Failure(ex) -> SnapshotResult(false, ex.getMessage())
-  | Success(value) -> SnapshotResult(true, builder.snapshot().snapshot(value))
+  | Success(value) -> SnapshotResult(true, value)
   }
 }
 
@@ -151,18 +129,39 @@ fun resourceSnapshotLookup(
   params: String,
   key: String,
 ): SnapshotResult {
-  builder = ServiceInstance.getResourceBuilder(resource) match {
-  | Failure(ex) -> return SnapshotResult(false, ex.getMessage())
-  | Success(builder) -> builder
-  };
-  parameters = Result::guard(() ~> builder.parseParameters(params)) match {
-  | Failure(ex) -> return SnapshotResult(false, ex.getMessage())
-  | Success(parameters) -> parameters
-  };
-  ServiceInstance.resourceSnapshotLookup(resource, parameters, key) match {
+  ServiceInstance.resourceSnapshotLookup(resource, params, key) match {
   | Failure(ex) -> SnapshotResult(false, ex.getMessage())
-  | Success(value) ->
-    SnapshotResult(true, builder.snapshot().snapshotLookup(value))
+  | Success(value) -> SnapshotResult(true, value)
+  }
+}
+
+value class SubscribeResult(id: Int, error: ?String)
+
+@export("SkipRuntime_subscribe")
+fun subscribe(
+  identifier: String,
+  notifier: SR.Notifier,
+  watermark: ?String,
+): SubscribeResult {
+  ServiceInstance.subscribe(identifier, notifier, watermark) match {
+  | Failure(ex) -> SubscribeResult(0, Some(ex.getMessage()))
+  | Success(id) -> SubscribeResult(id, None())
+  }
+}
+
+@export("SkipRuntime_unsubscribe")
+fun unsubscribe(identifier: Int): ?String {
+  ServiceInstance.unsubscribe(identifier) match {
+  | Failure(ex) -> Some(ex.getMessage())
+  | _ -> None()
+  }
+}
+
+@export("SkipRuntime_update")
+fun update(input: String, values: String, executor: SR.Executor): ?String {
+  ServiceInstance.update(input, values, executor) match {
+  | Failure(ex) -> Some(ex.getMessage())
+  | _ -> None()
   }
 }
 

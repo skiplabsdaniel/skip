@@ -3,8 +3,15 @@ module SkipRuntime;
 base class IError uses Show
 base class Parameters uses Orderable, Show
 base class Collections {
-  fun get(name: String): Collection;
+  fun maybeGet(name: String): ?Collection;
   fun each((String, Collection) -> void): void;
+
+  fun get(name: String): Collection {
+    this.maybeGet(name) match {
+    | Some(c) -> c
+    | _ -> invariant_violation(`Unknown collection ${name}`)
+    }
+  }
 }
 
 base class KeyConverter<K: frozen & Orderable> {
@@ -134,11 +141,13 @@ fun instanceOfEntry<K: frozen & Orderable, V: frozen>(entry: Entry): Bool {
 
 base class Data {
   fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)>;
+  fun parse(values: String): Array<Entry>;
 }
 
 class InitialData<K: frozen & Orderable, V: frozen>(
   entries: Array<TEntry<K, V>>,
   converters: ConverterPair<K, V>,
+  parsers: String ~> Array<Entry>,
 ) extends Data {
   fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)> {
     this.entries.map(v -> {
@@ -149,11 +158,19 @@ class InitialData<K: frozen & Orderable, V: frozen>(
       )
     })
   }
+
+  fun parse(values: String): Array<Entry> {
+    this.parsers(values)
+  }
 }
 
-class EmptyData() extends Data {
+class EmptyData(parsers: String ~> Array<Entry>) extends Data {
   fun keyValues(): Array<(SKStore.Key, Array<SKStore.File>)> {
     Array[]
+  }
+
+  fun parse(values: String): Array<Entry> {
+    this.parsers(values)
   }
 }
 

@@ -8,9 +8,15 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use tokio::{self, spawn};
 
+#[derive(Debug, Clone)]
+struct Client {
+    sender: sse::Sender,
+    id: i64,
+}
+
 #[derive(Debug, Clone, Default)]
 struct ClientsInner {
-    clients: HashMap<String, sse::Sender>,
+    clients: HashMap<String, Client>,
 }
 
 pub struct Clients {
@@ -66,11 +72,12 @@ impl Clients {
         match self.inner.lock().clients.get(uuid) {
             Some(client) => {
                 if !(client
+                    .sender
                     .send(sse::Event::Comment("ping".into()))
                     .await
                     .is_ok())
                 {
-                    match ffi::unsubscribe(uuid.to_string()) {
+                    match ffi::unsubscribe(client.id) {
                         Ok(()) => _ = self.inner.lock().clients.remove(uuid),
                         Err(e) => error!("{}", e.msg),
                     }
@@ -86,13 +93,14 @@ impl Clients {
         let mut ok_clients = HashMap::new();
         for (uuid, client) in clients {
             if client
+                .sender
                 .send(sse::Event::Comment("ping".into()))
                 .await
                 .is_ok()
             {
                 ok_clients.insert(uuid, client.clone());
             } else {
-                match ffi::unsubscribe(uuid.to_string()) {
+                match ffi::unsubscribe(client.id) {
                     Ok(()) => (),
                     Err(e) => error!("{}", e.msg),
                 }
@@ -105,12 +113,15 @@ impl Clients {
     pub async fn new_client(
         &self,
         uuid: String,
-        init: Box<dyn Fn(SseNotifier) + Send + Sync>,
+        init: Box<dyn Fn(SseNotifier) -> i64 + Send + Sync>,
     ) -> Sse<ChannelStream> {
         self.check_client(&uuid).await;
         let (tx, rx) = sse::channel(10);
-        init(SseNotifier { sender: tx.clone() });
-        self.inner.lock().clients.insert(uuid, tx);
+        let id = init(SseNotifier { sender: tx.clone() });
+        self.inner
+            .lock()
+            .clients
+            .insert(uuid, Client { sender: tx, id });
         rx
     }
 }

@@ -8,6 +8,11 @@ typedef struct {
   const char* value;  // si err
 } result_t;
 
+typedef struct {
+  int64_t id;         // 0 = Err, > 0 = Ok
+  const char* error;  // si err
+} subscribe_t;
+
 void free_string(char* str);
 const void* SKIP_new_Obstack();
 void SKIP_destroy_Obstack(const void* obstack);
@@ -19,9 +24,9 @@ char* SkipRuntime_instantiateResource(const char* identifier,
                                       const char* parameters);
 
 char* SkipRuntime_closeResourceInstance(const char* identifier);
-char* SkipRuntime_subscribe(const char* identifier, const void* notifier,
-                            const char* watermark);
-char* SkipRuntime_unsubscribe(const char* identifier);
+subscribe_t SkipRuntime_subscribe(const char* identifier, const void* notifier,
+                                  const char* watermark);
+char* SkipRuntime_unsubscribe(int64_t id);
 result_t SkipRuntime_resourceSnapshot(const char* resource,
                                       const char* parameters);
 result_t SkipRuntime_resourceSnapshotLookup(const char* resource,
@@ -71,28 +76,28 @@ char* Skip_close_resource_instance(const char* identifier) {
   return result;
 };
 
-char* Skip_subscribe(const char* identifier, uint32_t notifier,
-                     const char* watermark) {
+subscribe_t Skip_subscribe(const char* identifier, uint32_t notifier,
+                           const char* watermark) {
   const void* obstack = SKIP_new_Obstack();
   const char* skidentifier = sk_string_create(identifier, strlen(identifier));
   const void* sknotifier = SkipRuntime_createNotifier(notifier);
   const char* skwatermark =
       watermark ? sk_string_create(watermark, strlen(watermark)) : NULL;
-  const char* skresult =
+  subscribe_t skresult =
       SkipRuntime_subscribe(skidentifier, sknotifier, skwatermark);
-  char* result = NULL;
-  if (skresult != NULL) {
-    sk_string_check_c_safe(skresult);
-    result = strdup(skresult);
+  char* error = NULL;
+  if (skresult.id == 0 && skresult.error != NULL) {
+    sk_string_check_c_safe(skresult.error);
+    error = strdup(skresult.error);
   }
   SKIP_destroy_Obstack(obstack);
-  return result;
+  subscribe_t res = {skresult.id, error};
+  return res;
 }
 
-char* Skip_unsubscribe(const char* identifier) {
+char* Skip_unsubscribe(uint64_t id) {
   const void* obstack = SKIP_new_Obstack();
-  const char* skidentifier = sk_string_create(identifier, strlen(identifier));
-  const char* skresult = SkipRuntime_unsubscribe(skidentifier);
+  const char* skresult = SkipRuntime_unsubscribe(id);
   char* result = NULL;
   if (skresult != NULL) {
     sk_string_check_c_safe(skresult);
@@ -129,7 +134,7 @@ result_t Skip_resource_snapshot_lookup(const char* resource, const char* params,
   return res;
 }
 
-char* Skip_set_input(const char* input, const char* data) {
+char* Skip_update(const char* input, const char* data) {
   const void* obstack = SKIP_new_Obstack();
   const char* skinput = sk_string_create(input, strlen(input));
   const char* skdata = sk_string_create(data, strlen(data));

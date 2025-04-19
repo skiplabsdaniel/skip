@@ -19,6 +19,12 @@ lazy_static! {
 }
 
 #[repr(C)]
+pub struct SubscribeResult {
+    id: i64,
+    error: *mut c_char,
+}
+
+#[repr(C)]
 pub struct SnapshotResult {
     is_ok: u8,
     value: *mut c_char,
@@ -250,15 +256,16 @@ unsafe extern "C" {
         identifier: *const c_char,
         notifier: u32,
         watermark: *const c_char,
-    ) -> *mut c_char;
-    fn Skip_unsubscribe(identifier: *const c_char) -> *mut c_char;
-    fn Skip_resource_snapshot(resource: *const c_char, parameters: *const c_char) -> SnapshotResult;
+    ) -> SubscribeResult;
+    fn Skip_unsubscribe(identifier: i64) -> *mut c_char;
+    fn Skip_resource_snapshot(resource: *const c_char, parameters: *const c_char)
+    -> SnapshotResult;
     fn Skip_resource_snapshot_lookup(
         resource: *const c_char,
         parameters: *const c_char,
         key: *const c_char,
     ) -> SnapshotResult;
-    fn Skip_set_input(input: *const c_char, data: *const c_char, executor: u32) -> *mut c_char;
+    fn Skip_update(input: *const c_char, data: *const c_char, executor: u32) -> *mut c_char;
 }
 
 fn copy_c_string(s: *const c_char) -> String {
@@ -328,7 +335,7 @@ pub fn close_resource_instance(identifier: String) -> Result<(), error::SkipErro
 pub fn subscribe(
     identifier: String,
     watermark: Option<String>,
-) -> Result<Box<dyn Fn(SseNotifier) + Send + Sync>, error::SkipError> {
+) -> Result<Box<dyn Fn(SseNotifier) -> i64 + Send + Sync>, error::SkipError> {
     unsafe {
         let c_identifier = CString::new(identifier).expect("CString::new failed");
         let c_watermark = match watermark {
@@ -341,33 +348,34 @@ pub fn subscribe(
         };
         let handle = register_notifier(Box::new(Subscriber::new()));
         let result = Skip_subscribe(c_identifier.as_ptr(), handle, c_watermark_ptr);
-        // Supposed to free the result mut char *
-        let c_str = CString::from_raw(result);
-        let rust_str = c_str.to_str().expect("Bad encoding");
-        let owned = rust_str.to_owned();
-        if owned.is_empty() {
-            return Ok(Box::new(move |n| {
-                init_notifier(handle, n);
-            }));
-        } else {
-            return Err(error::SkipError { msg: owned });
+        if result.id == 0 {
+            if !result.error.is_null() {
+                let error = copy_c_string_and_free(result.error);
+                if !error.is_empty() {
+                    return Err(error::SkipError { msg: error });
+                }
+            }
+            return Err(error::SkipError {
+                msg: "Unknown error".to_string(),
+            });
         }
+        return Ok(Box::new(move |n| {
+            init_notifier(handle, n);
+            result.id
+        }));
     }
 }
 
-pub fn unsubscribe(identifier: String) -> Result<(), error::SkipError> {
+pub fn unsubscribe(identifier: i64) -> Result<(), error::SkipError> {
     unsafe {
-        let c_identifier = CString::new(identifier).expect("CString::new failed");
-        let result = Skip_unsubscribe(c_identifier.as_ptr());
-        // Supposed to free the result mut char *
-        let c_str = CString::from_raw(result);
-        let rust_str = c_str.to_str().expect("Bad encoding");
-        let owned = rust_str.to_owned();
-        if owned.is_empty() {
-            return Ok(());
-        } else {
-            return Err(error::SkipError { msg: owned });
-        }
+        let result = Skip_unsubscribe(identifier);
+        if !result.is_null() {
+            let error = copy_c_string_and_free(result);
+            if !error.is_empty() {
+                return Err(error::SkipError { msg: error });
+            }
+        };
+        return Ok(());
     }
 }
 
@@ -415,7 +423,7 @@ pub fn resource_snapshot_lookup(
     })
 }
 
-pub fn set_input(input: String, data: String) -> Result<(), error::SkipError> {
+pub fn update(input: String, data: String) -> Result<(), error::SkipError> {
     let (sender, receiver) = oneshot::channel();
     let handle = register_executor(Box::new(ExecutorImpl {
         sender: Some(sender),
@@ -423,7 +431,7 @@ pub fn set_input(input: String, data: String) -> Result<(), error::SkipError> {
     unsafe {
         let c_input = CString::new(input).expect("CString::new failed");
         let c_data = CString::new(data).expect("CString::new failed");
-        let result = Skip_set_input(c_input.as_ptr(), c_data.as_ptr(), handle);
+        let result = Skip_update(c_input.as_ptr(), c_data.as_ptr(), handle);
         if !result.is_null() {
             let owned = copy_c_string_and_free(result);
             if !owned.is_empty() {

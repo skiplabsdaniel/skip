@@ -155,7 +155,7 @@ pub async fn input(
     if check_content_type("application/json", req) {
         match state
             .worker
-            .submit::<_, _>(move || ffi::set_input(collection.to_string(), data.to_string()))
+            .submit::<_, _>(move || ffi::update(collection.to_string(), data.to_string()))
         {
             Ok(()) => HttpResponse::Ok().finish(),
             Err(e) => {

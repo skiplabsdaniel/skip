@@ -1,5 +1,9 @@
 fun main(): void {
   srcs = Array["cc/context.cpp", "cc/ffi.c"];
   srcs.each(src -> print_string(`skargo:rerun-if-changed=${src}`));
-  Cc.Build().flags(Cc.kRecommendedCflags).flag("-fPIC").files(srcs).compile("services-ffi")
+  Cc.Build()
+    .flags(Cc.kRecommendedCflags)
+    .flag("-fPIC")
+    .files(srcs)
+    .compile("services-ffi")
 }

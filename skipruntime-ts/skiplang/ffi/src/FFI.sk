@@ -340,11 +340,9 @@ fun createService(
       initialData.add(
         fieldName,
         InitialData(
-          SKJSON.expectArray(field).map(v -> {
-            e = SKJSON.expectArray(v);
-            TEntry::create(e[0], SKJSON.expectArray(e[1]))
-          }),
+          entriesFromJson(field),
           kJSON_CONVERTERS,
+          entriesFromJsonString,
         ),
       )
     }
@@ -644,12 +642,15 @@ fun createResourceOfRuntime(
   params: SKJSON.CJSON,
   executor: Executor,
 ): Float {
-  ServiceInstance.instantiateResource(
-    identifier,
-    resource,
-    JSONParams(params),
-    executor,
-  ) match {
+  SKStore.runWithResult(context ~> {
+    _ = createReactiveResource(
+      context,
+      identifier,
+      resource,
+      JSONParams(params),
+      executor,
+    )
+  }) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
   }
@@ -730,6 +731,8 @@ fun subscribeOfRuntime(
     subscribe(context, reactiveId, notifier, watermark)
   }) match {
   | Success(id) -> id
+  | Failure(UnknownCollectionError _) -> -1
+  | Failure(ResourceInstanceInUse _) -> -2
   | Failure(err) -> -getErrorHdl(err).toInt()
   };
 }

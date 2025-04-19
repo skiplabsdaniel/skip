@@ -37,6 +37,18 @@ class UseExternalResourceException() extends Exception {
   }
 }
 
+class UnknownCollectionError(resourceInstanceId: String) extends Exception {
+  fun getMessage(): String {
+    `Unknown resource instance '${this.resourceInstanceId}'`
+  }
+}
+
+class ResourceInstanceInUse(resourceInstanceId: String) extends Exception {
+  fun getMessage(): String {
+    `Resource instance '${this.resourceInstanceId}' cannot be subscribed twice.`
+  }
+}
+
 class SKStoreMapper<
   K1: frozen & Orderable,
   V1: frozen,
@@ -717,6 +729,8 @@ base class Collection {
   fun unsafeCast<K: frozen & Orderable, V: frozen>(
     converters: ConverterPair<K, V>,
   ): TCollection<K, V>;
+
+  fun getToSKStore(): Entry ~> (SKStore.Key, Array<SKStore.File>);
 }
 
 class TCollection<K: frozen & Orderable, V: frozen>(
@@ -1012,6 +1026,10 @@ class TCollection<K: frozen & Orderable, V: frozen>(
       )
     | _ -> invariant_violation("Store context must be specified.")
     }
+  }
+
+  fun getToSKStore(): Entry ~> (SKStore.Key, Array<SKStore.File>) {
+    this.converters.toSKStore
   }
 
   private fun map_<K2: frozen & Orderable, V2: frozen>(
@@ -1417,7 +1435,7 @@ fun subscribe(
   );
   subId = `subscription.${identifier}`;
   if (context.getPersistent(subId).isSome()) {
-    return -2
+    throw ResourceInstanceInUse(identifier)
   };
   resourceHdl.maybeGet(context, sid) match {
   | Some(definition) ->
@@ -1447,7 +1465,7 @@ fun subscribe(
     };
     checkGarbage(context);
     session
-  | _ -> -1
+  | _ -> throw UnknownCollectionError(identifier)
   }
 }
 
@@ -1613,6 +1631,39 @@ fun getResourceBuilder(
   }) match {
   | Some(builder) -> builder
   | _ -> throw SKStore.Error(`Unable to find '${name}' resource.`)
+  }
+}
+
+fun getInputData(
+  context: mutable SKStore.Context,
+  input: String,
+): (Collection, Data) {
+  sessionHdl = SKStore.EHandle(
+    SKStore.UnitID::keyType,
+    ServiceDefinition::type,
+    kSessionDir,
+  );
+  serviceHdl = SKStore.EHandle(
+    SKStore.SID::keyType,
+    ServiceFile::type,
+    kGraphDir,
+  );
+  (sessionHdl.maybeGet(context, SKStore.UnitID::singleton) match {
+  | Some(def) ->
+    (
+      def.service.initialData().maybeGet(input),
+      serviceHdl.maybeGet(context, SKStore.SID(def.runId)) match {
+      | Some(service) -> service.inputs.maybeGet(input)
+      | _ -> None()
+      },
+    ) match {
+    | (Some(d), Some(c)) -> Some((c, d))
+    | _ -> None()
+    }
+  | _ -> None()
+  }) match {
+  | Some(data) -> data
+  | _ -> throw SKStore.Error(`Unable to find '${input}' input.`)
   }
 }
 

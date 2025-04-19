@@ -336,17 +336,26 @@ class UnusedSnapshot() extends Snapshot {
 }
 
 class CollectionsMap(map: Map<String, Collection>) extends Collections {
-  fun get(name: String): Collection {
-    this.map.maybeGet(name) match {
-    | Some(collection) -> collection
-    | _ -> invariant_violation(`Unknown collection ${name}`)
-    }
+  fun maybeGet(name: String): ?Collection {
+    this.map.maybeGet(name)
   }
-
 
   fun each(fn: (String, Collection) -> void): void {
     this.map.each(fn)
   }
+}
+
+fun entriesFromJson(
+  json: SKJSON.CJSON,
+): Array<TEntry<SKJSON.CJSON, SKJSON.CJSON>> {
+  SKJSON.expectArray(json).map(v -> {
+    e = SKJSON.expectArray(v);
+    TEntry::create(e[0], SKJSON.expectArray(e[1]))
+  })
+}
+
+fun entriesFromJsonString(jsonString: String): Array<Entry> {
+  entriesFromJson(SKJSON.decode(jsonString, x -> x))
 }
 
 module end;
