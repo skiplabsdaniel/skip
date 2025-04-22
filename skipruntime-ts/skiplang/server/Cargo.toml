@@ -1,0 +1,29 @@
+[package]
+name = "skipruntime_server"
+version = "0.1.0"
+authors = ["Skiplabs <dev@skiplabs.io>"]
+edition = "2024"
+
+[dependencies]
+libc = "0.2.170"
+actix-web = "4"
+actix-rt = "2"
+actix-cors = "0.7.1"
+#sse
+actix-web-lab = "0.19.2"
+parking_lot = "0.12.1"
+futures = "0.3"
+futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
+log = "0.4.26"
+tokio = "1.43.0"
+lazy_static = "1.5.0"
+clap = { version = "4", features = ["derive"] }
+env_logger = "0.10"
+
+[dependencies.uuid]
+version = "1.15.0"
+features = [
+    "v4",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+]

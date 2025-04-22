@@ -1,0 +1,12 @@
+[package]
+name = "services-ffi"
+version = "0.0.1"
+
+[build-dependencies]
+cc = { path = "../../skiplang/cc" }
+
+[dependencies]
+skipruntime-core = { path = "../core" }
+
+[lib]
+type = ["cdylib"]
