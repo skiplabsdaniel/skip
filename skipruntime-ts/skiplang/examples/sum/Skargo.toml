@@ -1,0 +1,9 @@
+[package]
+name = "sum-example"
+version = "0.0.1"
+
+[dependencies]
+services-ffi = { path = "../../services-ffi" }
+
+[lib]
+type = ["cdylib"]
