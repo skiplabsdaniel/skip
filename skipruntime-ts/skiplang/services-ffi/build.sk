@@ -1,0 +1,23 @@
+fun main(): void {
+  Array[
+    "cc/worker.h",
+    "cc/handles.h",
+    "cc/executor.h",
+    "cc/notification_queue.h",
+  ].each(src -> print_string(`skargo:rerun-if-changed=${src}`));
+  srcs = Array[
+    "cc/context.cpp",
+    "cc/handles.cpp",
+    "cc/executor.cpp",
+    "cc/ffi.cpp",
+    "cc/worker.cpp",
+    "cc/notification_queue.cpp",
+  ];
+  srcs.each(src -> print_string(`skargo:rerun-if-changed=${src}`));
+  Cc.Build()
+    .flags(Cc.kRecommendedCflags)
+    .flag("-fPIC")
+    .flag("-std=c++17")
+    .files(srcs)
+    .compile("services-ffi")
+}
