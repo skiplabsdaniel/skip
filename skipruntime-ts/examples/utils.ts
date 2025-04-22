@@ -15,19 +15,22 @@ export async function subscribe(
   streaming_port: number,
   params: Json = {},
 ): Promise<{ close: () => void }> {
-  return await service.getStreamUUID(resource, params).then((uuid) => {
-    const evSource = new EventSource(
-      `http://localhost:${streaming_port}/v1/streams/${uuid}`,
-    );
+  const uuid = await service.getStreamUUID(resource, params);
+  const url = `http://localhost:${streaming_port}/v1/streams/${uuid}`;
+  const evSource = new EventSource(url);
+  return new Promise((resolve, reject) => {
+    evSource.addEventListener("open", () => {
+      resolve(evSource);
+    });
     evSource.addEventListener("init", (e: MessageEvent<string>) => {
       console.log("Init", e.data);
     });
     evSource.addEventListener("update", (e: MessageEvent<string>) => {
       console.log("Update", e.data);
     });
-    evSource.onerror = (e: MessageEvent<string>) => {
-      console.log("Error", e);
+    evSource.onerror = (e: MessageEvent<Error>) => {
+      console.log(e);
+      reject(new Error(`Unable to connect to '${url}'`));
     };
-    return evSource;
   });
 }
