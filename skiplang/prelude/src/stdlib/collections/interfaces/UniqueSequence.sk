@@ -9,7 +9,10 @@ module Sequence;
 
 // Represents a sequence of unique values: implementations must guarantee that
 // each value in the sequence is not equal (per Equality) to any other value.
-mutable base class .UniqueSequence<+T: Equality> extends Sequence<T> {
+mutable base class .UniqueSequence<+T: Equality> extends
+  Sequence<T>,
+  Iterable<T>,
+{
   // # Creating Sequences
 
   // Create a mutable container with the given capacity.

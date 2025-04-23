@@ -828,7 +828,7 @@ class TCollection<K: frozen & Orderable, V: frozen>(
     keyConv = this.converters.key;
     key = keyConv.fromString(strKey);
     values = this.lookupValues(keyConv.toKey(key));
-    TEntry::create(key, values.map(this.converters.value.fromFile))
+    CEntry::create(key, values.map(this.converters.value.fromFile))
   }
 
   /**
@@ -1751,6 +1751,16 @@ fun checkGarbage(context: mutable SKStore.Context): void {
 fun updateContext(context: mutable SKStore.Context): void {
   context.update();
   checkGarbage(context);
+}
+
+@no_inline
+fun concreteByName<T: IO.Serializable>(name: String): Concrete<T> {
+  name match {
+  | "Int" -> IO.unsafeConcreteCast(Int)
+  | "Float" -> IO.unsafeConcreteCast(Float)
+  | "SkipRuntime.SEntry" -> IO.unsafeConcreteCast(SEntry)
+  | _ -> invariant_violation(`Unknown class name '${name}'`)
+  };
 }
 
 module end;

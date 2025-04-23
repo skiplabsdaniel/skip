@@ -7,12 +7,19 @@
 
 module Sequence;
 
+mutable base class .KeyedIterable<+K, +V> {
+  readonly fun size(): Int;
+  readonly fun isEmpty(): Bool;
+  readonly fun each(f: (K, V) -> void): void;
+  readonly fun items(): mutable Iterator<(K, V)>;
+}
+
 // Represents a sequence of values that are key-value items:
 // implementations must guarantee that each key in the sequence
 // is associated with exactly one value (keys must be unique).
-mutable base class .KeyedSequence<+K: Hashable & Equality, +V> uses
-  IntoIterator<(K, V)>,
-{
+mutable base class .KeyedSequence<+K: Hashable & Equality, +V>
+  extends .KeyedIterable<K, V>
+  uses IntoIterator<(K, V)> {
   // Return a chilled (shallowly frozen) copy of this sequence.
   readonly fun chill(): this;
 

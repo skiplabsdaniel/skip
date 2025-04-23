@@ -42,33 +42,6 @@ fun inputsFromJson(jsonString: String): Array<SR.Entry> {
   })
 }
 
-class StringIntToJsonSnapshot() extends SR.Snapshot {
-  //
-  fun snapshot(entries: Array<SR.Entry>): String {
-    SKJSON.CJArray(
-      entries.map(entry -> {
-        tentry = SR.castEntry<String, Int>(entry);
-        SKJSON.CJArray(
-          Array[
-            SKJSON.CJString(tentry.key()),
-            SKJSON.CJArray(tentry.values.map(v -> SKJSON.CJInt(v))),
-          ],
-        )
-      }),
-    ).prettyPrint()
-  }
-
-  fun snapshotLookup(entry: SR.Entry): String {
-    tentry = SR.castEntry<String, Int>(entry);
-    SKJSON.CJArray(
-      Array[
-        SKJSON.CJString(tentry.key()),
-        SKJSON.CJArray(tentry.values.map(v -> SKJSON.CJInt(v))),
-      ],
-    ).prettyPrint()
-  }
-}
-
 class Indexed(index: Int, value: Int) extends SKStore.File uses Orderable
 
 class AddIndex(
@@ -160,8 +133,8 @@ class Service() extends SR.TService<Inputs, Inputs> uses SR.WithServiceData {
       "input2" => SR.InitialData(Array[], kSTRING_INT_TYPES, inputsFromJson),
     ],
     resourceBuilders => Map[
-      "add" => SR.NoParamsBuilder(Add(), StringIntToJsonSnapshot()),
-      "sub" => SR.NoParamsBuilder(Sub(), StringIntToJsonSnapshot()),
+      "add" => SR.NoParamsBuilder(Add(), SR.TEntryToJSON<String, Int>()),
+      "sub" => SR.NoParamsBuilder(Sub(), SR.TEntryToJSON<String, Int>()),
     ],
     externalServices => Map[],
   };

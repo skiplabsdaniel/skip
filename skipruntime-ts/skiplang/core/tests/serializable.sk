@@ -1,0 +1,20 @@
+module alias T = SKTest;
+module alias SR = SkipRuntime;
+
+module SRTest;
+
+@test
+fun jsonserialize1(): void {
+  entry = SR.CEntry::create("v", Array[0, 1]);
+  snapshot = SR.EntryToJSON<String, Int>();
+  T.expectEq(snapshot.snapshot(Array[entry]), "[[\"v\", [0, 1]]]");
+}
+
+@test
+fun jsonserialize2(): void {
+  entry = SR.CEntry::create(10, Array[0.1, 1.2]);
+  snapshot = SR.EntryToJSON<Int, Float>();
+  T.expectEq(snapshot.snapshot(Array[entry]), "[[10, [0.1, 1.2]]]");
+}
+
+module end;

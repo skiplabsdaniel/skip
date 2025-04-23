@@ -40,7 +40,7 @@ class ConverterPair<K: frozen & Orderable, V: frozen>(
   value: ValueConverter<V>,
 ) {
   fun fromSKStore(v: (SKStore.Key, Array<SKStore.File>)): Entry {
-    TEntry::create(this.key.fromKey(v.i0), v.i1.map(this.value.fromFile))
+    CEntry::create(this.key.fromKey(v.i0), v.i1.map(this.value.fromFile))
   }
 
   fun toSKStore(v: Entry): (SKStore.Key, Array<SKStore.File>) {
@@ -112,35 +112,69 @@ base class ResourceBuilder {
 
 base class Entry uses Downcastable
 
-class TEntry<K: frozen & Orderable, V: frozen>{
+base class TEntry<K: frozen & Orderable, V: frozen>{
   private key_: ?K = None(),
   values: Array<V> = Array[],
 } extends Entry {
   //
-  static fun create(key: K, values: Array<V>): TEntry<K, V> {
-    TEntry{key_ => Some(key), values};
-  }
-
-  @no_inline
-  static fun const_type_id(): Int {
-    SKStore.const_typed_symbol(TEntry<K, V>{});
-  }
-
   fun key(): K {
     this.key_.fromSome()
   }
+
+  static fun const_type_id(): Int;
 
   fun type_id(): Int {
     static::const_type_id()
   }
 }
 
-fun castEntry<K: frozen & Orderable, V: frozen>(entry: Entry): TEntry<K, V> {
-  cast(entry, TEntry<K, V>);
+class SEntry<
+  K: frozen & Orderable & IO.Serializable,
+  V: frozen & IO.Serializable,
+> extends TEntry<K, V> uses IO.Serializable {
+  //
+  static fun create(key: K, values: Array<V>): SEntry<K, V> {
+    SEntry{key_ => Some(key), values};
+  }
+
+  @no_inline
+  static fun const_type_id(): Int {
+    SKStore.const_typed_symbol(SEntry<K, V>{});
+  }
+
+  fun serialize(s: mutable IO.Serializer): void {
+    s.startArray(2);
+    s.push(this.key());
+    s.putIterable(this.values);
+    s.endArray();
+  }
+
+  static fun deserialize(_deserializer: mutable IO.Deserializer): SEntry<K, V> {
+    invariant_violation("TODO");
+  }
+}
+
+class CEntry<K: frozen & Orderable, V: frozen> extends TEntry<K, V> {
+  static fun create(key: K, values: Array<V>): CEntry<K, V> {
+    CEntry{key_ => Some(key), values};
+  }
+
+  @no_inline
+  static fun const_type_id(): Int {
+    SKStore.const_typed_symbol(CEntry<K, V>{});
+  }
+
+  fun toSerializable[K: IO.Serializable, V: IO.Serializable](): SEntry<K, V> {
+    SEntry::create(this.key(), this.values)
+  }
+}
+
+fun castEntry<K: frozen & Orderable, V: frozen>(entry: Entry): CEntry<K, V> {
+  cast(entry, CEntry<K, V>);
 }
 
 fun instanceOfEntry<K: frozen & Orderable, V: frozen>(entry: Entry): Bool {
-  instanceOf(entry, TEntry<K, V>);
+  instanceOf(entry, CEntry<K, V>);
 }
 
 base class Data {
@@ -149,13 +183,12 @@ base class Data {
 }
 
 class InitialData<K: frozen & Orderable, V: frozen>(
-  entries: Array<TEntry<K, V>>,
+  entries: Array<SEntry<K, V>>,
   converters: ConverterPair<K, V>,
   parsers: String ~> Array<Entry>,
 ) extends Data {
   fun toCollection(context: mutable SKStore.Context, name: String): Collection {
-    values = this.entries.map(v -> {
-      entry = castEntry<K, V>(v);
+    values = this.entries.map(entry -> {
       (
         this.converters.key.toKey(entry.key()),
         entry.values.map(this.converters.value.toFile),

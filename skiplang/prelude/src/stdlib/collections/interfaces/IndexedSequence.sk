@@ -7,10 +7,17 @@
 
 module Sequence;
 
+mutable base class .Iterable<+T> {
+  readonly fun size(): Int;
+  readonly fun isEmpty(): Bool;
+  readonly fun each(f: T -> void): void;
+  readonly fun values(): mutable Iterator<T>;
+}
+
 // A type that represents a concrete sequence of items with a finite size (that
 // may change over time) that can be accessed by contiguous integer indices in
 // the range 0 (inclusive) to `size()` (exclusive).
-mutable base class .IndexedSequence<+T> extends Sequence<T> {
+mutable base class .IndexedSequence<+T> extends Sequence<T>, Iterable<T> {
   // # Creating Sequences
 
   // Return a chilled (shallowly frozen) copy of this sequence.

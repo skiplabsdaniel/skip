@@ -10,13 +10,15 @@ module SortedSet;
 // Use SortedMap for inner as iteration must be in order.
 class .SortedSet<+T: Orderable>(
   inner: SortedMap<T, void>,
-) uses  // extends Sequence<T>
-  IntoIterator<T>,
-  FromIterator<T>,
-  Show[T: readonly Show],
-  Hashable[T: Hashable],
-  Equality,
-{
+)
+  extends Iterable<T>
+  uses  // extends Sequence<T>
+    IntoIterator<T>,
+    FromIterator<T>,
+    Show[T: readonly Show],
+    Hashable[T: Hashable],
+    Equality,
+   {
   fun isEmpty(): Bool {
     this.inner.isEmpty()
   }

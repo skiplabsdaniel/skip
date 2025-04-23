@@ -1,0 +1,316 @@
+module JSON;
+
+class TupleVector<+K, +V>(data: Vector<(K, V)>) extends KeyedIterable<K, V> {
+  //
+  fun size(): Int {
+    this.data.size()
+  }
+
+  fun isEmpty(): .Bool {
+    this.data.isEmpty()
+  }
+
+  fun each(f: (K, V) -> void): void {
+    this.data.each(v -> f(v.i0, v.i1))
+  }
+
+  fun items(): mutable Iterator<(K, V)> {
+    this.data.values()
+  }
+}
+
+mutable base class Buffer{parent: ?mutable Buffer} {
+  mutable fun putField(name: .String): void;
+  mutable fun putValue(value: Value): void;
+
+  readonly fun getValue(): Value;
+}
+
+mutable class BValue{value: Value} extends Buffer {
+  //
+  readonly fun getValue(): Value {
+    this.value
+  }
+
+  mutable fun putField(_name: .String): void {
+    invariant_violation("No fields managed in Value")
+  }
+
+  mutable fun putValue(_value: Value): void {
+    invariant_violation("Cannot add value to Value")
+  }
+}
+
+mutable class BObject{
+  value: mutable Map<.String, Value> = mutable Map[],
+  mutable field: ?.String = None(),
+} extends Buffer {
+  //
+  readonly fun getValue(): Value {
+    Object(this.value.chill())
+  }
+
+  mutable fun putField(name: .String): void {
+    this.!field = Some(name);
+  }
+
+  mutable fun putValue(value: Value): void {
+    this.field match {
+    | Some(field) ->
+      this.value.set(field, value);
+      this.!field = None()
+    | _ -> invariant_violation("Field name not defined")
+    }
+  }
+}
+
+mutable class BArray{
+  value: mutable Vector<Value> = mutable Vector[],
+} extends Buffer {
+  //
+  readonly fun getValue(): Value {
+    Array(this.value.chill())
+  }
+
+  mutable fun putField(_name: .String): void {
+    invariant_violation("No fields managed in Array")
+  }
+
+  mutable fun putValue(value: Value): void {
+    this.value.push(value)
+  }
+}
+
+mutable class UnsafeSerializer(
+  private write: .String -> void,
+  private space: Int = -1,
+  private mutable buffer: ?mutable Buffer = None(),
+) extends IO.Serializer {
+  //
+  mutable fun putFloat(v: Float): void {
+    this.putValue(FloatNumber(v))
+  }
+
+  mutable fun putInt(v: Int): void {
+    this.putValue(IntNumber(v))
+  }
+
+  mutable fun putBool(v: .Bool): void {
+    this.putValue(Bool(v))
+  }
+
+  mutable fun putNone(): void {
+    this.putValue(Null())
+  }
+
+  mutable fun putString(v: .String): void {
+    this.putValue(String(v))
+  }
+
+  mutable fun startObject(
+    _name: .String,
+    _types: .Array<?.String> = .Array[],
+  ): void {
+    this.!buffer = Some(mutable BObject{parent => this.buffer})
+  }
+
+  mutable fun putField<V: IO.Serializable>(key: .String, v: V): void {
+    this.buffer match {
+    | Some(buffer) -> buffer.putField(key)
+    | _ -> invariant_violation("No object created")
+    };
+    v.serialize(this)
+  }
+
+  mutable fun putIterableField<V: IO.Serializable>(
+    key: .String,
+    v: Iterable<V>,
+  ): void {
+    this.buffer match {
+    | Some(buffer) -> buffer.putField(key)
+    | _ -> invariant_violation("No object created")
+    };
+    this.putIterable(v);
+  }
+
+  mutable fun endObject(): void {
+    this.endElement()
+  }
+
+  mutable fun startArray(_size: Int): void {
+    this.!buffer = Some(mutable BArray{parent => this.buffer})
+  }
+
+  mutable fun push<T: IO.Serializable>(v: T): void {
+    v.serialize(this);
+  }
+
+  mutable fun endArray(): void {
+    this.endElement()
+  }
+
+  mutable fun close(): void {
+    this.buffer match {
+    | Some(buffer) -> buffer.getValue().writeToStream(this.write, this.space)
+    | _ -> invariant_violation("No value created")
+    }
+  }
+
+  private mutable fun putValue(value: Value): void {
+    this.buffer match {
+    | Some(buffer) -> buffer.putValue(value)
+    | _ -> this.!buffer = Some(mutable BValue{value, parent => this.buffer})
+    }
+  }
+
+  private mutable fun endElement(): void {
+    this.buffer match {
+    | Some(buffer) ->
+      buffer.parent match {
+      | Some(parent) ->
+        parent.putValue(buffer.getValue());
+        this.!buffer = Some(parent)
+      | _ -> void
+      }
+    | _ -> invariant_violation("No object created")
+    }
+  }
+
+  private mutable fun indent(nd: Int): void {
+    indent(this.write, this.space * nd)
+  }
+
+  mutable fun putChar(_v: Char): void {
+    invariant_violation("Char in not managed")
+  }
+
+  mutable fun putInt32(_v: Int32): void {
+    invariant_violation("Int32 in not managed");
+  }
+
+  mutable fun putInt16(_v: Int16): void {
+    invariant_violation("Int16 in not managed");
+  }
+
+  mutable fun putInt8(_v: Int8): void {
+    invariant_violation("Int8 in not managed");
+  }
+
+  mutable fun putUInt32(_v: UInt32): void {
+    invariant_violation("UInt32 in not managed");
+  }
+
+  mutable fun putUInt16(_v: UInt16): void {
+    invariant_violation("UInt16 in not managed");
+  }
+
+  mutable fun putUInt8(_v: UInt8): void {
+    invariant_violation("UInt8 in not managed");
+  }
+}
+/*
+mutable base class Block {
+  readonly fun get(): SKJSON.CJSON;
+}
+
+mutable class ArrayBlock{
+  array: .Array<SKJSON.CJSON>,
+  parent: mutable Block,
+  mutable index: Int = 0,
+} extends Block {
+  readonly fun get(): SKJSON.CJSON {
+    this.array[this.index]
+  }
+}
+
+mutable class ValueBlock(value: SKJSON.CJSON) extends Block {
+  readonly fun get(): SKJSON.CJSON {
+    this.value
+  }
+}
+
+mutable class Deserializer(
+  write: .String -> void,
+  mutable current: mutable Block,
+) extends IO.Deserializer {
+  mutable fun nextFloat(): Float {
+    SKJSON.asFloat(this.current.get())
+  }
+
+  mutable fun nextInt(): Int {
+    SKJSON.asInt(this.current.get())
+  }
+
+  mutable fun nextBool(): .Bool {
+    this.current.get() match {
+    | SKJSON.CJBool(v) -> v
+    | _ -> invariant_violation("Must be a Boolean value.")
+    }
+  }
+
+  mutable fun nextChar(): Char {
+    SKJSON.asString(this.current.get()).chars()[0]
+  }
+
+  mutable fun nextString(): .String {
+    SKJSON.asString(this.current.get())
+  }
+
+  mutable fun nextToken(): .String {
+    this.current.get() match {
+    | SKJSON.CJNull _ -> "null"
+    | _ -> invariant_violation("Only null token is managed")
+    }
+  }
+
+  mutable fun nextArraySize(): Int {
+    array = SKJSON.expectArray(this.current.get());
+    this.!current = mutable ArrayBlock{parent => this.current, array};
+    array.size()
+  }
+
+  mutable fun nextItem<T: IO.Serializable>(t: Concrete<T>): T {
+    this.current match {
+    | a @ ArrayBlock _ ->
+      v = t::deserialize(this);
+      a.!index = a.index + 1;
+      if (a.index == a.array.size()) {
+        this.!current = a.parent
+      };
+      v
+    | _ -> invariant_violation("Must be an array block")
+    }
+  }
+
+  mutable fun nextIterable<T: IO.Serializable>(t: Concrete<T>): Iterable<T> {
+    current = this.current;
+    res = SKJSON.expectArray(this.current.get()).map(element -> {
+      this.!current = mutable ValueBlock(element);
+      t::deserialize(this);
+    });
+    this.!current = current;
+    res;
+  }
+
+  mutable fun nextKeyedIterable<V: IO.Serializable>(
+    v: Concrete<V>,
+  ): KeyedIterable<.String, V> {
+    current = this.current;
+    this.current.get() match {
+    | SKJSON.CJObject(fields) ->
+      keyValue = mutable Vector[];
+      for (fieldName => field in fields) {
+        this.!current = mutable ValueBlock(field);
+        rv = v::deserialize(this);
+        keyValue.push((fieldName, rv));
+      };
+      this.!current = current;
+      TupleVector(keyValue.chill())
+    | _ -> invariant_violation("Must be a Object value.")
+    }
+  }
+}
+*/
+
+
+module end;

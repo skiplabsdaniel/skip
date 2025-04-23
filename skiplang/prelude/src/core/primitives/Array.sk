@@ -9,7 +9,7 @@ module Array;
 
 // A contiguous, fixed-size list/array-like type.
 mutable native class .Array<+T>
-  extends Sequence<T>
+  extends Sequence<T>, Iterable<T>
   uses
     IntoIterator<T>,
     FromIterator<T>,

@@ -215,6 +215,10 @@ class IntValueConverter() extends ValueConverter<Int> {
   fun toFile(v: Int): SKStore.File {
     SKStore.IntFile(v)
   }
+
+  static fun deserialize(ds: mutable IO.Deserializer): Int {
+    Int::deserialize(ds)
+  }
 }
 
 class IntKeyConverter() extends KeyConverter<Int> {
@@ -227,6 +231,9 @@ class IntKeyConverter() extends KeyConverter<Int> {
   fun fromString(k: String): Int {
     k.toInt()
   }
+  static fun deserialize(ds: mutable IO.Deserializer): Int {
+    Int::deserialize(ds)
+  }
 }
 
 class StringValueConverter() extends ValueConverter<String> {
@@ -235,6 +242,9 @@ class StringValueConverter() extends ValueConverter<String> {
   }
   fun toFile(v: String): SKStore.File {
     SKStore.StringFile(v)
+  }
+  static fun deserialize(ds: mutable IO.Deserializer): String {
+    String::deserialize(ds)
   }
 }
 
@@ -248,6 +258,9 @@ class StringKeyConverter() extends KeyConverter<String> {
   fun fromString(k: String): String {
     k
   }
+  static fun deserialize(ds: mutable IO.Deserializer): String {
+    String::deserialize(ds)
+  }
 }
 
 class FileValueConverter<V: SKStore.File>(
@@ -258,6 +271,9 @@ class FileValueConverter<V: SKStore.File>(
   }
   fun toFile(v: V): SKStore.File {
     v
+  }
+  static fun deserialize[V: IO.Serializable](_ds: mutable IO.Deserializer): V {
+    invariant_violation("Unused")
   }
 }
 
@@ -339,6 +355,34 @@ class UnusedSnapshot() extends Snapshot {
   }
 }
 
+class EntryToJSON<
+  K: frozen & Orderable & IO.Serializable,
+  V: frozen & IO.Serializable,
+>() extends Snapshot {
+  //
+  fun snapshot(entries: Array<Entry>): String {
+    writer = mutable Vector[];
+    serializer = mutable JSON.UnsafeSerializer(writer.push);
+    serializer.putIterable(
+      entries.map(e -> {
+        entry = castEntry<K, V>(e);
+        entry.toSerializable()
+      }),
+    );
+    serializer.close();
+    writer.join("");
+  }
+
+  fun snapshotLookup(e: Entry): String {
+    entry = castEntry<K, V>(e);
+    writer = mutable Vector[];
+    serializer = mutable JSON.UnsafeSerializer(writer.push);
+    serializer.putIterable(entry.values);
+    serializer.close();
+    writer.join("");
+  }
+}
+
 class CollectionsMap(map: Map<String, Collection>) extends Collections {
   fun maybeGet(name: String): ?Collection {
     this.map.maybeGet(name)
@@ -351,10 +395,10 @@ class CollectionsMap(map: Map<String, Collection>) extends Collections {
 
 fun entriesFromJson(
   json: SKJSON.CJSON,
-): Array<TEntry<SKJSON.CJSON, SKJSON.CJSON>> {
+): Array<CEntry<SKJSON.CJSON, SKJSON.CJSON>> {
   SKJSON.expectArray(json).map(v -> {
     e = SKJSON.expectArray(v);
-    TEntry::create(e[0], SKJSON.expectArray(e[1]))
+    CEntry::create(e[0], SKJSON.expectArray(e[1]))
   })
 }
 
