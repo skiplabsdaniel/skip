@@ -7,12 +7,14 @@
 
 module SortedMap;
 
-base class .SortedMap<+K: Orderable, +V> uses  //  extends KeyedSequence<K, V>
-  Show[K: readonly Show, V: readonly Show],
-  Hashable[K: Hashable, V: Hashable],
-  Equality[K: Equality, V: Equality],
-  Orderable[K: Orderable, V: Orderable],
-{
+base class .SortedMap<+K: Orderable, +V>
+  extends .KeyedIterable<K, V>
+  uses  //  extends KeyedSequence<K, V>
+    Show[K: readonly Show, V: readonly Show],
+    Hashable[K: Hashable, V: Hashable],
+    Equality[K: Equality, V: Equality],
+    Orderable[K: Orderable, V: Orderable],
+   {
   children =
   | Nil()
   | Node{

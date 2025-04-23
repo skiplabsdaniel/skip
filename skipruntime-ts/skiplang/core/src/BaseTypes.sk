@@ -115,7 +115,7 @@ base class Entry uses Downcastable
 class TEntry<K: frozen & Orderable, V: frozen>{
   private key_: ?K = None(),
   values: Array<V> = Array[],
-} extends Entry {
+} extends Entry uses IO.Serializable[K: IO.Serializable, V: IO.Serializable] {
   //
   static fun create(key: K, values: Array<V>): TEntry<K, V> {
     TEntry{key_ => Some(key), values};
@@ -132,6 +132,21 @@ class TEntry<K: frozen & Orderable, V: frozen>{
 
   fun type_id(): Int {
     static::const_type_id()
+  }
+
+  fun serialize[K: IO.Serializable, V: IO.Serializable](
+    s: mutable IO.Serializer,
+  ): void {
+    s.startArray(2);
+    s.push(this.key());
+    s.putIterable(this.values);
+    s.endArray();
+  }
+
+  static fun deserialize[K: IO.Serializable, V: IO.Serializable](
+    _s: mutable IO.Deserializer,
+  ): TEntry<K, V> {
+    invariant_violation("TODO")
   }
 }
 
@@ -154,8 +169,7 @@ class InitialData<K: frozen & Orderable, V: frozen>(
   parsers: String ~> Array<Entry>,
 ) extends Data {
   fun toCollection(context: mutable SKStore.Context, name: String): Collection {
-    values = this.entries.map(v -> {
-      entry = castEntry<K, V>(v);
+    values = this.entries.map(entry -> {
       (
         this.converters.key.toKey(entry.key()),
         entry.values.map(this.converters.value.toFile),
