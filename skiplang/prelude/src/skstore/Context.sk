@@ -826,6 +826,21 @@ mutable class Context private {
           } else {
             (true, SortedSet[])
           };
+
+          debug_prefix =
+            "[DEBUG current tick: " +
+            this.tick +
+            " start tick: " +
+            start +
+            "]";
+          print_string(
+            debug_prefix + " changedKeys: " + inspect(changedKeys).toString(),
+          );
+          print_string(
+            debug_prefix +
+              " full data: " +
+              inspect(dir.unsafeGetFileIter().collect(Array)).toString(),
+          );
           keys = if (init) {
             keys = SortedSet[];
             // Key can appears multiple times
