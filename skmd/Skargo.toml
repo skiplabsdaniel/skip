@@ -1,0 +1,14 @@
+[package]
+name = "skmd"
+version = "0.1.0"
+
+[dependencies]
+std = { path = "../skiplang/prelude" }
+skargo = { path = "../skiplang/skargo" }
+
+[dev-dependencies]
+sktest = { path = "../skiplang/sktest" }
+
+[[bin]]
+name = "skmd"
+main = "SKMD.main"

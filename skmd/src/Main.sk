@@ -1,0 +1,347 @@
+module SKMD;
+
+const kConfigFile: String = "skmd.json";
+const filesDirName: SKStore.DirName = SKStore.DirName::create("/skmd/files/");
+
+const filesHandle: SKStore.EHandle<SKStore.IID, Files> = SKStore.EHandle(
+  SKStore.IID::keyType,
+  Files::type,
+  filesDirName,
+);
+
+const configsDirName: SKStore.DirName = SKStore.DirName::create(
+  "/skmd/configs/",
+);
+
+const configsHandle: SKStore.EHandle<SKStore.IID, Config> = SKStore.EHandle(
+  SKStore.IID::keyType,
+  Config::type,
+  configsDirName,
+);
+
+fun main(): void {
+  saved = SKStore.newObstack();
+  cmd = Cli.Command("skmd")
+    .about("Skip's Markdown converter")
+    .arg(
+      Cli.Arg::bool("version")
+        .short("V")
+        .long("version")
+        .about("Print version info and exit"),
+    )
+    .arg(Cli.StringArg{name => "data"})
+    .arg(Cli.StringArg{name => "init"})
+    .arg(
+      Cli.StringArg{name => "capacity"}.about(
+        "Initialize SKStore runtime with given capacity",
+      ),
+    )
+    .arg(
+      Cli.StringArg{name => "target-dir"}.about(
+        "Directory for all generated artifacts",
+      ),
+    )
+    .arg(Cli.StringArg{name => "path"}.about("Specify the path of the project"))
+    .arg(
+      Cli.Arg::bool("verbose")
+        .short("v")
+        .long("verbose")
+        .about("Use verbose output")
+        .global(),
+    );
+  !cmd = cmd.help();
+  args = cmd.parseArgs();
+  args.error match {
+  | Some(exn) ->
+    print_error_ln(exn.getMessage().trim());
+    print_error(Cli.usage(args.cmd, false));
+    SKStore.destroyObstack(saved);
+    skipExit(1)
+  | _ -> void
+  };
+  if (args.getBool("version")) {
+    print_string(
+      // FIXME
+      Environ.args().next().default("skmd") + " " + "FIXME",
+    );
+    SKStore.destroyObstack(saved);
+    skipExit(0);
+  } else {
+    // NOTE: This should be a subcommand, but the `--init` flag is currently
+    // hardcoded in the runtime. It should be revisited once the runtime has
+    // a proper two-step init API for persistence.
+    if (args.maybeGetString("init").isSome()) {
+      // check config file existance
+      SKStore.runWithGc(SKStore.Context{}, initContext, None());
+      SKStore.destroyObstack(saved);
+      skipExit(0);
+    } else if (args.maybeGetString("capacity") is Some _) {
+      print_error("cannot use capacity without init");
+      skipExit(2)
+    };
+    if (SKStore.gHasContext() == 0) {
+      SKStore.runWithGc(SKStore.Context{}, initContext, None());
+    };
+    exec(args) match {
+    | Some(exn) ->
+      e = SKStore.destroyObstackWithValue(saved, List[exn]).getHead();
+      throw e
+    | _ -> skipExit(0)
+    }
+  };
+}
+
+fun contentToNameMapping(
+  _context: mutable SKStore.Context,
+  writer: mutable SKStore.TWriter<SKStore.SID, SKStore.StringFile>,
+  _key: SKStore.IID,
+  it: mutable SKStore.NonEmptyIterator<Files>,
+): void {
+  it.first.files.each(f -> {
+    writer.set(SKStore.SID(f.contents), SKStore.StringFile(f.name));
+  });
+}
+
+fun parseMarkdownContent(
+  _context: mutable SKStore.Context,
+  writer: mutable SKStore.TWriter<SKStore.SID, Parsed>,
+  key: SKStore.SID,
+  _it: mutable SKStore.NonEmptyIterator<SKStore.StringFile>,
+): void {
+  writer.set(key, Parsed(parseToBlocks(key.value)))
+}
+
+fun computeToc(
+  _context: mutable SKStore.Context,
+  writer: mutable SKStore.TWriter<SKStore.SID, Toc>,
+  key: SKStore.SID,
+  it: mutable SKStore.NonEmptyIterator<Parsed>,
+): void {
+  writer.set(key, Toc(toMenu(it.first.value)))
+}
+
+fun convertToHtmlBody(
+  _context: mutable SKStore.Context,
+  writer: mutable SKStore.TWriter<SKStore.SID, HtmlBody>,
+  key: SKStore.SID,
+  it: mutable SKStore.NonEmptyIterator<Parsed>,
+): void {
+  writer.set(key, HtmlBody(convert(it.first.value)))
+}
+
+fun convertToHtmlPage(
+  context: mutable SKStore.Context,
+  _writer: mutable SKStore.TWriter<SKStore.SID, SKStore.StringFile>,
+  _key: SKStore.SID,
+  _it: mutable SKStore.NonEmptyIterator<HtmlBody>,
+  _splittedHdl: SKStore.EHandle<SKStore.SID, SKStore.StringFile>,
+  configsHdl: SKStore.EHandle<SKStore.IID, Config>,
+): void {
+  configsHdl.maybeGet(context, SKStore.IID(0)).each(_config -> {
+    void
+  })
+}
+
+fun initContext(context: mutable SKStore.Context): SKStore.ContextOp {
+  filesHdl = context.mkdir(SKStore.IID::keyType, Files::type, filesDirName);
+  configsHdl = context.mkdir(
+    SKStore.IID::keyType,
+    Config::type,
+    configsDirName,
+  );
+  splittedHdl = filesHdl.map(
+    SKStore.SID::keyType,
+    SKStore.StringFile::type,
+    context,
+    SKStore.DirName::create("/skmd/splitted/"),
+    contentToNameMapping,
+  );
+  parsedHdl = splittedHdl.map(
+    SKStore.SID::keyType,
+    Parsed::type,
+    context,
+    SKStore.DirName::create("/skmd/parsed/"),
+    parseMarkdownContent,
+  );
+  _tocHdl = parsedHdl.map(
+    SKStore.SID::keyType,
+    Toc::type,
+    context,
+    SKStore.DirName::create("/skmd/tocs/"),
+    computeToc,
+  );
+  htmlBodiesHdl = parsedHdl.map(
+    SKStore.SID::keyType,
+    HtmlBody::type,
+    context,
+    SKStore.DirName::create("/skmd/html_bodies/"),
+    convertToHtmlBody,
+  );
+  _htmlPagesHdl = htmlBodiesHdl.map(
+    SKStore.SID::keyType,
+    SKStore.StringFile::type,
+    context,
+    SKStore.DirName::create("/skmd/html_pages/"),
+    (context, writer, key, it) ~> {
+      convertToHtmlPage(context, writer, key, it, splittedHdl, configsHdl)
+    },
+  );
+  SKStore.CStop(None())
+}
+
+/********* Build **********/
+
+class File(name: String, contents: String)
+class Files(files: Array<File>) extends SKStore.File
+class Parsed(value: Vector<Entity>) extends SKStore.File
+class HtmlBody(value: Vector<HTMLElement>) extends SKStore.File
+class Toc(value: Array<Menu>) extends SKStore.File
+
+fun exec(args: Cli.ParseResults): ?Exception {
+  configLoad = loadConfig(args.maybeGetString("path"));
+  if (configLoad.optError.isSome()) {
+    return configLoad.optError;
+  };
+  config = configLoad.optConfig.fromSome();
+  files = mutable Vector[];
+  FileSystem.readFilesRecursive(config.root, f -> {
+    ext = Path.extname(f);
+    ext == ".md" || ext == ".markdown"
+  }).each(f -> files.push(File(f, FileSystem.readTextFile(f))));
+  filesArray = files.toArray();
+  SKStore.runWithGc(
+    SKStore.Context{},
+    context ~> {
+      filesHandle.writeArray(context, SKStore.IID(0), Array[Files(filesArray)]);
+      context.update();
+      SKStore.CStop(None())
+    },
+    None(),
+  );
+  None()
+}
+
+fun execHtml(_: Skargo.GlobalContext, args: Cli.ParseResults): void {
+  acc = mutable Vector[];
+  rl = () -> {
+    try {
+      read_line()
+    } catch {
+    | EndOfFile _ -> None()
+    | exn -> throw exn
+    };
+  };
+  loop {
+    rl() match {
+    | None() ->
+      conf = args
+        .maybeGetString("conf")
+        .map(readTextFile)
+        .map(JSON.decode)
+        .map(HTMLConfig::fromJSON)
+        .default(HTMLConfig{});
+      buffer = mutable Vector[];
+      convertToHtml{markdown => acc.join(""), buffer, conf};
+      print_string(buffer.join("\n"));
+      break void
+    | Some(str) ->
+      acc.push(str);
+      acc.push("\n")
+    }
+  }
+}
+
+class Config{
+  root: String,
+  title: ?String,
+  author: ?String,
+  date: ?String,
+  version: ?String,
+  html: ?HTMLConfig,
+} extends SKStore.File {
+  //
+  static fun fromJSON(root: String, jsv: JSON.Value): Config {
+    jso = jsv.expectObject();
+    static{
+      root,
+      title => jso.maybeGetString("title"),
+      author => jso.maybeGetString("author"),
+      date => jso.maybeGetString("date"),
+      version => jso.maybeGetString("version"),
+      html => jso.maybeGet("html").map(HTMLConfig::fromJSON),
+    }
+  }
+}
+
+value class ConfigLoad{
+  optConfig: ?Config = None(),
+  optError: ?Exception = None(),
+}
+
+class NoConfigFileError(
+  path: String,
+  file: String,
+  direct: Bool,
+) extends Exception {
+  fun getMessage(): String {
+    if (this.direct) {
+      `Could not find \`${this.file}\` in \`${this.path}\`.`
+    } else {
+      `Could not find \`${this.file}\` in \`${
+        this.path
+      }\` or any parent directory.`
+    }
+  }
+}
+
+class InvalidConfigFileError(
+  path: String,
+  file: String,
+  cause: Exception,
+) extends Exception {
+  fun getMessage(): String {
+    Array[
+      `Invalid configuration \`${this.file}\` in \`${this.path}\`.`,
+      `Due to: ${this.cause.getMessage()}`,
+    ].join("\n")
+  }
+}
+
+private fun loadConfig(optPath: ?String = None()): ConfigLoad {
+  (path, file) = optPath match {
+  | Some(path) ->
+    file = Path.join(path, kConfigFile);
+    if (!FileSystem.exists(file)) {
+      return ConfigLoad{
+        optError => Some(NoConfigFileError(path, kConfigFile, true)),
+      }
+    };
+    (path, file)
+  | _ ->
+    current = getcwd();
+    path = current;
+    file = loop {
+      file = Path.join(path, kConfigFile);
+      if (FileSystem.exists(file)) {
+        break file
+      };
+      if (Path.isRoot(path)) {
+        return ConfigLoad{
+          optError => Some(NoConfigFileError(path, kConfigFile, false)),
+        }
+      };
+      !path = Path.parentname(path)
+    };
+    (path, file)
+  };
+  contents = FileSystem.readTextFile(file);
+  try {
+    config = Config::fromJSON(path, JSON.decode(contents));
+    ConfigLoad{optConfig => Some(config)}
+  } catch {
+  | ex ->
+    ConfigLoad{optError => Some(InvalidConfigFileError(path, kConfigFile, ex))}
+  }
+}
+
+module end;
