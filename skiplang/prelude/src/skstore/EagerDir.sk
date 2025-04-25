@@ -1280,15 +1280,15 @@ class EagerDir protected {
     reducerOpt: ?IReducer = None(),
     unsafeSkipInit: Bool = false,
   ): void {
-    context.unsafeMaybeGetEagerDir(childName) match {
+    existing = context.unsafeMaybeGetEagerDir(childName) match {
     | Some(child) ->
       if (static::isReusable(context, child, parents)) {
         static::reuseDir(context, childName);
         return void
-      }
-    | _ -> void
+      };
+      Some(child)
+    | _ -> None()
     };
-
     if (context.newDirs.contains(childName)) {
       error(`Error: directory ${childName.toString()} already exists`);
     };
@@ -1398,6 +1398,11 @@ class EagerDir protected {
         static::addChildToParent(context, parentName, childName, rangeOpt);
       }
     };
+    existing.each(edir -> {
+      if (context.isObserved(edir.dirName) && dir.keys().isEmpty()) {
+        context.markAsRemoved(edir);
+      }
+    })
   }
 
   private static fun addChildToParent(

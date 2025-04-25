@@ -19,6 +19,12 @@ const kResourceInstancesDir: SKStore.DirName = kResourceSessionDir.sub(
 const kResourceGraphDir: SKStore.DirName = SKStore.DirName::create(
   "/sk_prv/resources/graph/",
 );
+const kResourceUtilsDir: SKStore.DirName = SKStore.DirName::create(
+  "/sk_prv/resources/utils/",
+);
+const kResourceInstancesDir: SKStore.DirName = SKStore.DirName::create(
+  "/sk_prv/resources/instances/",
+);
 const kResourceCollectionsDir: SKStore.DirName = SKStore.DirName::create(
   "/sk_prv/resources/collections/",
 );
@@ -74,7 +80,7 @@ fun identityMap<K: SKStore.Key, V: SKStore.File>(
   key: K,
   it: mutable SKStore.NonEmptyIterator<V>,
 ): void {
-  writer.setArray(key, Array::createFromIterator(it.values())); // TODO: use it.toArray()
+  writer.setArray(key, it.toArray())
 }
 
 fun noFilter<K: SKStore.Key, V: SKStore.File>(

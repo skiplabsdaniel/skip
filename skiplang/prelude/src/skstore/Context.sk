@@ -355,6 +355,8 @@ mutable class Context private {
   mutable purgeFrom: (mutable Context, Dir) ~> Tick = (ctx, _) ~>
     Tick(ctx.getTick().value - 1000),
   mutable sourceOverride: ?Path = None(),
+  private mutable obervedDir: SortedMap<DirName, Int> = SortedMap[],
+  private mutable removedKeys: SortedMap<DirName, SortedSet<Key>> = SortedMap[],
 } {
   static fun create{canReuse: CanReuse = CRIfMatch()}: this {
     static{canReuse}
@@ -366,6 +368,17 @@ mutable class Context private {
 
   fun withGlobals(globals: SortedMap<String, File>): this {
     this with {globals}
+  }
+
+  readonly fun isObserved(dirName: DirName): Bool {
+    this.obervedDir.maybeGet(dirName).default(0) > 0
+  }
+
+  mutable fun markAsRemoved(dir: EagerDir): void {
+    keys = dir.keys();
+    if (!keys.isEmpty()) {
+      this.!removedKeys = this.removedKeys.set(dir.dirName, keys)
+    }
   }
 
   readonly fun isWithSharedSubDirs(dirName: DirName): Bool {
@@ -420,12 +433,26 @@ mutable class Context private {
     dirSubs: Array<DirSub>,
     init: ?Tick = None(),
   ): void {
+    for (dirSub in dirSubs) {
+      this.!obervedDir = this.obervedDir.set(
+        dirSub.dirName,
+        this.obervedDir.maybeGet(dirSub.dirName).default(0) + 1,
+      )
+    };
     sub = Sub(mutexCreate(), condCreate(), cmd, destinationSource, dirSubs);
     init.each(tick -> this.notifySub(sub, tick));
     this.!sessions[sessionId] = sub;
   }
 
   mutable fun unsubscribe(sessionId: Int): void {
+    this.sessions.maybeGet(sessionId).each(sub -> {
+      for (dirSub in sub.dirSubs) {
+        this.!obervedDir = this.obervedDir.set(
+          dirSub.dirName,
+          this.obervedDir.get(dirSub.dirName) - 1,
+        )
+      };
+    });
     this.!sessions = this.sessions.remove(sessionId)
   }
 
@@ -462,6 +489,8 @@ mutable class Context private {
       writeChecker => this.writeChecker.map(x -> x.mclone()),
       purgeFrom => this.purgeFrom,
       sourceOverride => this.sourceOverride,
+      obervedDir => this.obervedDir,
+      removedKeys => this.removedKeys,
     }
   }
 
@@ -493,6 +522,8 @@ mutable class Context private {
     this.!writeChecker = ctx.writeChecker.map(x -> x.mclone());
     this.!purgeFrom = ctx.purgeFrom;
     this.!sourceOverride = ctx.sourceOverride;
+    this.!obervedDir = ctx.obervedDir;
+    this.!removedKeys = ctx.removedKeys;
   }
 
   readonly fun getReads(): SortedSet<Path> {
@@ -696,7 +727,7 @@ mutable class Context private {
     if (this.debugMode) {
       print_debug(`------------ UPDATE (TICK: ${this.tick}) ------------`);
     };
-
+    if (!this.removedKeys.isEmpty()) this.!removedKeys = SortedMap[];
     _ = this.timeStamp();
 
     this.updateLazyGets();
@@ -856,6 +887,15 @@ mutable class Context private {
               result.push((key, values))
             };
             fn(dirName, result.toArray(), this.tick, !init)
+          } else {
+            this.removedKeys.maybeGet(dirName).each(keys ->
+              fn(
+                dirName,
+                keys.toArray().map(key -> (key, Array[])),
+                this.tick,
+                true,
+              )
+            )
           }
         | _ -> void
         }
