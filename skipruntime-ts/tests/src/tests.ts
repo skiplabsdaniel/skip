@@ -39,26 +39,6 @@ async function withAlternateConsoleError(
   console.error = systemConsoleError;
 }
 
-async function withRetries(
-  f: () => Promise<void>,
-  maxRetries: number = 5,
-  init: number = 100,
-  exponent: number = 1.5,
-): Promise<void> {
-  let retries = 0;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  while (true) {
-    try {
-      await timeout(init * exponent ** retries);
-      await f();
-      break;
-    } catch (e: unknown) {
-      if (retries < maxRetries) retries++;
-      else throw e;
-    }
-  }
-}
-
 class Notifier {
   private updates: CollectionUpdate<Json, Json>[] = [];
   private sid: SubscriptionID;
@@ -825,7 +805,8 @@ class KafkaResource implements Resource<Input_NN> {
       .useExternalResource({
         service: "kafka",
         identifier: "skip-test-topic",
-        params: {},
+        // To avoid different behavior between existing and non exiting topic
+        params: { fromBeginning: false },
       })
       .map(ParseAndMultiply, collections.input);
   }
@@ -1654,20 +1635,22 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
       this.skip();
     }
     try {
-      await service.instantiateResource(resourceId, "resource", {});
-      expect(await service.getAll("resource")).toEqual([]);
-
+      const resource = "resource";
+      expect(await service.getAll(resource)).toEqual([]);
+      await service.instantiateResource(resourceId, resource, {});
+      const notifier = new Notifier(service, resourceId);
+      notifier.checkInit([]);
       const messages = Array.from({ length: 5 }, () => {
         const noise = Math.floor(Math.random() * 1_000_000_000);
         return { key: String(noise), value: String(1 + (noise % 5)) };
       });
       await producer.send({ topic: "skip-test-topic", messages });
-      await withRetries(async () => {
-        for (const { key, value } of messages) {
-          const expected = 10 * Number(value) ** 2;
-          expect(await service.getArray("resource", key)).toEqual([expected]);
-        }
-      }, 10);
+      await notifier.waitNotification((updates) => updates.length == 1, 10000);
+      for (const { key, value } of messages) {
+        const expected = 10 * Number(value) ** 2;
+        expect(await service.getArray(resource, key)).toEqual([expected]);
+      }
+      notifier.close();
     } finally {
       await producer.disconnect();
       service.closeResourceInstance(resourceId);
