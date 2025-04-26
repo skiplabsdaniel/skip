@@ -1,0 +1,69 @@
+module Serialization;
+
+class TEntryMetaClass<
+  Tk: frozen & Orderable,
+  Ck: MetaClass<Tk>,
+  Tv: frozen,
+  Cv: MetaClass<Tv>,
+>(
+  keyClass: Ck,
+  valueClass: Cv,
+)
+  extends MetaClass<SkipRuntime.TEntry<Tk, Tv>>
+  uses
+    Serialization.Serializer<SkipRuntime.TEntry<Tk, Tv>>[
+      Ck: Serialization.Serializer<Tk>,
+      Cv: Serialization.Serializer<Tv>,
+    ],
+   {
+  fun description(): String {
+    `SkipRuntime.TEntry<${this.keyClass.description()}, ${this.valueClass.description()}>`
+  }
+
+  fun expectedType(): String {
+    this.description()
+  }
+
+  fun serialize[
+    Ck: Serialization.Serializer<Tk>,
+    Cv: Serialization.Serializer<Tv>,
+  ](
+    entry: SkipRuntime.TEntry<Tk, Tv>,
+    writer: mutable Serialization.Writer,
+  ): void {
+    aMeta = Array::meta(this.valueClass);
+    tupleWriter = writer.writeTuple(2);
+    tupleWriter.writeTuple2(entry.key(), this.keyClass, entry.values, aMeta);
+  }
+
+  fun deserialize[
+    Ck: Serialization.Serializer<Tk>,
+    Cv: Serialization.Serializer<Tv>,
+  ](
+    reader: mutable Serialization.Reader,
+  ): SkipRuntime.TEntry<Tk, Tv> {
+    aMeta = Array::meta(this.valueClass);
+    tupleReader = reader.readTuple(2);
+    v = tupleReader.readTuple2(this.keyClass, aMeta);
+    SkipRuntime.TEntry::create(v.i0, v.i1)
+  }
+}
+module end;
+
+module SkipRuntime;
+
+extension class TEntry {
+  static fun meta<
+    Tk: frozen & Orderable,
+    Ck: MetaClass<Tk>,
+    Tv: frozen,
+    Cv: MetaClass<Tv>,
+  >(
+    keyClass: Ck,
+    valueClass: Cv,
+  ): Serialization.TEntryMetaClass<Tk, Ck, Tv, Cv> {
+    Serialization.TEntryMetaClass(keyClass, valueClass)
+  }
+}
+
+module end;

@@ -1,0 +1,30 @@
+module alias T = SKTest;
+module alias SR = SkipRuntime;
+
+module SRTest;
+
+@test
+fun jsonserialize(): void {
+  entry = SR.TEntry::create("v", Array[0, 1]);
+  JSON.serialize(
+    Array[entry],
+    Array::meta(SR.TEntry::meta(String::meta, Int::meta)),
+  ) match {
+  | Success(res) -> T.expectEq(res, "[[\"v\", [0, 1]]]")
+  | Failure(e) -> T.fail(e.getMessage())
+  }
+}
+
+@test
+fun jsondeserialize(): void {
+  entry = SR.TEntry::create("v", Array[0, 1]);
+  JSON.deserialize(
+    "[[\"v\", [0, 1]]]",
+    Array::meta(SR.TEntry::meta(String::meta, Int::meta)),
+  ) match {
+  | Success(res) -> T.expectEq(res, Array[entry])
+  | Failure(e) -> T.fail(e.getMessage())
+  }
+}
+
+module end;

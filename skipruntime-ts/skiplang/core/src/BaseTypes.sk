@@ -115,7 +115,7 @@ base class Entry uses Downcastable
 class TEntry<K: frozen & Orderable, V: frozen>{
   private key_: ?K = None(),
   values: Array<V> = Array[],
-} extends Entry {
+} extends Entry uses Equality[K: Equality, V: Equality] {
   //
   static fun create(key: K, values: Array<V>): TEntry<K, V> {
     TEntry{key_ => Some(key), values};

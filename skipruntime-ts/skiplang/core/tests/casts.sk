@@ -1,6 +1,6 @@
 module alias T = SKTest;
 
-module CastsTest;
+module SRTest;
 
 base class Entry uses SkipRuntime.Downcastable
 
