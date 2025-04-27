@@ -1,0 +1,382 @@
+module alias SRS = SRSerialization;
+
+module SRSerialization;
+
+trait Serializable extends HasClassName {
+  fun serialize(writer: mutable Writer): void;
+
+  macro static fun className(): String {
+    #thisClassName
+  }
+
+  static fun deserialize(mutable Reader): this;
+}
+
+type SizeHint = ?Int;
+type Size = Int;
+
+@debug
+@cpp_extern("SKIP_unsafe_cast")
+native fun unsafeConcreteCast<T: Serializable, F: Serializable>(
+  t: Concrete<T>,
+): Concrete<F>;
+
+fun deserialize<T: Serializable>(cv: Concrete<T>, reader: mutable Reader): T {
+  cv::deserialize(reader)
+}
+
+fun nameForConcrete<T: Serializable>(cv: Concrete<T>): String {
+  cv::className()
+}
+
+mutable base class Reader() {
+  mutable fun readBool(): Bool;
+  mutable fun readFloat(): Float;
+  mutable fun readInt(): Int;
+  mutable fun readInt32(): Int32;
+  mutable fun readInt16(): Int16;
+  mutable fun readInt8(): Int8;
+  mutable fun readString(): String;
+  mutable fun readChar(): Char;
+
+  mutable fun readSequence<T: Serializable>(): mutable SequenceReader<T>;
+
+  mutable fun readTuple(size: Size): mutable TupleReader;
+
+  mutable fun readKeyedSequence<
+    K: Serializable,
+    V: Serializable,
+  >(): mutable KeyedSequenceReader<K, V>;
+
+  mutable fun readRecord(fieldNames: Array<String>): mutable RecordReader;
+
+  mutable fun readVoid(): void;
+
+  mutable fun readOption<T: Serializable>(): ?T;
+
+  mutable fun readType(): String;
+
+  mutable fun readVariant(): (String, mutable Reader, () -> void);
+
+  mutable fun readDynamic<T: Serializable, V: Serialization.Visitor<T>>(
+    visitor: V,
+  ): T;
+}
+
+mutable base class SequenceReader<T: Serializable>() {
+  mutable fun sizeHint(): SizeHint;
+  mutable fun readValue(): ?T;
+  mutable fun end(): void;
+}
+
+mutable base class TupleReader() {
+  mutable fun readValue<T: Serializable>(): T;
+  mutable fun end(): void;
+}
+
+mutable base class KeyedSequenceReader<Tk, Tv>() {
+  mutable fun sizeHint(): SizeHint;
+  mutable fun readItem(): ?(Tk, Tv);
+  mutable fun end(): void;
+}
+
+mutable base class RecordReader() {
+  mutable fun readKey(): ?String;
+  mutable fun readValue<T: Serializable>(): T;
+  mutable fun end(): void;
+}
+
+mutable base class Writer() {
+  type T_result;
+
+  mutable deferred fun result(): this::T_result;
+
+  mutable fun writeBool(value: Bool): void;
+  mutable fun writeFloat(value: Float): void;
+  mutable fun writeInt(value: Int): void;
+  mutable fun writeInt32(value: Int32): void;
+  mutable fun writeInt16(value: Int16): void;
+  mutable fun writeInt8(value: Int8): void;
+  mutable fun writeString(value: String): void;
+  mutable fun writeChar(value: Char): void;
+
+  mutable fun writeSequence<T: Serializable>(
+    sizeHint: SizeHint = None(),
+  ): mutable SequenceWriter<T>;
+  mutable fun writeTuple(size: Size): mutable TupleWriter;
+  mutable fun writeKeyedSequence<K: Serializable, V: Serializable>(
+    sizeHint: SizeHint = None(),
+  ): mutable KeyedSequenceWriter<K, V>;
+  mutable fun writeRecord(fieldNames: Array<String>): mutable RecordWriter;
+  mutable fun writeVoid(): void;
+  mutable fun writeOption<T: Serializable>(value: ?T): void;
+
+  mutable fun writeType(name: String): void;
+  mutable fun writeVariant<T: Serializable>(childName: String, value: T): void;
+}
+
+mutable base class SequenceWriter<T: Serializable>() {
+  mutable fun writeValue(value: T): void;
+  mutable fun end(): void;
+}
+
+mutable base class TupleWriter() {
+  mutable fun writeValue<T: Serializable>(value: T): void;
+  mutable fun end(): void;
+}
+
+mutable base class KeyedSequenceWriter<K: Serializable, V: Serializable>() {
+  mutable fun writeItem(key: K, value: V): void;
+  mutable fun end(): void;
+}
+
+mutable base class RecordWriter() {
+  mutable fun writeItem<T: Serializable>(fieldName: String, value: T): void;
+  mutable fun end(): void;
+}
+
+mutable base class DefaultReader() extends Reader {
+  overridable mutable fun readBool(): Bool {
+    throw Serialization.NotSupportedError(`readBool()`)
+  }
+  overridable mutable fun readFloat(): Float {
+    throw Serialization.NotSupportedError(`readFloat()`)
+  }
+  overridable mutable fun readInt(): Int {
+    throw Serialization.NotSupportedError(`readInt()`)
+  }
+  overridable mutable fun readInt32(): Int32 {
+    throw Serialization.NotSupportedError(`readInt32()`)
+  }
+  overridable mutable fun readInt16(): Int16 {
+    throw Serialization.NotSupportedError(`readInt16()`)
+  }
+  overridable mutable fun readInt8(): Int8 {
+    throw Serialization.NotSupportedError(`readInt16()`)
+  }
+  overridable mutable fun readString(): String {
+    throw Serialization.NotSupportedError(`readString()`)
+  }
+  overridable mutable fun readChar(): Char {
+    throw Serialization.NotSupportedError(`readChar()`)
+  }
+
+  overridable mutable fun readSequence<
+    T: Serializable,
+  >(): mutable SequenceReader<T> {
+    throw Serialization.NotSupportedError(`readSequence()`)
+  }
+  overridable mutable fun readTuple(_size: Size): mutable TupleReader {
+    throw Serialization.NotSupportedError(`readTuple()`)
+  }
+  overridable mutable fun readKeyedSequence<
+    K: Serializable,
+    V: Serializable,
+  >(): mutable KeyedSequenceReader<K, V> {
+    throw Serialization.NotSupportedError(`readKeyedSequence()`)
+  }
+  overridable mutable fun readRecord(
+    _fieldNames: Array<String>,
+  ): mutable RecordReader {
+    throw Serialization.NotSupportedError(`readRecord()`)
+  }
+
+  overridable mutable fun readVoid(): void {
+    throw Serialization.NotSupportedError(`readVoid()`)
+  }
+  overridable mutable fun readOption<T: Serializable>(): ?T {
+    throw Serialization.NotSupportedError(`readOption()`)
+  }
+
+  overridable mutable fun readType(): String {
+    throw Serialization.NotSupportedError(`readType()`)
+  }
+  overridable mutable fun readVariant(): (String, mutable Reader, () -> void) {
+    throw Serialization.NotSupportedError(`readVariant()`)
+  }
+
+  overridable mutable fun readDynamic<
+    T: Serializable,
+    V: Serialization.Visitor<T>,
+  >(
+    _visitor: V,
+  ): T {
+    throw Serialization.NotSupportedError(`readDynamic()`)
+  }
+}
+
+mutable base class DefaultSequenceReader<T: Serializable>() extends
+  SequenceReader<T>,
+{
+  overridable mutable fun sizeHint(): SizeHint {
+    throw Serialization.NotImplementedError(`sizeHint()`)
+  }
+  overridable mutable fun readValue(): ?T {
+    throw Serialization.NotImplementedError(`readValue()`)
+  }
+  overridable mutable fun end(): void {
+    throw Serialization.NotImplementedError(`end()`)
+  }
+}
+
+mutable base class DefaultTupleReader() extends TupleReader {
+  overridable mutable fun readValue<T: Serializable>(): T {
+    throw Serialization.NotImplementedError(`readValue()`)
+  }
+  overridable mutable fun end(): void {
+    throw Serialization.NotImplementedError(`end()`)
+  }
+}
+
+mutable base class DefaultKeyedSequenceReader<
+  K: Serializable,
+  V: Serializable,
+>() extends KeyedSequenceReader<K, V> {
+  overridable mutable fun sizeHint(): SizeHint {
+    throw Serialization.NotImplementedError(`sizeHint()`)
+  }
+  overridable mutable fun readItem(): ?(K, V) {
+    throw Serialization.NotImplementedError(`readItem()`)
+  }
+  overridable mutable fun end(): void {
+    throw Serialization.NotImplementedError(`end()`)
+  }
+}
+
+mutable base class DefaultRecordReader() extends RecordReader {
+  overridable mutable fun readKey(): ?String {
+    throw Serialization.NotImplementedError(`readKey()`)
+  }
+  overridable mutable fun readValue<T: Serializable>(): T {
+    throw Serialization.NotImplementedError(`readValue()`)
+  }
+  overridable mutable fun end(): void {
+    throw Serialization.NotImplementedError(`end()`)
+  }
+}
+
+mutable base class DefaultWriter() extends Writer {
+  type T_result;
+
+  overridable mutable deferred fun result(): this::T_result {
+    throw Serialization.NotSupportedError(`result()`)
+  }
+
+  overridable mutable fun writeBool(_value: Bool): void {
+    throw Serialization.NotSupportedError(`writeBool()`)
+  }
+  overridable mutable fun writeFloat(_value: Float): void {
+    throw Serialization.NotSupportedError(`writeFloat()`)
+  }
+
+  overridable mutable fun writeInt(_value: Int): void {
+    throw Serialization.NotSupportedError(`writeInt()`)
+  }
+
+  overridable mutable fun writeInt32(_value: Int32): void {
+    throw Serialization.NotSupportedError(`writeInt32()`)
+  }
+
+  overridable mutable fun writeInt16(_value: Int16): void {
+    throw Serialization.NotSupportedError(`writeInt16()`)
+  }
+
+  overridable mutable fun writeInt8(_value: Int8): void {
+    throw Serialization.NotSupportedError(`writeInt8()`)
+  }
+
+  overridable mutable fun writeString(_value: String): void {
+    throw Serialization.NotSupportedError(`writeString()`)
+  }
+
+  overridable mutable fun writeChar(_value: Char): void {
+    throw Serialization.NotSupportedError(`writeChar()`)
+  }
+
+  overridable mutable fun writeSequence<T: Serializable>(
+    _sizeHint: SizeHint = None(),
+  ): mutable SequenceWriter<T> {
+    throw Serialization.NotSupportedError(`writeSequence()`)
+  }
+
+  overridable mutable fun writeTuple(_size: Size): mutable TupleWriter {
+    throw Serialization.NotSupportedError(`writeTuple()`)
+  }
+
+  overridable mutable fun writeKeyedSequence<K: Serializable, V: Serializable>(
+    _sizeHint: SizeHint = None(),
+  ): mutable KeyedSequenceWriter<K, V> {
+    throw Serialization.NotSupportedError(`writeKeyedSequence()`)
+  }
+
+  overridable mutable fun writeRecord(
+    _fieldNames: Array<String>,
+  ): mutable RecordWriter {
+    throw Serialization.NotSupportedError(`writeRecord()`)
+  }
+
+  overridable mutable fun writeVoid(): void {
+    throw Serialization.NotSupportedError(`writeVoid()`)
+  }
+
+  overridable mutable fun writeOption<T: Serializable>(_value: ?T): void {
+    throw Serialization.NotSupportedError(`writeOption()`)
+  }
+
+  overridable mutable fun writeType(_name: String): void {
+    throw Serialization.NotSupportedError(`writeType()`)
+  }
+
+  overridable mutable fun writeVariant<T: Serializable>(
+    _childName: String,
+    _value: T,
+  ): void {
+    throw Serialization.NotSupportedError(`writeVariant()`)
+  }
+}
+
+mutable base class DefaultSequenceWriter<T: Serializable>() extends
+  SequenceWriter<T>,
+{
+  overridable mutable fun writeValue(_value: T): void {
+    throw Serialization.NotImplementedError(`writeValue()`)
+  }
+  overridable mutable fun end(): void {
+    throw Serialization.NotImplementedError(`end()`)
+  }
+}
+
+mutable base class DefaultTupleWriter() extends TupleWriter {
+  overridable mutable fun writeValue<T: Serializable>(_value: T): void {
+    throw Serialization.NotImplementedError(`writeValue()`)
+  }
+  overridable mutable fun end(): void {
+    throw Serialization.NotImplementedError(`end()`)
+  }
+}
+
+mutable base class DefaultKeyedSequenceWriter<
+  K: Serializable,
+  V: Serializable,
+>() extends KeyedSequenceWriter<K, V> {
+  overridable mutable fun writeItem(_key: K, _value: V): void {
+    throw Serialization.NotImplementedError(`writeItem()`)
+  }
+  overridable mutable fun end(): void {
+    throw Serialization.NotImplementedError(`end()`)
+  }
+}
+
+mutable base class DefaultRecordWriter() extends RecordWriter {
+  overridable mutable fun writeKey(_fieldName: String): void {
+    throw Serialization.NotImplementedError(`writeKey()`)
+  }
+  overridable mutable fun writeValue<T: Serializable>(_value: T): void {
+    throw Serialization.NotImplementedError(`writeValue()`)
+  }
+  overridable mutable fun end(): void {
+    throw Serialization.NotImplementedError(`end()`)
+  }
+}
+
+module end;

@@ -339,6 +339,32 @@ class UnusedSnapshot() extends Snapshot {
   }
 }
 
+class EntryToJSON<
+  K: frozen & Orderable & SRSerialization.Serializable,
+  V: frozen & SRSerialization.Serializable,
+>() extends Snapshot {
+  //
+  fun snapshot(entries: Array<Entry>): String {
+    SKJSON.serialize(
+      entries.map(e -> {
+        entry = castEntry<K, V>(e);
+        entry
+      }),
+    ) match {
+    | Success(res) -> res
+    | Failure(e) -> throw e
+    }
+  }
+
+  fun snapshotLookup(e: Entry): String {
+    entry = castEntry<K, V>(e);
+    SKJSON.serialize(entry.values) match {
+    | Success(res) -> res
+    | Failure(exn) -> throw exn
+    }
+  }
+}
+
 class CollectionsMap(map: Map<String, Collection>) extends Collections {
   fun maybeGet(name: String): ?Collection {
     this.map.maybeGet(name)

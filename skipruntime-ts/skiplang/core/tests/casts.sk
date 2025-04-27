@@ -1,6 +1,7 @@
 module alias T = SKTest;
+module alias SRS = SRSerialization;
 
-module CastsTest;
+module SRTest;
 
 base class Entry uses SkipRuntime.Downcastable
 
@@ -45,6 +46,18 @@ fun casts(): void {
   T.expectEq(instanceOfEntry<String, Int>(entry3), false);
   T.expectEq(instanceOfEntry<String, Float>(entry3), false);
   T.expectEq(instanceOfEntry<SKStore.IID, SKStore.IntFile>(entry3), true);
+}
+
+@test
+fun concrete(): void {
+  c1 = SkipRuntime.concreteByName<Int, Int, Int>("Int");
+  T.expectEq(SRS.nameForConcrete(c1), "Int");
+  c2 = SkipRuntime.concreteByName<Float, Int, Int>("Float");
+  T.expectEq(SRS.nameForConcrete(c2), "Float");
+  c3 = SkipRuntime.concreteByName<SkipRuntime.TEntry<Int, Int>, Int, Int>(
+    "SkipRuntime.TEntry",
+  );
+  T.expectEq(SRS.nameForConcrete(c3), "SkipRuntime.TEntry");
 }
 
 module end;

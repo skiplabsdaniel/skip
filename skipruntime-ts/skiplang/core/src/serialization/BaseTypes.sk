@@ -1,0 +1,157 @@
+module alias SRS = SRSerialization;
+
+extension class Int uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeInt(this)
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): Int {
+    reader.readInt()
+  }
+}
+
+extension class Float uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeFloat(this)
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): Float {
+    reader.readFloat()
+  }
+}
+
+extension class Bool uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeBool(this)
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): Bool {
+    reader.readBool()
+  }
+}
+
+extension class String uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeString(this)
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): String {
+    reader.readString()
+  }
+}
+
+extension class Char uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeChar(this)
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): Char {
+    reader.readChar()
+  }
+}
+
+extension class Int32 uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeInt32(this)
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): Int32 {
+    reader.readInt32()
+  }
+}
+
+extension class UInt32 uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeInt32(Int32::truncate(this.toInt()))
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): UInt32 {
+    UInt32::truncate(reader.readInt32().toInt())
+  }
+}
+
+extension class Int16 uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeInt16(this)
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): Int16 {
+    reader.readInt16()
+  }
+}
+
+extension class UInt16 uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeInt16(Int16::truncate(this.toInt()))
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): UInt16 {
+    UInt16::truncate(reader.readInt16().toInt())
+  }
+}
+
+extension class Int8 uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeInt8(this)
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): Int8 {
+    reader.readInt8()
+  }
+}
+
+extension class UInt8 uses SRS.Serializable {
+  fun serialize(writer: mutable SRS.Writer): void {
+    writer.writeInt8(Int8::truncate(this.toInt()))
+  }
+
+  static fun deserialize(reader: mutable SRS.Reader): UInt8 {
+    UInt8::truncate(reader.readInt8().toInt())
+  }
+}
+
+extension class Tuple2 uses
+  SRS.Serializable[T0: SRS.Serializable, T1: SRS.Serializable],
+{
+  fun serialize[T0: SRS.Serializable, T1: SRS.Serializable](
+    writer: mutable SRS.Writer,
+  ): void {
+    tuple = writer.writeTuple(2);
+    tuple.writeValue(this.i0);
+    tuple.writeValue(this.i1);
+    tuple.end();
+  }
+
+  static fun deserialize[T0: SRS.Serializable, T1: SRS.Serializable](
+    reader: mutable SRS.Reader,
+  ): (T0, T1) {
+    tuple = reader.readTuple(2);
+    (tuple.readValue(), tuple.readValue())
+  }
+}
+
+extension class Array uses SRS.Serializable[T: SRS.Serializable] {
+  fun serialize[T: SRS.Serializable](writer: mutable SRS.Writer): void {
+    sequence = writer.writeSequence(Some(this.size()));
+    for (item in this) {
+      sequence.writeValue(item)
+    };
+    sequence.end();
+  }
+
+  static fun deserialize[T: SRS.Serializable](
+    reader: mutable SRS.Reader,
+  ): Array<T> {
+    sequence = reader.readSequence();
+    sizeHint = sequence.sizeHint().default(0);
+    vector = Vector::mcreate(sizeHint);
+    loop {
+      sequence.readValue() match {
+      | Some(item) -> vector.push(item)
+      | None() -> break void
+      };
+    };
+    sequence.end();
+    vector.toArray();
+  }
+}

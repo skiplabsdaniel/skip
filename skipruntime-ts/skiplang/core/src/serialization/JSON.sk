@@ -1,0 +1,269 @@
+module alias SRS = SRSerialization;
+
+module SKJSON;
+
+fun formatter(
+  write: .String -> void,
+  isPretty: .Bool = false,
+): mutable JSON.Formatter {
+  if (isPretty) {
+    mutable JSON.PrettyFormatter(write)
+  } else {
+    mutable JSON.CompactFormatter(write)
+  };
+}
+
+fun writer(write: .String -> void, isPretty: .Bool = false): mutable Writer {
+  mutable Writer(formatter(write, isPretty));
+}
+
+fun streamSerialize<T: SRS.Serializable>(
+  value: T,
+  write: .String -> void,
+  isPretty: .Bool = false,
+): Result<void, Serialization.SerializationError> {
+  try {
+    writer = writer(write, isPretty);
+    value.serialize(writer);
+    writer.result();
+    Success(void)
+  } catch {
+  | exn @ Serialization.SerializationError _ -> Failure(exn)
+  | e -> throw e
+  }
+}
+
+fun serialize<T: SRS.Serializable>(
+  value: T,
+  isPretty: .Bool = false,
+): Result<.String, Serialization.SerializationError> {
+  vec = mutable Vector[];
+  result = streamSerialize(value, vec.push, isPretty);
+  result match {
+  | Success _ -> Success(vec.join(""))
+  | Failure(exn) -> Failure(exn)
+  }
+}
+
+private mutable base class DefaultWriter(
+  jsonFormatter: mutable JSON.Formatter,
+) extends SRS.DefaultWriter {
+  type T_result = void;
+
+  overridable mutable fun result(): this::T_result {
+    void
+  }
+
+  overridable mutable fun writeBool(value: .Bool): void {
+    this.jsonFormatter.writeRaw(value.toString())
+  }
+
+  overridable mutable fun writeFloat(value: Float): void {
+    this.jsonFormatter.writeRaw(value.toString())
+  }
+
+  overridable mutable fun writeInt(value: Int): void {
+    this.jsonFormatter.writeRaw(value.toString())
+  }
+
+  overridable mutable fun writeString(value: .String): void {
+    JSON.writeStringValue(this.jsonFormatter.writeRaw, value)
+  }
+
+  overridable mutable fun writeSequence<T: SRS.Serializable>(
+    _sizeHint: SRS.SizeHint = None(),
+  ): mutable SRS.SequenceWriter<T> {
+    mutable SequenceWriter(this.jsonFormatter)
+  }
+
+  overridable mutable fun writeTuple(_size: SRS.Size): mutable SRS.TupleWriter {
+    mutable TupleWriter(this.jsonFormatter)
+  }
+  overridable mutable fun writeKeyedSequence<
+    K: SRS.Serializable,
+    V: SRS.Serializable,
+  >(
+    _sizeHint: SRS.SizeHint = None(),
+  ): mutable SRS.KeyedSequenceWriter<K, V> {
+    mutable KeyedSequenceWriter(this.jsonFormatter)
+  }
+
+  overridable mutable fun writeRecord(
+    _fieldNames: .Array<.String>,
+  ): mutable SRS.RecordWriter {
+    mutable RecordWriter(this.jsonFormatter)
+  }
+
+  overridable mutable fun writeVoid(): void {
+    throw Serialization.NotImplementedError(`writeVoid()`)
+  }
+
+  overridable mutable fun writeOption<T: SRS.Serializable>(value: ?T): void {
+    value match {
+    | None() -> this.jsonFormatter.writeRaw("null")
+    | Some(x) ->
+      writer = mutable OptionWriter(this.jsonFormatter);
+      x.serialize(writer)
+    }
+  }
+
+  overridable mutable fun writeType(name: .String): void {
+    JSON.writeStringValue(this.jsonFormatter.writeRaw, name)
+  }
+
+  overridable mutable fun writeVariant<T: SRS.Serializable>(
+    childName: .String,
+    value: T,
+  ): void {
+    record = mutable RecordWriter(this.jsonFormatter);
+    record.writeItem(childName, value);
+    record.end()
+  }
+}
+
+private mutable class Writer() extends DefaultWriter {}
+
+// we need the begun state in order to prevent writing of ', '
+// after every element in sequence.
+// Otherwise, we would output JSON such as '[1, 2, 3, ]'
+private mutable base class ValueWriter() {
+  mutable fun writeValueBase<T: SRS.Serializable>(
+    jsonFormatter: mutable JSON.Formatter,
+    value: T,
+    begun: .Bool,
+  ): void {
+    if (!begun) {
+      jsonFormatter.writeSquareOpen();
+    } else {
+      jsonFormatter.writeComma();
+    };
+    writer = mutable Writer(jsonFormatter);
+    value.serialize(writer)
+  }
+  mutable fun endBase(
+    jsonFormatter: mutable JSON.Formatter,
+    begun: .Bool,
+  ): void {
+    if (!begun) {
+      jsonFormatter.writeRaw("[]")
+    } else {
+      jsonFormatter.writeSquareClose()
+    }
+  }
+}
+
+private mutable class SequenceWriter<T: SRS.Serializable>(
+  jsonFormatter: mutable JSON.Formatter,
+  mutable begun: .Bool = false,
+) extends SRS.SequenceWriter<T>, ValueWriter {
+  mutable fun writeValue(value: T): void {
+    this.writeValueBase(this.jsonFormatter, value, this.begun);
+    this.!begun = true
+  }
+  mutable fun end(): void {
+    this.endBase(this.jsonFormatter, this.begun);
+    this.!begun = true
+  }
+}
+
+private mutable class TupleWriter(
+  jsonFormatter: mutable JSON.Formatter,
+  mutable begun: .Bool = false,
+) extends SRS.TupleWriter, ValueWriter {
+  mutable fun writeValue<T: SRS.Serializable>(value: T): void {
+    this.writeValueBase(this.jsonFormatter, value, this.begun);
+    this.!begun = true
+  }
+  mutable fun end(): void {
+    this.endBase(this.jsonFormatter, this.begun);
+    this.!begun = true
+  }
+}
+
+private mutable base class ItemWriter() {
+  mutable fun writeItemBase<K: SRS.Serializable, V: SRS.Serializable>(
+    jsonFormatter: mutable JSON.Formatter,
+    key: K,
+    value: V,
+    begun: .Bool,
+  ): void {
+    if (!begun) {
+      jsonFormatter.writeCurlyOpen();
+    } else {
+      jsonFormatter.writeComma();
+    };
+    keyWriter = mutable StringWriter(jsonFormatter);
+    key.serialize(keyWriter);
+    jsonFormatter.writeColon();
+    valueWriter = mutable Writer(jsonFormatter);
+    value.serialize(valueWriter)
+  }
+
+  mutable fun endBase(
+    jsonFormatter: mutable JSON.Formatter,
+    begun: .Bool,
+  ): void {
+    if (!begun) {
+      jsonFormatter.writeRaw("{}");
+      !begun = true
+    } else {
+      jsonFormatter.writeCurlyClose()
+    }
+  }
+}
+
+private mutable class KeyedSequenceWriter<
+  K: SRS.Serializable,
+  V: SRS.Serializable,
+>(
+  jsonFormatter: mutable JSON.Formatter,
+  mutable begun: .Bool = false,
+) extends SRS.KeyedSequenceWriter<K, V>, ItemWriter {
+  mutable fun writeItem(key: K, value: V): void {
+    this.writeItemBase(this.jsonFormatter, key, value, this.begun);
+    this.!begun = true
+  }
+  mutable fun end(): void {
+    this.endBase(this.jsonFormatter, this.begun);
+    this.!begun = true
+  }
+}
+
+private mutable class RecordWriter(
+  jsonFormatter: mutable JSON.Formatter,
+  mutable begun: .Bool = false,
+) extends SRS.RecordWriter, ItemWriter {
+  mutable fun writeItem<T: SRS.Serializable>(
+    fieldName: .String,
+    value: T,
+  ): void {
+    this.writeItemBase(this.jsonFormatter, fieldName, value, this.begun);
+    this.!begun = true
+  }
+  mutable fun end(): void {
+    this.endBase(this.jsonFormatter, this.begun);
+    this.!begun = true
+  }
+}
+
+private mutable class StringWriter(
+  jsonFormatter: mutable JSON.Formatter,
+) extends SRS.DefaultWriter {
+  type T_result = void;
+
+  mutable fun result(): this::T_result {
+    void
+  }
+
+  mutable fun writeString(value: .String): void {
+    JSON.writeStringValue(this.jsonFormatter.writeRaw, value)
+  }
+}
+
+private mutable class OptionWriter() extends DefaultWriter {
+  mutable fun writeOption<T: SRS.Serializable>(_value: ?T): void {
+    throw Serialization.NotSupportedError(`writeOption()`)
+  }
+}
+
+module end;

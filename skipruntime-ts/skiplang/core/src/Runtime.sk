@@ -1753,4 +1753,20 @@ fun updateContext(context: mutable SKStore.Context): void {
   checkGarbage(context);
 }
 
+@no_inline
+fun concreteByName<
+  T: SRSerialization.Serializable,
+  K: frozen & Orderable & SRSerialization.Serializable,
+  V: frozen & SRSerialization.Serializable,
+>(
+  name: String,
+): Concrete<T> {
+  name match {
+  | "Int" -> SRSerialization.unsafeConcreteCast(Int)
+  | "Float" -> SRSerialization.unsafeConcreteCast(Float)
+  | "SkipRuntime.TEntry" -> SRSerialization.unsafeConcreteCast(TEntry<K, V>)
+  | _ -> invariant_violation(`Unknown class name '${name}'`)
+  };
+}
+
 module end;
