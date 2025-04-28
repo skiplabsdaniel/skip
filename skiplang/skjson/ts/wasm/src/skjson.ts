@@ -30,14 +30,14 @@ interface WasmAccess {
   SKIP_SKJSON_typeOf: (json: ptr<Internal.CJSON>) => Type;
   SKIP_SKJSON_asNumber: (json: ptr<Internal.CJSON>) => number;
   SKIP_SKJSON_asBoolean: (json: ptr<Internal.CJSON>) => boolean;
-  SKIP_SKJSON_asString: (json: ptr<Internal.CJSON>) => ptr<Internal.String>;
+  SKIP_SKJSON_asString: (json: ptr<Internal.CJSON>) => ptr<Internal.SKString>;
   SKIP_SKJSON_asArray: (json: ptr<Internal.CJSON>) => ptr<Internal.CJArray>;
   SKIP_SKJSON_asObject: (json: ptr<Internal.CJSON>) => ptr<Internal.CJObject>;
 
   SKIP_SKJSON_fieldAt: (
     json: ptr<Internal.CJObject>,
     idx: int,
-  ) => ptr<Internal.String>; // Should be Nullable<...>
+  ) => ptr<Internal.SKString>; // Should be Nullable<...>
   SKIP_SKJSON_get: (
     json: ptr<Internal.CJObject>,
     idx: int,
@@ -60,7 +60,7 @@ interface FromWasm extends WasmAccess {
   SKIP_SKJSON_startCJObject: () => ptr<Internal.PartialCJObj>;
   SKIP_SKJSON_addToCJObject: (
     obj: ptr<Internal.PartialCJObj>,
-    name: ptr<Internal.String>,
+    name: ptr<Internal.SKString>,
     value: ptr<Internal.CJSON>,
   ) => void;
   SKIP_SKJSON_endCJObject: (
@@ -80,7 +80,7 @@ interface FromWasm extends WasmAccess {
   SKIP_SKJSON_createCJInt: (v: int) => ptr<Internal.CJInt>;
   SKIP_SKJSON_createCJFloat: (v: float) => ptr<Internal.CJFloat>;
   SKIP_SKJSON_createCJString: (
-    str: ptr<Internal.String>,
+    str: ptr<Internal.SKString>,
   ) => ptr<Internal.CJString>;
   SKIP_SKJSON_createCJBool: (v: boolean) => ptr<Internal.CJBool>;
 }

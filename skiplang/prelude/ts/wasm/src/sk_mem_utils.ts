@@ -1,5 +1,5 @@
 import type { int } from "../skiplang-std/index.js";
-import type { FileSystem, System } from "./sk_types.js";
+import type { SKFileSystem, System } from "./sk_types.js";
 import { Options } from "./sk_types.js";
 
 class File {
@@ -71,7 +71,7 @@ class File {
   }
 }
 
-export class MemFS implements FileSystem {
+export class MemFS implements SKFileSystem {
   private readonly fileDescrs: Map<string, number>;
   private fileDescrNbr: int;
   private readonly files: File[];

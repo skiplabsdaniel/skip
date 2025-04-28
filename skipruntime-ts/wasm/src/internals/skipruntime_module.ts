@@ -73,19 +73,19 @@ export interface FromWasm {
   // CollectionWriter
 
   SkipRuntime_CollectionWriter__update(
-    name: ptr<Internal.String>,
+    name: ptr<Internal.SKString>,
     values: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
     isInit: boolean,
     executor: ptr<Internal.Executor>,
   ): Handle<Error>;
 
   SkipRuntime_CollectionWriter__error(
-    name: ptr<Internal.String>,
+    name: ptr<Internal.SKString>,
     error: ptr<Internal.CJSON>,
   ): Handle<Error>;
 
   SkipRuntime_CollectionWriter__initialized(
-    name: ptr<Internal.String>,
+    name: ptr<Internal.SKString>,
     error: ptr<Internal.CJSON>,
   ): Handle<Error>;
 
@@ -112,7 +112,7 @@ export interface FromWasm {
 
   SkipRuntime_ResourceBuilderMap__add(
     map: ptr<Internal.ResourceBuilderMap>,
-    key: ptr<Internal.String>,
+    key: ptr<Internal.SKString>,
     collection: ptr<Internal.ResourceBuilder>,
   ): void;
 
@@ -121,63 +121,63 @@ export interface FromWasm {
   SkipRuntime_ExternalServiceMap__create(): ptr<Internal.ExternalServiceMap>;
   SkipRuntime_ExternalServiceMap__add(
     map: ptr<Internal.ExternalServiceMap>,
-    key: ptr<Internal.String>,
+    key: ptr<Internal.SKString>,
     collection: ptr<Internal.ExternalService>,
   ): void;
 
   // Collection
 
   SkipRuntime_Collection__getArray(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     key: ptr<Internal.CJSON>,
   ): ptr<Internal.CJArray<Internal.CJSON>>;
 
   SkipRuntime_Collection__map(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     mapper: ptr<Internal.Mapper>,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
 
   SkipRuntime_Collection__mapReduce(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     mapper: ptr<Internal.Mapper>,
     reducer: ptr<Internal.Reducer>,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
   SkipRuntime_Collection__nativeMapReduce(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     mapper: ptr<Internal.Mapper>,
-    reducer: ptr<Internal.String>,
-  ): ptr<Internal.String>;
+    reducer: ptr<Internal.SKString>,
+  ): ptr<Internal.SKString>;
 
   SkipRuntime_Collection__reduce(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     reducer: ptr<Internal.Reducer>,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
   SkipRuntime_Collection__nativeReduce(
-    collection: ptr<Internal.String>,
-    reducer: ptr<Internal.String>,
-  ): ptr<Internal.String>;
+    collection: ptr<Internal.SKString>,
+    reducer: ptr<Internal.SKString>,
+  ): ptr<Internal.SKString>;
 
   SkipRuntime_Collection__slice(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     range: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
 
   SkipRuntime_Collection__take(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     limit: bigint,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
 
   SkipRuntime_Collection__merge(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     others: ptr<Internal.CJArray<Internal.CJString>>,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
 
-  SkipRuntime_Collection__size(collection: ptr<Internal.String>): bigint;
+  SkipRuntime_Collection__size(collection: ptr<Internal.SKString>): bigint;
 
   // LazyCollection
 
   SkipRuntime_LazyCollection__getArray(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     key: ptr<Internal.CJSON>,
   ): ptr<Internal.CJArray<Internal.CJSON>>;
 
@@ -190,37 +190,37 @@ export interface FromWasm {
   // Runtime
 
   SkipRuntime_Runtime__createResource(
-    identifier: ptr<Internal.String>,
-    resource: ptr<Internal.String>,
+    identifier: ptr<Internal.SKString>,
+    resource: ptr<Internal.SKString>,
     params: ptr<Internal.CJSON>,
     executor: ptr<Internal.Executor>,
   ): Handle<Error>;
 
   SkipRuntime_Runtime__getAll(
-    resource: ptr<Internal.String>,
+    resource: ptr<Internal.SKString>,
     params: ptr<Internal.CJSON>,
   ): ptr<Internal.CJObject | Internal.CJFloat>;
 
   SkipRuntime_Runtime__getForKey(
-    resource: ptr<Internal.String>,
+    resource: ptr<Internal.SKString>,
     params: ptr<Internal.CJSON>,
     key: ptr<Internal.CJSON>,
   ): ptr<Internal.CJObject | Internal.CJFloat>;
 
   SkipRuntime_Runtime__closeResource(
-    identifier: ptr<Internal.String>,
+    identifier: ptr<Internal.SKString>,
   ): Handle<Error>;
 
   SkipRuntime_Runtime__subscribe(
-    collection: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
     notifier: ptr<Internal.Notifier>,
-    watermark: Nullable<ptr<Internal.String>>,
+    watermark: Nullable<ptr<Internal.SKString>>,
   ): bigint;
 
   SkipRuntime_Runtime__unsubscribe(id: bigint): Handle<Error>;
 
   SkipRuntime_Runtime__update(
-    input: ptr<Internal.String>,
+    input: ptr<Internal.SKString>,
     values: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
     executor: ptr<Internal.Executor>,
   ): Handle<Error>;
@@ -245,18 +245,18 @@ export interface FromWasm {
 
   SkipRuntime_Context__createLazyCollection(
     compute: ptr<Internal.LazyCompute>,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
 
   SkipRuntime_Context__jsonExtract(
     from: ptr<Internal.CJObject>,
-    pattern: ptr<Internal.String>,
+    pattern: ptr<Internal.SKString>,
   ): ptr<Internal.CJArray>;
 
   SkipRuntime_Context__useExternalResource(
-    service: ptr<Internal.String>,
-    identifier: ptr<Internal.String>,
+    service: ptr<Internal.SKString>,
+    identifier: ptr<Internal.SKString>,
     params: ptr<Internal.CJSON>,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
 
   // Executor
 
@@ -284,7 +284,7 @@ interface ToWasm {
 
   SkipRuntime_LazyCompute__compute(
     lazyCompute: Handle<JSONLazyCompute>,
-    self: ptr<Internal.String>,
+    self: ptr<Internal.SKString>,
     key: ptr<Internal.CJSON>,
   ): ptr<Internal.CJArray>;
 
@@ -294,15 +294,15 @@ interface ToWasm {
 
   SkipRuntime_ExternalService__subscribe(
     supplier: Handle<ExternalService>,
-    collection: ptr<Internal.String>,
-    instance: ptr<Internal.String>,
-    resource: ptr<Internal.String>,
+    collection: ptr<Internal.SKString>,
+    instance: ptr<Internal.SKString>,
+    resource: ptr<Internal.SKString>,
     params: ptr<Internal.CJSON>,
   ): void;
 
   SkipRuntime_ExternalService__unsubscribe(
     supplier: Handle<ExternalService>,
-    instance: ptr<Internal.String>,
+    instance: ptr<Internal.SKString>,
   ): void;
 
   SkipRuntime_ExternalService__shutdown(
@@ -316,7 +316,7 @@ interface ToWasm {
   SkipRuntime_Resource__instantiate(
     resource: Handle<Resource>,
     collections: ptr<Internal.CJObject>,
-  ): ptr<Internal.String>;
+  ): ptr<Internal.SKString>;
 
   SkipRuntime_deleteResource(resource: Handle<Resource>): void;
 
@@ -347,7 +347,7 @@ interface ToWasm {
   SkipRuntime_Notifier__notify<K extends Json, V extends Json>(
     notifier: Handle<Notifier<K, V>>,
     values: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
-    watermark: ptr<Internal.String>,
+    watermark: ptr<Internal.SKString>,
     isUpdates: number,
   ): void;
 
@@ -379,7 +379,7 @@ interface ToWasm {
 
   SkipRuntime_Checker__check(
     checker: Handle<Checker>,
-    request: ptr<Internal.String>,
+    request: ptr<Internal.SKString>,
   ): void;
 
   SkipRuntime_deleteChecker(checker: Handle<Checker>): void;
@@ -844,7 +844,7 @@ class LinksImpl implements Links {
 
   computeOfLazyCompute(
     sklazyCompute: Handle<JSONLazyCompute>,
-    skself: ptr<Internal.String>,
+    skself: ptr<Internal.SKString>,
     skkey: ptr<Internal.CJSON>,
   ) {
     return toPtr(
@@ -865,7 +865,7 @@ class LinksImpl implements Links {
   instantiateOfResource(
     skresource: Handle<Resource>,
     skcollections: ptr<Internal.CJObject>,
-  ): ptr<Internal.String> {
+  ): ptr<Internal.SKString> {
     return this.utils.exportString(
       this.tobinding.SkipRuntime_Resource__instantiate(
         skresource,
@@ -912,7 +912,7 @@ class LinksImpl implements Links {
   notifyOfNotifier<K extends Json, V extends Json>(
     sknotifier: Handle<Notifier<K, V>>,
     skvalues: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
-    watermark: ptr<Internal.String>,
+    watermark: ptr<Internal.SKString>,
     isUpdates: number,
   ) {
     this.tobinding.SkipRuntime_Notifier__notify(
@@ -971,9 +971,9 @@ class LinksImpl implements Links {
 
   subscribeOfExternalService(
     sksupplier: Handle<ExternalService>,
-    skwriter: ptr<Internal.String>,
-    skinstance: ptr<Internal.String>,
-    skresource: ptr<Internal.String>,
+    skwriter: ptr<Internal.SKString>,
+    skinstance: ptr<Internal.SKString>,
+    skresource: ptr<Internal.SKString>,
     skparams: ptr<Internal.CJSON>,
   ) {
     return this.tobinding.SkipRuntime_ExternalService__subscribe(
@@ -987,7 +987,7 @@ class LinksImpl implements Links {
 
   unsubscribeOfExternalService(
     sksupplier: Handle<ExternalService>,
-    skinstance: ptr<Internal.String>,
+    skinstance: ptr<Internal.SKString>,
   ) {
     this.tobinding.SkipRuntime_ExternalService__unsubscribe(
       sksupplier,

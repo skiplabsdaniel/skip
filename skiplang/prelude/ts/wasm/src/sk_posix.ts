@@ -5,17 +5,17 @@ import type {
   Links,
   ToWasmManager,
   Utils,
-  FileSystem,
+  SKFileSystem,
 } from "./sk_types.js";
 import { Options } from "./sk_types.js";
 import type * as Internal from "../skiplang-std/internal.js";
 
 interface ToWasm {
-  SKIP_check_if_file_exists: (skPath: ptr<Internal.String>) => boolean;
-  SKIP_js_open: (skPath: ptr<Internal.String>, flags: int, mode: int) => int;
+  SKIP_check_if_file_exists: (skPath: ptr<Internal.SKString>) => boolean;
+  SKIP_js_open: (skPath: ptr<Internal.SKString>, flags: int, mode: int) => int;
   SKIP_js_close: (fd: int) => void;
-  SKIP_js_write: (fd: int, skContents: ptr<Internal.String>, len: int) => int;
-  SKIP_js_read: (fd: int, skContents: ptr<Internal.String>, len: int) => int;
+  SKIP_js_write: (fd: int, skContents: ptr<Internal.SKString>, len: int) => int;
+  SKIP_js_read: (fd: int, skContents: ptr<Internal.SKString>, len: int) => int;
   SKIP_js_open_flags: (
     read: boolean,
     write: boolean,
@@ -32,12 +32,16 @@ interface ToWasm {
 }
 
 class LinksImpl implements Links, ToWasm {
-  private readonly fs: FileSystem;
-  SKIP_check_if_file_exists!: (skPath: ptr<Internal.String>) => boolean;
-  SKIP_js_open!: (skPath: ptr<Internal.String>, flags: int, mode: int) => int;
+  private readonly fs: SKFileSystem;
+  SKIP_check_if_file_exists!: (skPath: ptr<Internal.SKString>) => boolean;
+  SKIP_js_open!: (skPath: ptr<Internal.SKString>, flags: int, mode: int) => int;
   SKIP_js_close!: (fd: int) => void;
-  SKIP_js_write!: (fd: int, skContents: ptr<Internal.String>, len: int) => int;
-  SKIP_js_read!: (fd: int, skContents: ptr<Internal.String>, len: int) => int;
+  SKIP_js_write!: (
+    fd: int,
+    skContents: ptr<Internal.SKString>,
+    len: int,
+  ) => int;
+  SKIP_js_read!: (fd: int, skContents: ptr<Internal.SKString>, len: int) => int;
   SKIP_js_open_flags!: (
     read: boolean,
     write: boolean,
@@ -64,7 +68,7 @@ class LinksImpl implements Links, ToWasm {
       return this.fs.exists(utils.importString(skPath));
     };
     this.SKIP_js_open = (
-      skPath: ptr<Internal.String>,
+      skPath: ptr<Internal.SKString>,
       flags: int,
       mode: int,
     ) => {
@@ -79,7 +83,7 @@ class LinksImpl implements Links, ToWasm {
     };
     this.SKIP_js_write = (
       fd: int,
-      skContents: ptr<Internal.String>,
+      skContents: ptr<Internal.SKString>,
       len: int,
     ) => {
       // TODO: Write bytes directly into fs.
@@ -91,7 +95,7 @@ class LinksImpl implements Links, ToWasm {
     };
     this.SKIP_js_read = (
       fd: int,
-      skContents: ptr<Internal.String>,
+      skContents: ptr<Internal.SKString>,
       len: int,
     ) => {
       const res = this.fs.read(fd, len);
@@ -132,19 +136,19 @@ class Manager implements ToWasmManager {
     const toWasm = wasm as ToWasm;
     const links = new LinksImpl(this.environment);
     toWasm.SKIP_js_open = (
-      skPath: ptr<Internal.String>,
+      skPath: ptr<Internal.SKString>,
       flags: int,
       mode: int,
     ) => links.SKIP_js_open(skPath, flags, mode);
     toWasm.SKIP_js_close = (fd: int) => links.SKIP_js_close(fd);
     toWasm.SKIP_js_write = (
       fd: int,
-      skContents: ptr<Internal.String>,
+      skContents: ptr<Internal.SKString>,
       len: int,
     ) => links.SKIP_js_write(fd, skContents, len);
     toWasm.SKIP_js_read = (
       fd: int,
-      skContents: ptr<Internal.String>,
+      skContents: ptr<Internal.SKString>,
       len: int,
     ) => links.SKIP_js_read(fd, skContents, len);
     toWasm.SKIP_js_open_flags = (
