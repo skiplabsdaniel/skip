@@ -1,4 +1,4 @@
-import type { Environment, FileSystem } from "../skipwasm-std/index.js";
+import type { Environment, SKFileSystem } from "../skipwasm-std/index.js";
 import type {
   SKDBMechanism,
   SKDB,
@@ -36,7 +36,7 @@ class SKDBMechanismImpl implements SKDBMechanism {
 
   constructor(
     client: SKDBSyncImpl,
-    fs: FileSystem,
+    fs: SKFileSystem,
     utf8Encode: (v: string) => Uint8Array,
   ) {
     this.tableExists = (tableName: string) =>
@@ -114,7 +114,7 @@ export class SKDBSyncImpl implements SKDBSync {
   private subscriptionCount: number = 0;
   private clientUuid: string = "";
   private accessKey?: string;
-  private readonly fs: FileSystem;
+  private readonly fs: SKFileSystem;
 
   save!: () => Promise<boolean>;
   runLocal!: (new_args: string[], new_stdin: string) => string;

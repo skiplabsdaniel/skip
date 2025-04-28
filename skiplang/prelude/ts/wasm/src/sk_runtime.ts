@@ -19,16 +19,16 @@ class LinksImpl implements Links {
   SKIP_read_to_end_fill!: () => int;
   SKIP_read_line_get!: (index: int) => int;
 
-  SKIP_print_error!: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_error_raw!: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_debug!: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_debug_raw!: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_raw!: (strPtr: ptr<Internal.String>) => void;
+  SKIP_print_error!: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_error_raw!: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_debug!: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_debug_raw!: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_raw!: (strPtr: ptr<Internal.SKString>) => void;
   SKIP_print_char!: (code: int) => void;
-  SKIP_print_string!: (strPtr: ptr<Internal.String>) => void;
+  SKIP_print_string!: (strPtr: ptr<Internal.SKString>) => void;
   SKIP_etry!: <Ret>(
-    f: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
-    exn_handler: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
+    f: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
+    exn_handler: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
   ) => ptr<Internal.T<Ret>>;
   js_throw!: (excPtr: ptr<Internal.Exception>, rethrow: int) => void;
   js_replace_exn!: (
@@ -39,10 +39,10 @@ class LinksImpl implements Links {
   SKIP_JS_timeStamp!: () => float;
 
   SKIP_delete_external_exception!: (exc: int) => void;
-  SKIP_external_exception_message!: (exc: int) => ptr<Internal.String>;
+  SKIP_external_exception_message!: (exc: int) => ptr<Internal.SKString>;
   SKIP_FileSystem_appendTextFile!: (
-    path: ptr<Internal.String>,
-    contents: ptr<Internal.String>,
+    path: ptr<Internal.SKString>,
+    contents: ptr<Internal.SKString>,
   ) => void;
   SKIP_js_time_ms_lo!: () => int;
   SKIP_js_time_ms_hi!: () => int;
@@ -55,17 +55,17 @@ class LinksImpl implements Links {
   };
 
   SKIP_js_get_argc!: () => int;
-  SKIP_js_get_argn!: (index: int) => ptr<Internal.String>;
+  SKIP_js_get_argn!: (index: int) => ptr<Internal.SKString>;
   SKIP_js_get_envc!: () => int;
-  SKIP_js_get_envn!: (index: int) => ptr<Internal.String>;
+  SKIP_js_get_envn!: (index: int) => ptr<Internal.SKString>;
   SKIP_setenv!: (
-    skName: ptr<Internal.String>,
-    skvalue: ptr<Internal.String>,
+    skName: ptr<Internal.SKString>,
+    skvalue: ptr<Internal.SKString>,
   ) => void;
   SKIP_getenv!: (
-    skName: ptr<Internal.String>,
-  ) => Nullable<ptr<Internal.String>>;
-  SKIP_unsetenv!: (skName: ptr<Internal.String>) => void;
+    skName: ptr<Internal.SKString>,
+  ) => Nullable<ptr<Internal.SKString>>;
+  SKIP_unsetenv!: (skName: ptr<Internal.SKString>) => void;
 
   SKIP_glock() {
     /* nop since js is sequential */
@@ -77,22 +77,22 @@ class LinksImpl implements Links {
 
   complete = (utils: Utils, _exports: object) => {
     this.SKIP_etry = utils.etry;
-    this.SKIP_print_error = (msg: ptr<Internal.String>) => {
+    this.SKIP_print_error = (msg: ptr<Internal.SKString>) => {
       utils.sklog(msg, Stream.ERR, true);
     };
-    this.SKIP_print_error_raw = (msg: ptr<Internal.String>) => {
+    this.SKIP_print_error_raw = (msg: ptr<Internal.SKString>) => {
       utils.sklog(msg, Stream.ERR);
     };
-    this.SKIP_print_debug = (msg: ptr<Internal.String>) => {
+    this.SKIP_print_debug = (msg: ptr<Internal.SKString>) => {
       utils.sklog(msg, Stream.DEBUG, true);
     };
-    this.SKIP_print_debug_raw = (msg: ptr<Internal.String>) => {
+    this.SKIP_print_debug_raw = (msg: ptr<Internal.SKString>) => {
       utils.sklog(msg, Stream.DEBUG);
     };
-    this.SKIP_print_raw = (msg: ptr<Internal.String>) => {
+    this.SKIP_print_raw = (msg: ptr<Internal.SKString>) => {
       utils.sklog(msg, Stream.OUT);
     };
-    this.SKIP_print_string = (msg: ptr<Internal.String>) => {
+    this.SKIP_print_string = (msg: ptr<Internal.SKString>) => {
       utils.sklog(msg, Stream.OUT, true);
     };
     this.js_throw = (exc: ptr<Internal.Exception>, rethrow: int) =>
@@ -152,8 +152,8 @@ class LinksImpl implements Links {
       return line;
     };
     this.SKIP_FileSystem_appendTextFile = (
-      path: ptr<Internal.String>,
-      contents: ptr<Internal.String>,
+      path: ptr<Internal.SKString>,
+      contents: ptr<Internal.SKString>,
     ) => {
       const strPath = utils.importString(path);
       const strContents = utils.importString(contents);
@@ -163,8 +163,8 @@ class LinksImpl implements Links {
     };
 
     this.SKIP_setenv = (
-      skName: ptr<Internal.String>,
-      skValue: ptr<Internal.String>,
+      skName: ptr<Internal.SKString>,
+      skValue: ptr<Internal.SKString>,
     ) => {
       if (this.env) {
         this.env
@@ -172,14 +172,14 @@ class LinksImpl implements Links {
           .setenv(utils.importString(skName), utils.importString(skValue));
       }
     };
-    this.SKIP_getenv = (skName: ptr<Internal.String>) => {
+    this.SKIP_getenv = (skName: ptr<Internal.SKString>) => {
       if (this.env) {
         const value = this.env.sys().getenv(utils.importString(skName));
         return value ? utils.exportString(value) : null;
       }
       return null;
     };
-    this.SKIP_unsetenv = (skName: ptr<Internal.String>) => {
+    this.SKIP_unsetenv = (skName: ptr<Internal.SKString>) => {
       if (this.env) {
         this.env.sys().unsetenv(utils.importString(skName));
       }
@@ -242,23 +242,23 @@ class Manager implements ToWasmManager {
     toWasm.SKIP_Math_log10 = Math.log10;
     toWasm.SKIP_Math_exp = Math.exp;
     toWasm.SKIP_JS_timeStamp = () => links.SKIP_JS_timeStamp();
-    toWasm.SKIP_print_error = (strPtr: ptr<Internal.String>) =>
+    toWasm.SKIP_print_error = (strPtr: ptr<Internal.SKString>) =>
       links.SKIP_print_error(strPtr);
-    toWasm.SKIP_print_error_raw = (strPtr: ptr<Internal.String>) =>
+    toWasm.SKIP_print_error_raw = (strPtr: ptr<Internal.SKString>) =>
       links.SKIP_print_error_raw(strPtr);
-    toWasm.SKIP_print_debug = (strPtr: ptr<Internal.String>) =>
+    toWasm.SKIP_print_debug = (strPtr: ptr<Internal.SKString>) =>
       links.SKIP_print_debug(strPtr);
-    toWasm.SKIP_print_debug_raw = (strPtr: ptr<Internal.String>) =>
+    toWasm.SKIP_print_debug_raw = (strPtr: ptr<Internal.SKString>) =>
       links.SKIP_print_debug_raw(strPtr);
-    toWasm.SKIP_print_raw = (strPtr: ptr<Internal.String>) =>
+    toWasm.SKIP_print_raw = (strPtr: ptr<Internal.SKString>) =>
       links.SKIP_print_raw(strPtr);
-    toWasm.SKIP_print_char = (strPtr: ptr<Internal.String>) =>
+    toWasm.SKIP_print_char = (strPtr: ptr<Internal.SKString>) =>
       links.SKIP_print_char(strPtr);
-    toWasm.SKIP_print_string = (strPtr: ptr<Internal.String>) =>
+    toWasm.SKIP_print_string = (strPtr: ptr<Internal.SKString>) =>
       links.SKIP_print_string(strPtr);
     toWasm.SKIP_etry = <Ret>(
-      f: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
-      exn_handler: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
+      f: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
+      exn_handler: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
     ): ptr<Internal.T<Ret>> => links.SKIP_etry(f, exn_handler);
     toWasm.SKIP_delete_external_exception = (actor: int) =>
       links.SKIP_delete_external_exception(actor);
@@ -272,19 +272,19 @@ class Manager implements ToWasmManager {
     toWasm.SKIP_js_get_envc = () => links.SKIP_js_get_envc();
     toWasm.SKIP_js_get_envn = (index: int) => links.SKIP_js_get_envn(index);
     toWasm.SKIP_FileSystem_appendTextFile = (
-      path: ptr<Internal.String>,
-      contents: ptr<Internal.String>,
+      path: ptr<Internal.SKString>,
+      contents: ptr<Internal.SKString>,
     ) => links.SKIP_FileSystem_appendTextFile(path, contents);
     toWasm.SKIP_read_line_fill = () => links.SKIP_read_line_fill();
     toWasm.SKIP_read_to_end_fill = () => links.SKIP_read_to_end_fill();
     toWasm.SKIP_read_line_get = (index: int) => links.SKIP_read_line_get(index);
     toWasm.SKIP_setenv = (
-      skName: ptr<Internal.String>,
-      skValue: ptr<Internal.String>,
+      skName: ptr<Internal.SKString>,
+      skValue: ptr<Internal.SKString>,
     ) => links.SKIP_setenv(skName, skValue);
-    toWasm.SKIP_getenv = (skName: ptr<Internal.String>) =>
+    toWasm.SKIP_getenv = (skName: ptr<Internal.SKString>) =>
       links.SKIP_getenv(skName);
-    toWasm.SKIP_unsetenv = (skName: ptr<Internal.String>) =>
+    toWasm.SKIP_unsetenv = (skName: ptr<Internal.SKString>) =>
       links.SKIP_unsetenv(skName);
     return links;
   };
@@ -323,39 +323,41 @@ interface ToWasm {
   SKIP_Math_asin: (v: float) => float;
   SKIP_Math_log10: (v: float) => float;
   SKIP_Math_exp: (v: float) => float;
-  SKIP_print_error: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_error_raw: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_debug: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_debug_raw: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_raw: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_char: (strPtr: ptr<Internal.String>) => void;
-  SKIP_print_string: (strPtr: ptr<Internal.String>) => void;
+  SKIP_print_error: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_error_raw: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_debug: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_debug_raw: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_raw: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_char: (strPtr: ptr<Internal.SKString>) => void;
+  SKIP_print_string: (strPtr: ptr<Internal.SKString>) => void;
   SKIP_etry: <Ret>(
-    f: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
-    exn_handler: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
+    f: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
+    exn_handler: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
   ) => ptr<Internal.T<Ret>>;
   SKIP_delete_external_exception: (exc: int) => void;
-  SKIP_external_exception_message: (exc: int) => ptr<Internal.String>;
+  SKIP_external_exception_message: (exc: int) => ptr<Internal.SKString>;
   SKIP_js_time_ms_lo: () => int;
   SKIP_js_time_ms_hi: () => int;
   SKIP_js_get_entropy: () => int;
   SKIP_js_get_argc: () => int;
-  SKIP_js_get_argn: (index: int) => ptr<Internal.String>;
+  SKIP_js_get_argn: (index: int) => ptr<Internal.SKString>;
   SKIP_js_get_envc: () => int;
-  SKIP_js_get_envn: (index: int) => ptr<Internal.String>;
+  SKIP_js_get_envn: (index: int) => ptr<Internal.SKString>;
   SKIP_FileSystem_appendTextFile: (
-    path: ptr<Internal.String>,
-    contents: ptr<Internal.String>,
+    path: ptr<Internal.SKString>,
+    contents: ptr<Internal.SKString>,
   ) => void;
   SKIP_read_line_fill: () => int;
   SKIP_read_to_end_fill: () => int;
   SKIP_read_line_get: (index: int) => int;
   SKIP_setenv: (
-    skName: ptr<Internal.String>,
-    skvalue: ptr<Internal.String>,
+    skName: ptr<Internal.SKString>,
+    skvalue: ptr<Internal.SKString>,
   ) => void;
-  SKIP_getenv: (skName: ptr<Internal.String>) => Nullable<ptr<Internal.String>>;
-  SKIP_unsetenv: (skName: ptr<Internal.String>) => void;
+  SKIP_getenv: (
+    skName: ptr<Internal.SKString>,
+  ) => Nullable<ptr<Internal.SKString>>;
+  SKIP_unsetenv: (skName: ptr<Internal.SKString>) => void;
 }
 
 /* @sk runtime */

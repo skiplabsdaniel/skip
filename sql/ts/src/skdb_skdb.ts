@@ -69,13 +69,13 @@ interface ToWasm {
   SKIP_last_tick: (queryID: int) => int;
   SKIP_switch_to: (stream: int) => void;
   SKIP_clear_field_names: () => void;
-  SKIP_push_field_name: (skName: ptr<Internal.String>) => void;
+  SKIP_push_field_name: (skName: ptr<Internal.SKString>) => void;
   SKIP_clear_object: () => void;
   SKIP_push_object_field_null: () => void;
   SKIP_push_object_field_int32: (field: int) => void;
-  SKIP_push_object_field_int64: (field: ptr<Internal.String>) => void;
-  SKIP_push_object_field_float: (field: ptr<Internal.String>) => void;
-  SKIP_push_object_field_string: (field: ptr<Internal.String>) => void;
+  SKIP_push_object_field_int64: (field: ptr<Internal.SKString>) => void;
+  SKIP_push_object_field_float: (field: ptr<Internal.SKString>) => void;
+  SKIP_push_object_field_string: (field: ptr<Internal.SKString>) => void;
   SKIP_push_object_field_json: (field: ptr<InternalJ.CJSON>) => void;
   SKIP_push_object: () => void;
   SKIP_js_mark_query: (queryID: int) => void;
@@ -220,16 +220,16 @@ class LinksImpl implements Links, ToWasm {
   SKIP_switch_to!: (stream: int) => void;
   SKIP_call_external_fun!: (
     funId: int,
-    skParam: ptr<Internal.String>,
-  ) => ptr<Internal.String>;
+    skParam: ptr<Internal.SKString>,
+  ) => ptr<Internal.SKString>;
   SKIP_clear_field_names!: () => void;
-  SKIP_push_field_name!: (skName: ptr<Internal.String>) => void;
+  SKIP_push_field_name!: (skName: ptr<Internal.SKString>) => void;
   SKIP_clear_object!: () => void;
   SKIP_push_object_field_null!: () => void;
   SKIP_push_object_field_int32!: (field: int) => void;
-  SKIP_push_object_field_int64!: (field: ptr<Internal.String>) => void;
-  SKIP_push_object_field_float!: (field: ptr<Internal.String>) => void;
-  SKIP_push_object_field_string!: (field: ptr<Internal.String>) => void;
+  SKIP_push_object_field_int64!: (field: ptr<Internal.SKString>) => void;
+  SKIP_push_object_field_float!: (field: ptr<Internal.SKString>) => void;
+  SKIP_push_object_field_string!: (field: ptr<Internal.SKString>) => void;
   SKIP_push_object_field_json!: (field: ptr<InternalJ.CJSON>) => void;
   SKIP_push_object!: () => void;
   SKIP_js_mark_query!: (queryID: int) => void;
@@ -297,7 +297,7 @@ class LinksImpl implements Links, ToWasm {
     };
     this.SKIP_call_external_fun = (
       funId: int,
-      skParam: ptr<Internal.String>,
+      skParam: ptr<Internal.SKString>,
     ) => {
       const res = this.state.call(
         funId,
@@ -324,7 +324,7 @@ class LinksImpl implements Links, ToWasm {
     this.SKIP_clear_field_names = () => {
       this.field_names = [];
     };
-    this.SKIP_push_field_name = (skName: ptr<Internal.String>) => {
+    this.SKIP_push_field_name = (skName: ptr<Internal.SKString>) => {
       this.field_names.push(utils.importString(skName));
     };
     this.SKIP_clear_object = () => {
@@ -345,21 +345,21 @@ class LinksImpl implements Links, ToWasm {
       this.object[field_name] = n;
       this.objectIdx++;
     };
-    this.SKIP_push_object_field_int64 = (skV: ptr<Internal.String>) => {
+    this.SKIP_push_object_field_int64 = (skV: ptr<Internal.SKString>) => {
       const field_name = this.field_names[this.objectIdx];
       if (field_name === undefined)
         throw new Error(`Missing field name at index ${this.objectIdx}`);
       this.object[field_name] = parseInt(utils.importString(skV), 10);
       this.objectIdx++;
     };
-    this.SKIP_push_object_field_float = (skV: ptr<Internal.String>) => {
+    this.SKIP_push_object_field_float = (skV: ptr<Internal.SKString>) => {
       const field_name = this.field_names[this.objectIdx];
       if (field_name === undefined)
         throw new Error(`Missing field name at index ${this.objectIdx}`);
       this.object[field_name] = parseFloat(utils.importString(skV));
       this.objectIdx++;
     };
-    this.SKIP_push_object_field_string = (skV: ptr<Internal.String>) => {
+    this.SKIP_push_object_field_string = (skV: ptr<Internal.SKString>) => {
       const field_name = this.field_names[this.objectIdx];
       if (field_name === undefined)
         throw new Error(`Missing field name at index ${this.objectIdx}`);
@@ -525,7 +525,7 @@ class Manager implements ToWasmManager {
     toWasm.SKIP_clear_field_names = () => {
       links.SKIP_clear_field_names();
     };
-    toWasm.SKIP_push_field_name = (skName: ptr<Internal.String>) => {
+    toWasm.SKIP_push_field_name = (skName: ptr<Internal.SKString>) => {
       links.SKIP_push_field_name(skName);
     };
     toWasm.SKIP_clear_object = () => {
@@ -541,13 +541,13 @@ class Manager implements ToWasmManager {
     toWasm.SKIP_push_object_field_int32 = (field: int) => {
       links.SKIP_push_object_field_int32(field);
     };
-    toWasm.SKIP_push_object_field_int64 = (field: ptr<Internal.String>) => {
+    toWasm.SKIP_push_object_field_int64 = (field: ptr<Internal.SKString>) => {
       links.SKIP_push_object_field_int64(field);
     };
-    toWasm.SKIP_push_object_field_float = (field: ptr<Internal.String>) => {
+    toWasm.SKIP_push_object_field_float = (field: ptr<Internal.SKString>) => {
       links.SKIP_push_object_field_float(field);
     };
-    toWasm.SKIP_push_object_field_string = (field: ptr<Internal.String>) => {
+    toWasm.SKIP_push_object_field_string = (field: ptr<Internal.SKString>) => {
       links.SKIP_push_object_field_string(field);
     };
     toWasm.SKIP_push_object_field_json = (field: ptr<InternalJ.CJSON>) => {

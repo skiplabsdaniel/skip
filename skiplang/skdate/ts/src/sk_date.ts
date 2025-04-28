@@ -13,8 +13,8 @@ interface ToWasm {
     year: int,
     month: int,
     day: int,
-  ) => ptr<Internal.String>;
-  SKIP_locale: (code: int, value: int) => ptr<Internal.String>;
+  ) => ptr<Internal.SKString>;
+  SKIP_locale: (code: int, value: int) => ptr<Internal.SKString>;
 }
 
 class LinksImpl implements Links {
@@ -23,8 +23,8 @@ class LinksImpl implements Links {
     year: int,
     month: int,
     day: int,
-  ) => ptr<Internal.String>;
-  SKIP_locale!: (code: int, value: int) => ptr<Internal.String>;
+  ) => ptr<Internal.SKString>;
+  SKIP_locale!: (code: int, value: int) => ptr<Internal.SKString>;
 
   complete = (utils: Utils, _exports: object) => {
     this.SKIP_localetimezone = (year: int, month: int, day: int) => {

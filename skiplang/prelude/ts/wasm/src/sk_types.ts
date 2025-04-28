@@ -127,7 +127,7 @@ export class Options {
   }
 }
 
-export interface FileSystem {
+export interface SKFileSystem {
   openFile(filename: string, flags: Options, mode: int): number;
   closeFile(fd: int): void;
   watchFile(filename: string, f: (change: string) => void): void;
@@ -155,7 +155,7 @@ export interface Environment {
   onException: () => void;
   base64Decode: (base64: string) => Uint8Array;
   base64Encode: (toEncode: string, url?: boolean) => string;
-  fs: () => FileSystem;
+  fs: () => SKFileSystem;
   sys: () => System;
   crypto: () => Crypto;
   fetch: (url: URL | string) => Promise<Uint8Array | ArrayBuffer>;
@@ -165,33 +165,35 @@ export interface Memory {
   buffer: ArrayBuffer;
 }
 
+type CallClosure<Ret> = Internal.SKFunction<Internal.Void, Internal.T<Ret>>;
+
 interface Exported {
   SKIP_throw_EndOfFile: () => void;
-  SKIP_String_byteSize: (strPtr: ptr<Internal.String>) => int;
+  SKIP_String_byteSize: (strPtr: ptr<Internal.SKString>) => int;
   SKIP_Obstack_alloc: (size: int) => ptr<Internal.Raw>;
   SKIP_new_Obstack: () => ptr<Internal.Obstack>;
   SKIP_destroy_Obstack: (pos: ptr<Internal.Obstack>) => void;
   sk_string_create: (
     addr: ptr<Internal.Raw>,
     size: int,
-  ) => ptr<Internal.String>;
-  SKIP_createByteArray: (size: int) => ptr<Internal.Array<Internal.Byte>>;
-  SKIP_createFloatArray: (size: int) => ptr<Internal.Array<Internal.Float>>;
-  SKIP_createUInt32Array: (size: int) => ptr<Internal.Array<Internal.UInt32>>;
-  SKIP_getArraySize: <Ty>(skArray: ptr<Internal.Array<Internal.T<Ty>>>) => int;
-  SKIP_call0: <Ret>(
-    fnc: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
-  ) => ptr<Internal.T<Ret>>;
+  ) => ptr<Internal.SKString>;
+  SKIP_createByteArray: (size: int) => ptr<Internal.SKArray<Internal.Byte>>;
+  SKIP_createFloatArray: (size: int) => ptr<Internal.SKArray<Internal.Float>>;
+  SKIP_createUInt32Array: (size: int) => ptr<Internal.SKArray<Internal.UInt32>>;
+  SKIP_getArraySize: <Ty>(
+    skArray: ptr<Internal.SKArray<Internal.T<Ty>>>,
+  ) => int;
+  SKIP_call0: <Ret>(fnc: ptr<CallClosure<Ret>>) => ptr<Internal.T<Ret>>;
   SKIP_skstore_init: (size: int) => void;
   SKIP_initializeSkip: () => void;
   SKIP_skstore_end_of_init: () => void;
   SKIP_callWithException: <Ret>(
-    fnc: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
+    fnc: ptr<CallClosure<Ret>>,
     exc: int,
   ) => ptr<Internal.T<Ret>>;
   SKIP_getExceptionMessage: (
     skExc: ptr<Internal.Exception>,
-  ) => ptr<Internal.String>;
+  ) => ptr<Internal.SKString>;
   SKIP_get_persistent_size: () => int;
   SKIP_get_version: () => number;
   skip_main: () => void;
@@ -268,7 +270,7 @@ export class Utils {
     }
   };
   sklog = (
-    strPtr: ptr<Internal.String>,
+    strPtr: ptr<Internal.SKString>,
     kind?: Stream,
     newLine: boolean = false,
   ) => {
@@ -363,18 +365,18 @@ export class Utils {
     return this.stdout.join("");
   };
 
-  importOptString = (strPtr: ptr<Internal.String>) => {
+  importOptString = (strPtr: ptr<Internal.SKString>) => {
     if (strPtr > 0) {
       return this.importString(strPtr);
     }
     return null;
   };
-  importString = (strPtr: ptr<Internal.String>) => {
+  importString = (strPtr: ptr<Internal.SKString>) => {
     const size = this.exports.SKIP_String_byteSize(strPtr);
     const utf8 = new Uint8Array(this.exports.memory.buffer, strPtr, size);
     return this.env.decodeUTF8(utf8);
   };
-  exportString = (s: string): ptr<Internal.String> => {
+  exportString = (s: string): ptr<Internal.SKString> => {
     const data = new Uint8Array(this.exports.memory.buffer);
     let i = 0;
     const addr = this.exports.SKIP_Obstack_alloc(s.length * 4);
@@ -406,7 +408,7 @@ export class Utils {
     return this.exports.sk_string_create(addr, i);
   };
   importBytes = (
-    skArray: ptr<Internal.Array<Internal.Byte>>,
+    skArray: ptr<Internal.SKArray<Internal.Byte>>,
     sizeof: int = 1,
   ) => {
     const size = this.exports.SKIP_getArraySize(skArray) * sizeof;
@@ -439,7 +441,7 @@ export class Utils {
     );
     data.set(view);
   };
-  importUInt32s = (skArray: ptr<Internal.Array<Internal.UInt32>>) => {
+  importUInt32s = (skArray: ptr<Internal.SKArray<Internal.UInt32>>) => {
     const size = this.exports.SKIP_getArraySize(skArray);
     const skData = new Uint32Array(this.exports.memory.buffer, skArray, size);
     const copy = new Uint32Array(size);
@@ -457,7 +459,7 @@ export class Utils {
     skData.set(array);
     return skArray;
   }
-  importFloats = (skArray: ptr<Internal.Array<Internal.Float>>) => {
+  importFloats = (skArray: ptr<Internal.SKArray<Internal.Float>>) => {
     const size = this.exports.SKIP_getArraySize(skArray);
     const skData = new Float64Array(this.exports.memory.buffer, skArray, size);
     const copy = new Float64Array(size);
@@ -476,12 +478,12 @@ export class Utils {
     return skArray;
   }
   call = <Ret>(
-    fnId: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
+    fnId: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
   ): ptr<Internal.T<Ret>> => {
     return this.exports.SKIP_call0(fnId);
   };
   callWithException = <Ret>(
-    fnId: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
+    fnId: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
     exception: Exception | null,
   ): ptr<Internal.T<Ret>> => {
     return this.exports.SKIP_callWithException(
@@ -500,8 +502,8 @@ export class Utils {
     this.exports.SKIP_skstore_end_of_init();
   };
   etry = <Ret>(
-    f: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
-    exn_handler: ptr<Internal.Function<Internal.Void, Internal.T<Ret>>>,
+    f: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
+    exn_handler: ptr<Internal.SKFunction<Internal.Void, Internal.T<Ret>>>,
   ): ptr<Internal.T<Ret>> => {
     let err: Error | null = null;
     try {
