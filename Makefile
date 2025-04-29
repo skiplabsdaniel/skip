@@ -286,3 +286,11 @@ publish-metapackage:
 
 .PHONY: publish-all
 publish-all: clean publish-core publish-helpers publish-wasm publish-native publish-server publish-postgres-adapter publish-kafka-adapter publish-metapackage
+
+.PHONY: npm-build
+npm-build:
+	npm run build
+
+.PHONY: npm-install
+npm-install:
+	npm install
