@@ -27,8 +27,10 @@ bunclient-%:
 bunserver-%:
 	bun run examples/$*-server.ts
 
-noderun-%: build
+run-%:
 	node examples/dist/$*.js
+
+noderun-%: build run-%
 
 nodeclient-%:
 	cd examples && tsc
