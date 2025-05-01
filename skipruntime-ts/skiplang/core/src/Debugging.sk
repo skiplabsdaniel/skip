@@ -1,0 +1,222 @@
+module SkipRuntime;
+
+class Name{name: String, alias: ?String = None()} uses Hashable, Equality
+
+class Read{collection: String, key: SKStore.Key} {
+  //
+  static fun create(path: SKStore.Path): Read {
+    Read{collection => path.dirName.toString(), key => path.baseName}
+  }
+
+  fun isPrivate(): Bool {
+    this.collection.startsWith("/sk_prv/");
+  }
+}
+
+base class DirKind {
+  children =
+  | Eager(isInput: Bool, totalSize: Int, from: Array<String> = Array[])
+  | Lazy()
+  | Deleted()
+}
+
+base class Entity(reads: Array<String>, outputs: Array<String>) {
+  children =
+  | EEager(name: Name, inputs: Array<String>)
+  | ELazy(name: String)
+
+  fun getName(): String
+  | EEager(name, _, _, _) -> name.name
+  | ELazy(name, _, _) -> name
+
+  fun getSources(): Array<String>
+  | EEager(_, inputs, reads, _) -> inputs.concat(reads)
+  | ELazy _ -> Array[]
+
+  fun isOutput(): Bool
+  | EEager(_, _, _, outputs) -> outputs.isEmpty()
+  | ELazy _ -> false
+
+  fun isInput(): Bool
+  | EEager(_, inputs, _, _) -> inputs.isEmpty()
+  | ELazy _ -> false
+}
+
+class DirInfo{
+  name: String,
+  time: Int,
+  kind: DirKind,
+  readers: SortedSet<String>,
+} {
+  static fun create(
+    dirName: SKStore.DirName,
+    dir: SKStore.Dir,
+    readers: SortedSet<String>,
+  ): DirInfo {
+    kind = dir match {
+    | SKStore.EagerDir{input, totalSize, parents} ->
+      Eager(
+        input,
+        totalSize,
+        parents.items().map(v -> v.i0.toString()).collect(Array),
+      )
+    | SKStore.LazyDir _ -> Lazy()
+    | SKStore.DeletedDir _ -> Deleted()
+    };
+    DirInfo{
+      name => dirName.toString(),
+      time => dir.getTime().value,
+      kind,
+      readers,
+    }
+  }
+}
+
+class Graph private (
+  private entities: Map<String, Entity>,
+  private layers: Array<Array<Entity>>,
+  private reads: Array<Read>,
+) {
+  static fun create(
+    outputs_: Array<Name>,
+    dirs: Map<String, DirInfo>,
+    reads_: Array<Read>,
+  ): Graph {
+    outputs = mutable Map<String, mutable Set<String>>[];
+    reads = mutable Map<String, mutable Set<String>>[];
+    for (dir in dirs) {
+      dir.readers.each(reader ->
+        reads.maybeGet(reader) match {
+        | Some(rds) -> rds.insert(dir.name)
+        | _ -> reads.add(reader, mutable Set[dir.name])
+        }
+      );
+      dir.kind match {
+      | Eager(_, _, from) ->
+        from.each(n ->
+          outputs.maybeGet(n) match {
+          | Some(outs) -> outs.insert(dir.name)
+          | _ -> outputs.add(n, mutable Set[dir.name])
+          }
+        )
+      | _ -> void
+      }
+    };
+    mlayers = mutable Map<String, (Entity, Int)>[];
+    entities = mutable Map<String, Entity>[];
+    layer = Set::createFromItems(outputs_);
+    depth = 0;
+    loop {
+      next = mutable Set[];
+      for (n in layer) {
+        mlayers.maybeGet(n.name) match {
+        | Some((entity, _)) -> mlayers.set(n.name, (entity, depth))
+        | _ ->
+          rds = reads.maybeGet(n.name).map(v -> v.toArray()).default(Array[]);
+          outs = outputs
+            .maybeGet(n.name)
+            .map(v -> v.toArray())
+            .default(Array[]);
+          entity = dirs.maybeGet(n.name) match {
+          | Some(dir) ->
+            dir.kind match {
+            | Eager(_, _, from) -> EEager(n, from, rds, outs)
+            | Lazy _ -> ELazy(n.name, rds, outs)
+            | Deleted _ -> invariant_violation("Must be a deleted dir.")
+            }
+          | _ -> EEager(n, Array[], rds, outs)
+          };
+          entity.getSources().map(name -> Name{name}).each(next.insert);
+          mlayers.add(entity.getName(), (entity, depth));
+          entities.add(entity.getName(), entity)
+        }
+      };
+      !depth = depth + 1;
+      if (next.isEmpty()) {
+        break void;
+      };
+      !layer = next.chill()
+    };
+    glayers = Array::mfillBy(depth, (_) ~> mutable Vector<Entity>[]);
+    end = depth - 1;
+    for (l in mlayers) {
+      (entity, d) = l;
+      glayers[end - d].push(entity)
+    };
+    Graph(entities.chill(), glayers.map(v -> v.toArray()), reads_)
+  }
+}
+
+fun getDirInfos(
+  context: readonly SKStore.Context,
+  arrowKey: SKStore.ArrowKey,
+): (Map<String, DirInfo>, Array<Read>) {
+  created = context
+    .listDirs()
+    .map(item ->
+      item.i1 match {
+      | SKStore.EagerDir{creator}
+      | SKStore.LazyDir{creator} ->
+        creator match {
+        | Some(c) if (c == arrowKey) ->
+          readers = context.getReaders(item.i0).map(v -> v.toString());
+          Some(DirInfo::create(item.i0, item.i1, readers))
+        | _ -> None()
+        }
+      | SKStore.DeletedDir _ -> None()
+      }
+    )
+    .filterNone()
+    .collect(Array);
+  dirs = mutable Map[];
+  created.each(dir -> dirs.set(dir.name, dir));
+  (
+    dirs.chill(),
+    context.getReadsForArrow(arrowKey).map(Read::create).filter(r ->
+      !r.isPrivate()
+    ),
+  )
+}
+
+fun getServiceGraph(context: readonly SKStore.Context): Graph {
+  runId = SKStore.SID(
+    kSessionHdl.unsafeGet(context, SKStore.UnitID::singleton).runId,
+  );
+  collections = kGraphHdl.unsafeGet(context, runId);
+  (dirs, reads) = getDirInfos(context, serviceArrow(runId));
+  Graph::create(
+    collections.value
+      .items()
+      .map(v -> Name{name => v.i1.getId(), alias => Some(v.i0)})
+      .collect(Array),
+    dirs,
+    reads,
+  )
+}
+
+fun getResourceGraph(
+  context: readonly SKStore.Context,
+  resource: String,
+  params: SKJSON.CJSON,
+): ?Graph {
+  definition = ResourceDef(resource, params);
+  instancesHdl = SKStore.EHandle(
+    ResourceDef::keyType,
+    ResourceInfo::type,
+    kResourceInstancesDir,
+  );
+  instancesHdl.unsafeMaybeGet(context, definition) match {
+  | Some(resourceInfo) ->
+    (dirs, reads) = getDirInfos(context, resourceArrow(definition));
+    Some(
+      Graph::create(
+        Array[Name{name => resourceInfo.collection.getId()}],
+        dirs,
+        reads,
+      ),
+    )
+  | None() -> None()
+  }
+}
+
+module end;
