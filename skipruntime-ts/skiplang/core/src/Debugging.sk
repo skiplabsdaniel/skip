@@ -1,0 +1,258 @@
+module SkipRuntime;
+
+class Name{name: String, alias: ?String = None()} uses Hashable, Orderable
+
+class Read{collection: String, key: SKStore.Key} {
+  //
+  static fun create(path: SKStore.Path): Read {
+    Read{collection => path.dirName.toString(), key => path.baseName}
+  }
+
+  fun isPrivate(): Bool {
+    this.collection.startsWith("/sk_prv/");
+  }
+}
+
+base class DirKind {
+  children =
+  | Eager(isInput: Bool, from: Array<String> = Array[])
+  | Lazy()
+  | Deleted()
+}
+
+class Entity(name: String, inputs: Array<String>, reads: Array<String>) {
+  fun getSources(): Array<String> {
+    this.inputs.concat(this.reads.filter(r -> r != this.name))
+  }
+
+  fun isPrivate(): Bool {
+    this.name.startsWith("/sk_prv/");
+  }
+
+  fun hidePrivate(): Entity {
+    Entity(
+      this.name,
+      this.inputs.filter(s -> !s.startsWith("/sk_prv/")),
+      this.reads.filter(s -> !s.startsWith("/sk_prv/")),
+    )
+  }
+}
+
+class DirInfo{
+  name: String,
+  time: Int,
+  kind: DirKind,
+  readers: SortedSet<String>,
+} {
+  static fun create(
+    dirName: SKStore.DirName,
+    dir: SKStore.Dir,
+    readers: SortedSet<String>,
+  ): DirInfo {
+    kind = dir match {
+    | SKStore.EagerDir{input, parents} ->
+      Eager(input, parents.items().map(v -> v.i0.toString()).collect(Array))
+    | SKStore.LazyDir _ -> Lazy()
+    | SKStore.DeletedDir _ -> Deleted()
+    };
+    DirInfo{
+      name => dirName.toString(),
+      time => dir.getTime().value,
+      kind,
+      readers,
+    }
+  }
+}
+
+class Graph private (
+  inputs: Array<Name>,
+  outputs: Array<Name>,
+  entities: Array<Entity>,
+  reads: Array<Read>,
+) {
+  static fun create(
+    inputs: Array<Name>,
+    outputs: Array<Name>,
+    dirs: Map<String, DirInfo>,
+    reads_: Array<Read>,
+  ): Graph {
+    reads = mutable Map<String, mutable Set<String>>[];
+    for (dir in dirs) {
+      dir.readers.each(reader -> {
+        reads.maybeGet(reader) match {
+        | Some(rds) -> rds.insert(dir.name)
+        | _ -> reads.add(reader, mutable Set[dir.name])
+        }
+      });
+    };
+    done = mutable Set<String>[];
+    entities = mutable Vector<Entity>[];
+    layer = Set::createFromItems(outputs.map(n -> n.name));
+    replace = mutable Map<String, String>[];
+    loop {
+      next = mutable Set[];
+      for (n in layer) {
+        if (done.contains(n)) continue;
+        rds = (name_) ->
+          reads.maybeGet(name_).map(v -> v.toArray()).default(Array[]);
+        filterSink = `${n.lowercase()}filter-sink/`;
+        optDir = dirs.maybeGet(filterSink) match {
+        | None() -> dirs.maybeGet(n)
+        | dir ->
+          replace.add(filterSink, n);
+          dir
+        };
+        lazy = false;
+        entity = optDir match {
+        | Some(dir) ->
+          dir.kind match {
+          | Eager(_, from) ->
+            computeName = `${n}compute/`;
+            if (from == Array[`${n}compute/`]) {
+              replace.add(computeName, n);
+              compute = dirs.get(computeName);
+              compute.kind match {
+              | Eager(_, f) ->
+                cn = compute.name;
+                Entity(n, f, rds(cn))
+              | _ -> invariant_violation("Compute dir must be Eager")
+              }
+            } else {
+              Entity(n, from, rds(n))
+            }
+
+          | Lazy _ ->
+            !lazy = true;
+            Entity(n, Array[], rds(n))
+          | Deleted _ -> invariant_violation("Cannot be a deleted dir.")
+          }
+        | _ -> Entity(n, Array[], rds(n))
+        };
+        entity.getSources().each(next.insert);
+        done.add(entity.name);
+        if (lazy || !entity.inputs.isEmpty()) entities.push(entity)
+      };
+      if (next.isEmpty()) {
+        break void;
+      };
+      !layer = next.chill()
+    };
+    filtered = entities
+      .filter(e -> !e.isPrivate())
+      .map(e -> e.hidePrivate())
+      .toArray();
+    Graph(inputs, outputs, filtered, reads_)
+  }
+}
+
+fun getDirInfos(
+  context: readonly SKStore.Context,
+  arrowKey: SKStore.ArrowKey,
+  includes: SortedSet<String>,
+): (Map<String, DirInfo>, Array<Read>) {
+  created = context
+    .listDirs()
+    .map(dir -> {
+      dir match {
+      | SKStore.EagerDir{creator}
+      | SKStore.LazyDir{creator} ->
+        dirname = dir.getDirName();
+        strName = dirname.toString();
+        creator match {
+        | Some(c) if (c == arrowKey || includes.contains(strName)) ->
+          readers = context.getReaders(dirname).map(v -> v.toString());
+          Some(DirInfo::create(dirname, dir, readers))
+        | _ ->
+          if (includes.contains(strName)) {
+            readers = context.getReaders(dirname).map(v -> v.toString());
+            Some(DirInfo::create(dirname, dir, readers))
+          } else {
+            None()
+          }
+        }
+      | SKStore.DeletedDir _ -> None()
+      }
+    })
+    .filterNone()
+    .collect(Array);
+  dirs = mutable Map[];
+  created.each(dir -> dirs.set(dir.name, dir));
+  (
+    dirs.chill(),
+    context.getReadsForArrow(arrowKey).map(Read::create).filter(r ->
+      !r.isPrivate()
+    ),
+  )
+}
+
+fun getSharedGraph(context: readonly SKStore.Context): Graph {
+  runId = SKStore.SID(
+    kSessionHdl.unsafeGet(context, SKStore.UnitID::singleton).runId,
+  );
+  collections = kGraphHdl.unsafeGet(context, runId);
+  includes = SortedSet[];
+  inputs = collections.inputs
+    .items()
+    .map(item -> {
+      !includes = includes.set(item.i1.getId());
+      Name{name => item.i1.getId(), alias => Some(item.i0)}
+    })
+    .collect(Array);
+  (dirs, reads) = getDirInfos(context, serviceArrow(runId), includes);
+  Graph::create(
+    inputs,
+    collections.value
+      .items()
+      .map(v -> Name{name => v.i1.getId(), alias => Some(v.i0)})
+      .collect(Array),
+    dirs,
+    reads,
+  )
+}
+
+class Instance(params: SKJSON.CJSON, clients: Array<String>)
+
+fun getResourceGraph(
+  context: readonly SKStore.Context,
+  resource: String,
+  params: SKJSON.CJSON,
+): ?Graph {
+  runId = SKStore.SID(
+    kSessionHdl.unsafeGet(context, SKStore.UnitID::singleton).runId,
+  );
+  collections = kGraphHdl.unsafeGet(context, runId);
+  definition = ResourceDef(resource, params);
+  instancesHdl = SKStore.EHandle(
+    ResourceDef::keyType,
+    ResourceInfo::type,
+    kResourceCollectionsDir,
+  );
+  instancesHdl.unsafeMaybeGet(context, definition) match {
+  | Some(resourceInfo) ->
+    includes = SortedSet[];
+    inputs = collections.value
+      .items()
+      .map(item -> {
+        !includes = includes.set(item.i1.getId());
+        Name{name => item.i1.getId(), alias => Some(item.i0)}
+      })
+      .collect(Array);
+    (dirs, reads) = getDirInfos(context, resourceArrow(definition), includes);
+    Some(
+      Graph::create(
+        inputs,
+        Array[
+          Name{
+            name => resourceInfo.collection.getId(),
+            alias => Some(resource),
+          },
+        ],
+        dirs,
+        reads,
+      ),
+    )
+  | None() -> None()
+  }
+}
+
+module end;

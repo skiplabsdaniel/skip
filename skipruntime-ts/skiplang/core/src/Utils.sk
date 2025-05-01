@@ -27,6 +27,37 @@ const kResourceInstance2SubIdDir: SKStore.DirName = SKStore.DirName::create(
   "/sk_prv/resources/instance2subid/",
 );
 
+const kSessionHdl: SKStore.EHandle<
+  SKStore.UnitID,
+  ServiceDefinition,
+> = SKStore.EHandle(
+  SKStore.UnitID::keyType,
+  ServiceDefinition::type,
+  kSessionDir,
+);
+
+const kGraphHdl: SKStore.EHandle<SKStore.SID, ServiceFile> = SKStore.EHandle(
+  SKStore.SID::keyType,
+  ServiceFile::type,
+  kGraphDir,
+);
+
+fun resourceArrow(def: ResourceDef): SKStore.ArrowKey {
+  SKStore.ArrowKey{
+    parentName => kResourceStatusDir,
+    childName => kResourceCollectionsDir,
+    key => def,
+  }
+}
+
+fun serviceArrow(runId: SKStore.SID): SKStore.ArrowKey {
+  SKStore.ArrowKey{
+    parentName => kSessionDir.sub("inputs"),
+    childName => kGraphDir,
+    key => runId,
+  }
+}
+
 class JSONID(json: SKJSON.CJSON) extends SKStore.Key {
   //
   fun toString(): String {
@@ -90,17 +121,30 @@ fun removeElementAsOne<V: SKStore.File>(_value: V, _toRemove: Int): V {
   invariant_violation("removeElementAsOne called on singleton value");
 }
 
-fun subDirName(
+fun toMapperName(
   context: mutable SKStore.Context,
-  name: String,
+  kind: String,
+  id: String = "",
 ): SKStore.DirName {
   path = context.currentArrow() match {
   | Some(arrow) ->
-    b64 = base64(arrow.getKeyString());
-    `${arrow.childName}${b64}/${name}/`
-  | None() -> `/sk/${name}/`
+    arrow.key match {
+    | ResourceDef(
+      name,
+      params,
+    ) if (arrow.childName == kResourceCollectionsDir) ->
+      SKStore.DirName::create(
+        `/sk/resource_mappers/${name}/${base64(params.prettyPrint())}/${kind}/`,
+      )
+    | SKStore.SID _ if (arrow.childName == kGraphDir) ->
+      SKStore.DirName::create(`/sk/mappers/${kind}/`)
+    | _ ->
+      b64 = base64(arrow.getKeyString());
+      arrow.parentName.sub(`mappers/${b64}/${kind}/`)
+    }
+  | _ -> invariant_violation("Must be called into mapper")
   };
-  SKStore.DirName::create(path)
+  if (!id.isEmpty()) path.sub(id) else path
 }
 
 fun base64<T: Show>(toEncode: T): String {
@@ -109,7 +153,7 @@ fun base64<T: Show>(toEncode: T): String {
   | Some(i) ->
     _ = i.next();
     encoded.getIter().substring(i)
-  | None() -> ""
+  | None() -> encoded
   }
 }
 fun toResourceId(resource: String, params: SKJSON.CJSON): String {

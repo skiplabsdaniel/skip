@@ -17,7 +17,10 @@ base class LazyResult<F> {
   | LAbsent()
 }
 
-base class LazyDir protected {protected collect: Bool} extends Dir {
+base class LazyDir protected {
+  creator: ?ArrowKey,
+  protected collect: Bool,
+} extends Dir {
   /* Updates the lazyGets ref counts and return as well a potentially updated
     LazyDir in which dead keys have been removed. */
   fun updateLazyGets(
@@ -241,6 +244,7 @@ class TLazyDir{
         timeStack => TimeStack::create(context, time),
         dirName,
         lazyFun,
+        creator => context.currentArrow(),
         collect,
       };
       context.updateDirtyReaders(Path::dirTag(dirName));

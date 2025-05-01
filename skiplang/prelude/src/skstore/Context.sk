@@ -164,15 +164,33 @@ value class Deps private (
     this.data.maybeGet(path)
   }
 
-  fun set(path: Path, arrowKey: ArrowKey): this {
-    set = this.data.maybeGet(path) match {
+  fun set(read: Path, reader: ArrowKey): this {
+    set = this.data.maybeGet(read) match {
     | None() -> SortedSet[]
     | Some(x) -> x
     };
-    !set = set.set(arrowKey);
-    !this.data[path] = set;
-    !this = this.iset(arrowKey.childName, path);
+    !set = set.set(reader);
+    !this.data[read] = set;
+    !this = this.iset(reader.childName, read);
     this
+  }
+
+  fun getReaders(dirName: DirName): SortedSet<DirName> {
+    set = SortedSet[];
+    this.data.filter((path, _) ->
+      (path.dirName == dirName ||
+        path.dirName == dirName.size() ||
+        path.dirName == dirName.files())
+    )
+      .values()
+      .each(items -> items.each(arrow -> !set = set.set(arrow.childName)));
+    set
+  }
+
+  fun getReads(arrowKey: ArrowKey): Array<Path> {
+    this.data.filter((_, arrows) -> arrows.contains(arrowKey))
+      .keys()
+      .collect(Array)
   }
 
   private fun iset(dirName: DirName, arrow: Path): this {
@@ -1105,6 +1123,14 @@ mutable class Context private {
       }
     };
     this.!toPurge = SortedSet[];
+  }
+
+  readonly fun getReadsForArrow(arrowKey: ArrowKey): Array<Path> {
+    this.deps.getReads(arrowKey)
+  }
+
+  readonly fun getReaders(dirName: DirName): SortedSet<DirName> {
+    this.deps.getReaders(dirName)
   }
 }
 
