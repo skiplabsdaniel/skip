@@ -4,6 +4,7 @@ base class Reducer<V1: frozen, V2: frozen>(initial: V2) {
   fun getType(): SKStore.File ~> V2;
   fun add(acc: V2, value: V1): V2;
   fun remove(acc: V2, value: V1): ?V2;
+  fun getId(): String;
 }
 
 /**
@@ -19,10 +20,13 @@ base class Mapper {
     key: SKJSON.CJSON,
     values: mutable SKStore.NonEmptyIterator<SKJSON.CJSON>,
   ): mutable Iterator<(SKJSON.CJSON, SKJSON.CJSON)>;
+
+  fun getId(): String;
 }
 
 base class LazyCompute {
   fun compute(self: LazyCollection, key: SKJSON.CJSON): Array<SKJSON.CJSON>;
+  fun getId(): String;
 }
 
 base class ExternalService {
