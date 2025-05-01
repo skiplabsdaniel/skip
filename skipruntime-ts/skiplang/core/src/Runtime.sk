@@ -64,6 +64,10 @@ class ConvReducer(
   fun remove(acc: JSONFile, value: JSONFile): ?JSONFile {
     this.reducer.remove(acc.json, value.json).map(x -> JSONFile(x))
   }
+
+  fun getId(): String {
+    this.reducer.getId()
+  }
 }
 
 class ResourceCollection(value: Collection) extends SKStore.File
@@ -401,11 +405,6 @@ fun initService(
     } else {
       // Can be done because it's only used on test, we can add a environment variable or some way to protect that usage
       _ = closeService_(context);
-      sessionHdl = SKStore.EHandle(
-        SKStore.UnitID::keyType,
-        ServiceDefinition::type,
-        kSessionDir,
-      );
       statusHdl = SKStore.EHandle(
         SKStore.DirName::keyType,
         StatusFile::type,
@@ -416,9 +415,9 @@ fun initService(
         kf.i1.next().each(_f -> toclean.push(SKStore.DirName::keyType(kf.i0)))
       });
       toclean.each(key -> statusHdl.writeArray(context, key, Array[]));
-      sessionHdl.writeArray(context, SKStore.UnitID::singleton, Array[]);
+      kSessionHdl.writeArray(context, SKStore.UnitID::singleton, Array[]);
       context.update();
-      sessionHdl.writeArray(
+      kSessionHdl.writeArray(
         context,
         SKStore.UnitID::singleton,
         Array[ServiceDefinition(runId, service, executor)],
@@ -426,7 +425,7 @@ fun initService(
     };
     updateContext(context);
     checkSubcriptions(context, executor);
-  })
+  });
 }
 
 fun closeService_(
@@ -443,12 +442,7 @@ fun closeService_(
     kf.i1.next().each(_f -> todestroy.push(kf.i0))
   });
   todestroy.each(key -> destroyReactiveResource(context, key));
-  sessionHdl = SKStore.EHandle(
-    SKStore.UnitID::keyType,
-    ServiceDefinition::type,
-    kSessionDir,
-  );
-  handles = sessionHdl.maybeGet(context, SKStore.UnitID::singleton) match {
+  handles = kSessionHdl.maybeGet(context, SKStore.UnitID::singleton) match {
   | Some(def) ->
     def.service.remoteCollections
       .values()
@@ -522,8 +516,7 @@ class CloseExternalService(
 fun createLazyCollection(compute: LazyCompute): LazyCollection {
   getContext() match {
   | Some(context) ->
-    collectionId = `collection_${SKStore.genSym(0)}`;
-    dirName = subDirName(context, collectionId);
+    dirName = toMapperName(context, "lazy", compute.getId());
     lhdl = SKStore.LHandle::create(
       JSONID::keyType,
       JSONFile::type,
@@ -579,18 +572,13 @@ fun useExternalCollection(
       | _ -> void
       }
     });
-    sessionHdl = SKStore.EHandle(
-      SKStore.UnitID::keyType,
-      ServiceDefinition::type,
-      kSessionDir,
-    );
-    remoteCollections = sessionHdl.get(
+    remoteCollections = kSessionHdl.get(
       context,
       SKStore.UnitID::singleton,
     ).service.remoteCollections;
     externalSupplier = remoteCollections.get(supplier);
     collectionId = toSuppliedResourceId(supplier, resource, params);
-    dirName = subDirName(context, collectionId);
+    dirName = toMapperName(context, "external", collectionId);
     paramsDir = dirName.sub("params");
     dataDir = dirName.sub("data");
     hdl = context.mkdir(
@@ -724,27 +712,33 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
   ): Collection {
     getContext() match {
     | Some(context) ->
-      collectionId = `collection_${SKStore.genSym(0)}`;
-      dirName = this.hdl.dirName.sub(collectionId);
-      mapper = mapperOpt match {
-      | None() -> identityMap
+      (mapper, dirName) = mapperOpt match {
+      | None() ->
+        (identityMap, toMapperName(context, "reduce", reducer.getId()))
       | Some(mapper) ->
-        (ctx, writer, key, values) ~> {
-          pushContext(ctx);
-          try {
-            for (entry in mapper.mapEntry(
-              key.json,
-              values.nonEmptyMap(x -> x.json),
-            )) {
-              writer.append(JSONID(entry.i0), JSONFile(entry.i1))
-            };
-            popContext();
-          } catch {
-          | ex ->
-            popContext();
-            throw ex
-          }
-        }
+        (
+          (ctx, writer, key, values) ~> {
+            pushContext(ctx);
+            try {
+              for (entry in mapper.mapEntry(
+                key.json,
+                values.nonEmptyMap(x -> x.json),
+              )) {
+                writer.append(JSONID(entry.i0), JSONFile(entry.i1))
+              };
+              popContext();
+            } catch {
+            | ex ->
+              popContext();
+              throw ex
+            }
+          },
+          toMapperName(
+            context,
+            "map_reduce",
+            `${mapper.getId()}/${reducer.getId()}`,
+          ),
+        )
       };
       hdl = this.hdl.mapReduce(
         JSONID::keyType,
@@ -761,6 +755,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
 
   fun nativeMapReduceImpl<V_elt: SKStore.File, V_acc: SKStore.File>(
     mapperOpt: ?Mapper,
+    name: String,
     reducer: SKStore.EReducer<V_elt, V_acc>,
     eltType: SKStore.File ~> V_elt,
     inputConv: SKJSON.CJSON ~> V_elt,
@@ -794,11 +789,15 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
     };
     getContext() match {
     | Some(context) ->
+      dirname = mapperOpt match {
+      | None() -> toMapperName(context, "reduce", name)
+      | Some(m) -> toMapperName(context, "map_reduce", `${m.getId()}/${name}`)
+      };
       hdl = this.hdl.mapReduce(
         JSONID::keyType,
         eltType,
         context,
-        this.hdl.dirName.sub(`collection_${SKStore.genSym(0)}`),
+        dirname,
         mapper,
         reducer,
       );
@@ -807,13 +806,11 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
           JSONID::keyType,
           JSONFile::type,
           context,
-          this.hdl.dirName.sub(`collection_${SKStore.genSym(1)}`),
+          dirname.sub("extract"),
           (_ctx, writer, key, values) ~> {
             writer.setArray(
               key,
-              Array::createFromIterator(
-                values.nonEmptyMap(x -> JSONFile(outputConv(x))).values(),
-              ), // TODO: use .toArray()
+              values.nonEmptyMap(x -> JSONFile(outputConv(x))).toArray(),
             )
           },
         ),
@@ -832,6 +829,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
     | "sum" ->
       this.nativeMapReduceImpl(
         mapperOpt,
+        reducer,
         SKStore.sumReducer(),
         SKStore.IntFile::type,
         jsonToIntFile,
@@ -840,6 +838,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
     | "min" ->
       this.nativeMapReduceImpl(
         mapperOpt,
+        reducer,
         SKStore.minReducer(),
         SKStore.IntFile::type,
         jsonToIntFile,
@@ -848,6 +847,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
     | "max" ->
       this.nativeMapReduceImpl(
         mapperOpt,
+        reducer,
         SKStore.maxReducer(),
         SKStore.IntFile::type,
         jsonToIntFile,
@@ -856,6 +856,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
     | "count" ->
       this.nativeMapReduceImpl(
         mapperOpt,
+        reducer,
         SKStore.countReducer(),
         JSONFile::type,
         json ~> JSONFile(json),
@@ -879,8 +880,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
   fun take(limit: Int): Collection {
     getContext() match {
     | Some(context) ->
-      collectionId = `collection_${SKStore.genSym(0)}`;
-      dirName = this.hdl.dirName.sub(collectionId);
+      dirName = toMapperName(context, `take_${limit}`, `${SKStore.genSym(0)}`);
       resHdl = this.hdl.filter(
         context,
         dirName,
@@ -904,8 +904,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
   fun merge(others: Array<Collection>): Collection {
     getContext() match {
     | Some(context) ->
-      collectionId = `collection_${SKStore.genSym(0)}`;
-      dirName = this.hdl.dirName.sub(collectionId);
+      dirName = toMapperName(context, "merge", `${SKStore.genSym(0)}`);
       hdl = SKStore.EHandle::multiMap(
         JSONID::keyType,
         JSONFile::type,
@@ -967,27 +966,29 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
   ): Collection {
     getContext() match {
     | Some(context) ->
-      collectionId = `collection_${SKStore.genSym(0)}`;
-      dirName = this.hdl.dirName.sub(collectionId);
-      mapper = mapperOpt match {
-      | None() -> identityMap
+      (mapper, dirName) = mapperOpt match {
+      | None() ->
+        (identityMap, toMapperName(context, "slices", `${SKStore.genSym(0)}`))
       | Some(mapper) ->
-        (ctx, writer, key, values) ~> {
-          pushContext(ctx);
-          try {
-            for (entry in mapper.mapEntry(
-              key.json,
-              values.nonEmptyMap(x -> x.json),
-            )) {
-              writer.append(JSONID(entry.i0), JSONFile(entry.i1))
-            };
-            popContext();
-          } catch {
-          | ex ->
-            popContext();
-            throw ex
-          }
-        }
+        (
+          (ctx, writer, key, values) ~> {
+            pushContext(ctx);
+            try {
+              for (entry in mapper.mapEntry(
+                key.json,
+                values.nonEmptyMap(x -> x.json),
+              )) {
+                writer.append(JSONID(entry.i0), JSONFile(entry.i1))
+              };
+              popContext();
+            } catch {
+            | ex ->
+              popContext();
+              throw ex
+            }
+          },
+          toMapperName(context, "map", mapper.getId()),
+        )
       };
       hdl = this.hdl.map(
         JSONID::keyType,

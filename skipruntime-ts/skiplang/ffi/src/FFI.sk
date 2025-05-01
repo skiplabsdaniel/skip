@@ -55,6 +55,10 @@ class ExternMapper(eptr: SKStore.ExternalPointer) extends Mapper {
         .iterator()
     }
   }
+
+  fun getId(): String {
+    `ext_${this.eptr.value}`
+  }
 }
 
 /************  LazyCompute ****************/
@@ -84,6 +88,10 @@ class ExternLazyCompute(eptr: SKStore.ExternalPointer) extends LazyCompute {
     | SKJSON.CJArray(value) -> value
     | _ -> invariant_violation("Invalid computed value.")
     }
+  }
+
+  fun getId(): String {
+    `ext_${this.eptr.value}`
   }
 }
 
@@ -550,6 +558,10 @@ class JSONReducer(
 
   fun remove(acc: SKJSON.CJSON, value: SKJSON.CJSON): ?SKJSON.CJSON {
     removeOfReducer(this.eptr.value, acc, value)
+  }
+
+  fun getId(): String {
+    `ext_${this.eptr.value}`
   }
 }
 
