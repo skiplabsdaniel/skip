@@ -157,7 +157,11 @@ value class Deps private (
 
   fun getReaders(dirName: DirName): SortedSet<DirName> {
     set = SortedSet[];
-    this.data.filter((path, _) -> path.dirName == dirName)
+    this.data.filter((path, _) ->
+      (path.dirName == dirName ||
+        path.dirName == dirName.size() ||
+        path.dirName == dirName.files())
+    )
       .values()
       .each(items -> items.each(arrow -> !set = set.set(arrow.childName)));
     set

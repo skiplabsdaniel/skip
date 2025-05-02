@@ -75,7 +75,7 @@ class EagerFilter private {
     context: mutable Context,
     rangesOpt: ?FilterRange<Key>,
   ): void {
-    sinkName = this.childName.sub("filter-sink").sub(genSym(0).toString());
+    sinkName = this.childName.sub("filter-sink");
     EagerDir::apply(
       context,
       this.parentName,
