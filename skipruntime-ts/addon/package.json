@@ -7,9 +7,10 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "prepare": "skargo build -r --lib --manifest-path=../skiplang/ffi/Skargo.toml --out-dir=../../build/skipruntime",
-    "build": "skargo build -r --lib --manifest-path=../skiplang/ffi/Skargo.toml --out-dir=../../build/skipruntime && tsc && SKIPRUNTIME=$(realpath ../../build/skipruntime) node-gyp configure && node-gyp build",
-    "clean": "rm -rf dist && node-gyp clean",
+    "prepare": "SKIP_PLATFORM=native GIT_COMMIT_INFO=$(git log -1 --format=\"%h %ad\" --date=format:\"(%Y %m)\") skargo build -r --lib --manifest-path=../skiplang/ffi/Skargo.toml --out-dir=../../build/skipruntime",
+    "prebuild": "npm run prepare",
+    "build": "tsc && SKIPRUNTIME=$(realpath ../../build/skipruntime) node-gyp configure && node-gyp build",
+    "clean": "rm -rf dist && node-gyp clean && skargo clean --manifest-path=../skiplang/ffi/Skargo.toml",
     "lint": "eslint"
   },
   "dependencies": {
