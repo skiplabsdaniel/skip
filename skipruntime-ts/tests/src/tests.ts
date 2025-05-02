@@ -1,4 +1,4 @@
-import { expect, isEqual } from "earl";
+import { expect } from "earl";
 import type {
   Context,
   Json,
@@ -15,9 +15,12 @@ import type {
   ServiceInstance,
   CollectionUpdate,
   NamedCollections,
-  SubscriptionID,
+  Reducer,
+  DepSafe,
   Nullable,
 } from "@skipruntime/core";
+
+import * as u from "./utils.js";
 
 import { Count, Sum } from "@skipruntime/helpers";
 
@@ -28,136 +31,6 @@ import { PostgresExternalService } from "@skip-adapter/postgres";
 
 import { Kafka, logLevel as kafkaLogLevel } from "kafkajs";
 import { KafkaExternalService } from "@skip-adapter/kafka";
-
-async function withAlternateConsoleError(
-  altConsoleError: (...messages: any[]) => void,
-  f: () => Promise<void>,
-): Promise<void> {
-  const systemConsoleError = console.error;
-  console.error = altConsoleError;
-  await f();
-  console.error = systemConsoleError;
-}
-
-async function withRetries(
-  f: () => Promise<void>,
-  maxRetries: number = 5,
-  init: number = 100,
-  exponent: number = 1.5,
-): Promise<void> {
-  let retries = 0;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  while (true) {
-    try {
-      await timeout(init * exponent ** retries);
-      await f();
-      break;
-    } catch (e: unknown) {
-      if (retries < maxRetries) retries++;
-      else throw e;
-    }
-  }
-}
-
-class Notifier {
-  private updates: CollectionUpdate<Json, Json>[] = [];
-  private sid: SubscriptionID;
-  private resolver: Nullable<() => void> = null;
-
-  constructor(
-    private service: ServiceInstance,
-    instance: string,
-    private log: boolean = false,
-  ) {
-    this.sid = service.subscribe(instance, {
-      subscribed: () => {},
-      notify: (update) => {
-        if (this.log) console.log("NOTIFY", JSON.stringify(update));
-        this.updates.push(update);
-        if (this.resolver) this.resolver();
-      },
-      close: () => {},
-    });
-  }
-
-  check(
-    checker: (updates: CollectionUpdate<Json, Json>[]) => void,
-    clear: boolean = true,
-  ): void {
-    checker(this.updates);
-    if (clear) this.updates = [];
-  }
-
-  checkInit<K extends Json, V extends Json>(values: Entry<K, V>[]) {
-    this.check((updates) => {
-      expect([
-        updates.length,
-        updates[0]!.isInitial ? true : false,
-        updates[0]!.values,
-      ]).toEqual([1, true, values]);
-    });
-  }
-
-  checkUpdate<K extends Json, V extends Json>(values: Entry<K, V>[]) {
-    this.check((updates) => {
-      expect([
-        updates.length,
-        updates[0]?.isInitial ? true : false,
-        updates[0]?.values,
-      ]).toEqual([1, false, values]);
-      return false;
-    });
-  }
-
-  checkEmpty() {
-    this.check((updates) => {
-      expect(updates.length).toEqual(0);
-    });
-  }
-
-  async waitNotification(
-    checker: (updates: CollectionUpdate<Json, Json>[]) => boolean,
-    timeout: number = 1000,
-  ) {
-    if (checker(this.updates)) return;
-    return new Promise<void>((resolve, reject) => {
-      try {
-        let rejected = false;
-        const timeoutHdl = setTimeout(() => {
-          rejected = true;
-          reject(new Error("Timeout"));
-        }, timeout);
-        this.resolver = () => {
-          if (rejected) return;
-          if (checker(this.updates)) {
-            clearTimeout(timeoutHdl);
-            resolve();
-            this.updates = [];
-          }
-        };
-      } catch (e: unknown) {
-        reject(e as Error);
-      }
-    });
-  }
-
-  async wait<K extends Json, V extends Json>(
-    values: [boolean, Entry<K, V>[]][],
-    timeout: number = 1000,
-  ) {
-    return this.waitNotification((updates) => {
-      const current = updates.map((u) => [
-        u.isInitial ? true : false,
-        u.values,
-      ]);
-      return isEqual(current, values);
-    }, timeout);
-  }
-
-  close() {
-    this.service.unsubscribe(this.sid);
-  }
-}
 
 //// testMap1
 
@@ -333,10 +206,11 @@ class TestLazyAdd implements LazyCompute<number, number> {
   constructor(private readonly other: EagerCollection<number, number>) {}
 
   compute(
-    _selfHdl: LazyCollection<number, number>,
+    selfHdl: LazyCollection<number, number>,
     key: number,
   ): Iterable<number> {
-    return [this.other.getUnique(key) + 2];
+    if (key == -1) return [2];
+    return [this.other.getUnique(key) + selfHdl.getUnique(-1)];
   }
 }
 
@@ -381,6 +255,34 @@ class MapReduceResource implements Resource<Input_NN> {
 const mapReduceService: SkipService<Input_NN, Input_NN> = {
   initialData: { input: [] },
   resources: { mapReduce: MapReduceResource },
+
+  createGraph(inputCollections: Input_NN) {
+    return inputCollections;
+  },
+};
+
+//// testUserMapReduce
+class UserSum implements Reducer<number, number> {
+  initial = 0;
+
+  add(accum: Nullable<number>, value: number & DepSafe): number {
+    return (accum ?? 0) + value;
+  }
+
+  remove(accum: number, value: number & DepSafe): Nullable<number> {
+    return accum - value;
+  }
+}
+
+class UserMapReduceResource implements Resource<Input_NN> {
+  instantiate(cs: Input_NN): EagerCollection<number, number> {
+    return cs.input.mapReduce(TestOddEven)(UserSum);
+  }
+}
+
+const userMapReduceService: SkipService<Input_NN, Input_NN> = {
+  initialData: { input: [] },
+  resources: { userMapReduce: UserMapReduceResource },
 
   createGraph(inputCollections: Input_NN) {
     return inputCollections;
@@ -527,10 +429,6 @@ const jsonExtractService: SkipService<Input_NJP, Input_NJP> = {
 };
 
 //// testExternalService
-
-async function timeout(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 class MockExternal implements ExternalService {
   public subscribed: string[] = [];
@@ -784,7 +682,7 @@ async function trySetupDB(
     !("_connected" in pgSetupClient) ||
     !pgSetupClient._connected
   ) {
-    await timeout(50);
+    await u.timeout(50);
     return await trySetupDB(service, retries - 1);
   }
   if (!pgIsSetup) {
@@ -860,7 +758,7 @@ const postgresService: () => Promise<
   SkipService<Input_NN, Input_NN>
 > = async () => {
   const postgres = new PostgresExternalService(pg_config);
-  await withAlternateConsoleError(
+  await u.withAlternateConsoleError(
     () => {},
     async () => {
       pgSetupClient.connect().catch(() => {
@@ -1080,6 +978,38 @@ export function initTests(
     const service = await initService(map1Service);
     await service.update("input", [["1", [10]]]);
     expect(await service.getArray("map1", "1")).toEqual([12]);
+    const info = service.debug().service("testMap1");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testMap1",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input"],
+      resources: ["map1"],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph("map1")!;
+    const mapName = u.checkResourceOpName(resourceGraph, 0, "map1");
+    expect(resourceGraph).toEqual({
+      entities: [
+        u.opEntity({
+          name: mapName,
+          clazzName: "Map1",
+          inputs: ["/input/"],
+        }),
+        u.inputEntity({
+          name: "/input/",
+          outputs: [mapName],
+        }),
+      ],
+      reads: [],
+    });
   });
 
   it("testMap2", async () => {
@@ -1151,6 +1081,44 @@ export function initTests(
       [1, [1]],
       [2, [3]],
     ]);
+    const info = service.debug().service("testSize");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testSize",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input1", "input2"],
+      resources: ["size"],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input1"), u.input("input2")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const mapName = u.checkResourceOpName(resourceGraph, 0, "size");
+    expect(resourceGraph).toEqual({
+      entities: [
+        u.opEntity({
+          name: mapName,
+          params: [u.colParam("/input2/")],
+          clazzName: "SizeMapper",
+          inputs: ["/input1/"],
+          reads: ["/input2/"],
+          outputs: [],
+        }),
+        u.inputEntity({
+          name: "/input1/",
+          outputs: [mapName],
+        }),
+        u.inputEntity({
+          name: "/input2/",
+        }),
+      ],
+      reads: [],
+    });
   });
 
   it("testSlicedMap1", async () => {
@@ -1170,6 +1138,69 @@ export function initTests(
       [9, [81]],
       [20, [400]],
     ]);
+    const info = service.debug().service("testSlicedMap1");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testSlicedMap1",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input"],
+      resources: [resource],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const checkName = (index: number) =>
+      u.checkResourceInnerName(resourceGraph, index, "slice", "slices");
+    const slicesNames = [checkName(0), checkName(1), checkName(4)];
+    const takeName = u.getEntityName(resourceGraph, 2);
+    expect(takeName).toMatchRegex(
+      /^\/sk\/resource_mappers\/slice\/b64_e30.\/take_7\/[0-9]+\/$/,
+    );
+    const mapName = u.checkResourceOpName(resourceGraph, 3, "slice");
+    expect(resourceGraph).toEqual({
+      entities: [
+        u.internOpEntity({
+          name: slicesNames[0]!,
+          operator: "slices",
+          inputs: [slicesNames[1]!],
+        }),
+        u.internOpEntity({
+          name: slicesNames[1]!,
+          operator: "slices",
+          inputs: [takeName],
+          outputs: [slicesNames[0]!],
+        }),
+        u.internOpEntity({
+          name: takeName,
+          operator: "take",
+          inputs: [mapName],
+          outputs: [slicesNames[1]!],
+        }),
+        u.opEntity({
+          name: mapName,
+          clazzName: "SquareValues",
+          inputs: [slicesNames[2]!],
+          outputs: [takeName],
+        }),
+        u.internOpEntity({
+          name: slicesNames[2]!,
+          operator: "slices",
+          inputs: ["/input/"],
+          outputs: [mapName],
+        }),
+        u.inputEntity({
+          name: "/input/",
+          outputs: [slicesNames[2]!],
+        }),
+      ],
+      reads: [],
+    });
   });
 
   it("testLazy", async () => {
@@ -1194,6 +1225,53 @@ export function initTests(
       [0, [2]],
       [1, [2]],
     ]);
+    const info = service.debug().service("testLazy");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testLazy",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input"],
+      resources: [resource],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const mapName = u.checkResourceOpName(resourceGraph, 0, "lazy");
+    const lazyName = u.checkResourceOpName(resourceGraph, 2, "lazy", "lazy");
+    expect(resourceGraph).toEqual({
+      entities: [
+        u.opEntity({
+          name: mapName,
+          clazzName: "MapLazy",
+          inputs: ["/input/"],
+          params: [u.colParam(lazyName)],
+          reads: [lazyName],
+        }),
+        u.inputEntity({
+          name: "/input/",
+          outputs: [mapName],
+          // alias: "input",
+        }),
+        u.inputOpEntity({
+          name: lazyName,
+          clazzName: "TestLazyAdd",
+          params: [u.colParam("/input/")],
+          reads: ["/input/", lazyName],
+        }),
+      ],
+      reads: [
+        {
+          collection: lazyName,
+          key: "#tag",
+        },
+      ],
+    });
   });
 
   it("testMapReduce", async () => {
@@ -1227,6 +1305,117 @@ export function initTests(
       [0, [3]],
       [1, [2]],
     ]);
+    const info = service.debug().service("testMapReduce");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testMapReduce",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input"],
+      resources: [resource],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const mapReduceName = u.checkResourceOpName(
+      resourceGraph,
+      0,
+      "mapReduce",
+      "map_reduce",
+    );
+    expect(resourceGraph).toEqual({
+      entities: [
+        u.opEntity({
+          operator: "map_reduce",
+          name: mapReduceName,
+          clazzName: "TestOddEven",
+          inputs: ["/input/"],
+          buildinfos: [{ name: "sum" }],
+        }),
+        u.inputEntity({
+          name: "/input/",
+          outputs: [mapReduceName],
+        }),
+      ],
+      reads: [],
+    });
+  });
+
+  it("testUserMapReduce", async () => {
+    const service = await initService(userMapReduceService);
+    const resource = "userMapReduce";
+    await service.update("input", [
+      [0, [1]],
+      [1, [1]],
+      [2, [1]],
+    ]);
+    expect(await service.getAll(resource)).toEqual([
+      [0, [2]],
+      [1, [1]],
+    ]);
+    await service.update("input", [[3, [2]]]);
+    expect(await service.getAll(resource)).toEqual([
+      [0, [2]],
+      [1, [3]],
+    ]);
+    await service.update("input", [
+      [0, [2]],
+      [1, [2]],
+    ]);
+    expect(await service.getAll(resource)).toEqual([
+      [0, [3]],
+      [1, [4]],
+    ]);
+
+    await service.update("input", [[3, []]]);
+    expect(await service.getAll(resource)).toEqual([
+      [0, [3]],
+      [1, [2]],
+    ]);
+    const info = service.debug().service("testUserMapReduce");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testUserMapReduce",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input"],
+      resources: [resource],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const mapReduceName = u.checkResourceOpName(
+      resourceGraph,
+      0,
+      "userMapReduce",
+      "map_reduce",
+    );
+    expect(resourceGraph).toEqual({
+      entities: [
+        u.opEntity({
+          operator: "map_reduce",
+          name: mapReduceName,
+          clazzName: "TestOddEven",
+          inputs: ["/input/"],
+          buildinfos: [{ name: "UserSum", params: [] }],
+        }),
+        u.inputEntity({
+          name: "/input/",
+          outputs: [mapReduceName],
+        }),
+      ],
+      reads: [],
+    });
   });
 
   it("testCount", async () => {
@@ -1277,6 +1466,49 @@ export function initTests(
       [1, [20]],
       [2, [3, 7]],
     ]);
+    const info = service.debug().service("testMerge1");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testMerge1",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input1", "input2"],
+      resources: [resource],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input1"), u.input("input2")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const mergeName = u.checkResourceInnerName(
+      resourceGraph,
+      0,
+      resource,
+      "merge",
+    );
+    expect(u.sorted(resourceGraph)).toEqual(
+      u.sorted({
+        entities: [
+          u.internOpEntity({
+            operator: "merge",
+            name: mergeName,
+            inputs: ["/input1/", "/input2/"],
+          }),
+          u.inputEntity({
+            name: "/input1/",
+            outputs: [mergeName],
+          }),
+          u.inputEntity({
+            name: "/input2/",
+            outputs: [mergeName],
+          }),
+        ],
+        reads: [],
+      }),
+    );
   });
 
   it("testMergeReduce", async () => {
@@ -1296,6 +1528,61 @@ export function initTests(
       [1, [20]],
       [2, [10]],
     ]);
+    const info = service.debug().service("testMergeReduce");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testMergeReduce",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input1", "input2"],
+      resources: ["mergeMapReduce", resource],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input1"), u.input("input2")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const reduceName = u.checkResourceOpName(
+      resourceGraph,
+      0,
+      resource,
+      "reduce",
+    );
+    const mergeName = u.checkResourceInnerName(
+      resourceGraph,
+      1,
+      resource,
+      "merge",
+    );
+    expect(u.sorted(resourceGraph)).toEqual(
+      u.sorted({
+        entities: [
+          u.internOpEntity({
+            operator: "reduce",
+            name: reduceName,
+            inputs: [mergeName],
+          }),
+          u.internOpEntity({
+            operator: "merge",
+            name: mergeName,
+            inputs: ["/input1/", "/input2/"],
+            outputs: [reduceName],
+          }),
+          u.inputEntity({
+            name: "/input1/",
+            outputs: [mergeName],
+          }),
+          u.inputEntity({
+            name: "/input2/",
+            outputs: [mergeName],
+          }),
+        ],
+        reads: [],
+      }),
+    );
   });
 
   it("testMergeMapReduce", async () => {
@@ -1315,6 +1602,64 @@ export function initTests(
       [1, [25]],
       [2, [20]],
     ]);
+    const info = service.debug().service("testMergeMapReduce");
+    const version = info.version;
+    expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+    expect(info).toEqual({
+      name: "testMergeMapReduce",
+      platform: category.toLowerCase(),
+      version,
+      inputs: ["input1", "input2"],
+      resources: [resource, "mergeReduce"],
+      remotesResources: [],
+    });
+    const shared = service.debug().sharedGraph();
+    expect(shared).toEqual({
+      entities: [u.input("input1"), u.input("input2")],
+      reads: [],
+    });
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const mapReduceName = u.checkResourceOpName(
+      resourceGraph,
+      0,
+      resource,
+      "map_reduce",
+    );
+    const mergeName = u.checkResourceInnerName(
+      resourceGraph,
+      1,
+      resource,
+      "merge",
+    );
+    expect(u.sorted(resourceGraph)).toEqual(
+      u.sorted({
+        entities: [
+          u.opEntity({
+            operator: "map_reduce",
+            name: mapReduceName,
+            clazzName: "OffsetMapper",
+            params: [u.dataParam(5)],
+            inputs: [mergeName],
+            buildinfos: [{ name: "sum" }],
+          }),
+          u.internOpEntity({
+            operator: "merge",
+            name: mergeName,
+            inputs: ["/input1/", "/input2/"],
+            outputs: [mapReduceName],
+          }),
+          u.inputEntity({
+            name: "/input1/",
+            outputs: [mergeName],
+          }),
+          u.inputEntity({
+            name: "/input2/",
+            outputs: [mergeName],
+          }),
+        ],
+        reads: [],
+      }),
+    );
   });
 
   it("testJSONParams", async () => {
@@ -1454,6 +1799,64 @@ export function initTests(
           [1, [[20, 31]]],
         ],
       ]);
+      const info = service.debug().service("testExternal");
+      const version = info.version;
+      expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
+      expect(info).toEqual({
+        name: "testExternal",
+        platform: category.toLowerCase(),
+        version,
+        inputs: ["input1", "input2"],
+        resources: [resource],
+        remotesResources: ["external"],
+      });
+      const shared = service.debug().sharedGraph();
+      expect(shared).toEqual({
+        entities: [u.input("input1"), u.input("input2")],
+        reads: [],
+      });
+      const resourceGraph = service.debug().resourceGraph(resource)!;
+      const mapName = u.checkResourceOpName(resourceGraph, 0, "external");
+      const remoteName =
+        "/sk/resource_mappers/external/b64_e30./remote/external/mock/b64_eyJ2MSI6ICI2IiwgInYyIjogIjExIn0./";
+      expect(resourceGraph).toEqual({
+        entities: [
+          u.opEntity({
+            name: mapName,
+            clazzName: "MockExternalCheck",
+            inputs: ["/input1/"],
+            params: [u.colParam(remoteName)],
+            reads: [remoteName],
+          }),
+          u.inputEntity({
+            name: "/input1/",
+            outputs: [mapName],
+            // alias: "input1",
+          }),
+          u.opEntity({
+            operator: "remote",
+            name: remoteName,
+            clazzName: "external",
+            params: [
+              u.dataParam("mock"),
+              u.dataParam({
+                v1: "6",
+                v2: "11",
+              }),
+            ],
+          }),
+        ],
+        reads: [
+          {
+            collection: "/input2/",
+            key: 0,
+          },
+          {
+            collection: "/input2/",
+            key: 1,
+          },
+        ],
+      });
     } finally {
       service.unsubscribe(sid);
       service.closeResourceInstance(constantResourceId1);
@@ -1553,7 +1956,7 @@ export function initTests(
         [3, [30]],
       ]);
       await service.instantiateResource(instanceId, resource, {});
-      const notifier = new Notifier(service, instanceId);
+      const notifier = new u.Notifier(service, instanceId);
       notifier.checkInit([
         [1, [111]],
         [2, [222]],
@@ -1575,7 +1978,7 @@ export function initTests(
       const instanceId2 = "unsafe.fixed.resource.ident.2";
 
       await service.instantiateResource(instanceId2, streamingResource, {});
-      const notifier2 = new Notifier(service, instanceId2);
+      const notifier2 = new u.Notifier(service, instanceId2);
       notifier2.checkInit([]);
 
       await pgClient.query("INSERT INTO skip_test (id, x) VALUES (5, 5);");
@@ -1590,13 +1993,13 @@ export function initTests(
       );
 
       const errorMessages: any[] = [];
-      await withAlternateConsoleError(
+      await u.withAlternateConsoleError(
         (...msgs) => msgs.forEach((x) => errorMessages.push(x)),
         async () => {
           await pgClient.query(
             "INSERT INTO skip_test (id, x) VALUES (42, 42);",
           );
-          await timeout(10);
+          await u.timeout(10);
           expect(errorMessages).toHaveLength(2);
           expect(errorMessages[0]).toEqual(
             "Uncaught error triggered by Postgres adapter update (key 42, table skip_test):",
@@ -1654,7 +2057,7 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
         return { key: String(noise), value: String(1 + (noise % 5)) };
       });
       await producer.send({ topic: "skip-test-topic", messages });
-      await withRetries(async () => {
+      await u.withRetries(async () => {
         for (const { key, value } of messages) {
           const expected = 10 * Number(value) ** 2;
           expect(await service.getArray("resource", key)).toEqual([expected]);
@@ -1754,7 +2157,7 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
       const resource = "resource";
       const instanceId = "unsafe.fixed.resource.ident.1";
       await service.instantiateResource(instanceId, resource, {});
-      const notifier = new Notifier(service, instanceId);
+      const notifier = new u.Notifier(service, instanceId);
       notifier.checkInit([]);
       let values: Entry<number, number>[] = [
         [0, [10]],
@@ -1787,7 +2190,7 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
       const resource = "resource";
       const instanceId = "unsafe.fixed.resource.ident.1";
       await service.instantiateResource(instanceId, resource, 1);
-      const notifier = new Notifier(service, instanceId);
+      const notifier = new u.Notifier(service, instanceId);
       notifier.checkInit([[1, [1]]]);
       await service.update("input1", [[1, [1]]]);
       notifier.checkEmpty();
