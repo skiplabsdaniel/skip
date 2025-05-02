@@ -101,6 +101,41 @@ export function controlService(service: ServiceInstance): express.Express {
     res.sendStatus(200);
   });
 
+  // DEBUGGING
+
+  app.delete("/v1/debug/service", (req, res) => {
+    try {
+      const info = service.debug().service(req.headers.host ?? `anonymous`);
+      res.status(200).json(info);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.delete("/v1/debug/shared", (_req, res) => {
+    try {
+      const graph = service.debug().sharedGraph();
+      res.status(200).json(graph);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.delete("/v1/debug/resource/:resource", (req, res) => {
+    try {
+      const graph = service
+        .debug()
+        .resourceGraph(req.params.resource, req.body as Json);
+      if (!graph) res.sendStatus(404);
+      else res.status(200).json(graph);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
   return app;
 }
 
