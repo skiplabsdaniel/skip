@@ -22,6 +22,7 @@ class Base64() {
     ("foo", "Zm9v"),
     ("fo", "Zm8="),
     ("f", "Zg=="),
+    ("{\"v1\": \"6\", \"v2\": \"11\"}", "eyJ2MSI6ICI2IiwgInYyIjogIjExIn0="),
     ("", ""),
   ];
 
