@@ -69,6 +69,7 @@ const server = await runService(service, {
   control_port: 3588,
   streaming_port: 3587,
   platform,
+  debug: { port: 3589, no_cors: true, log: true },
 });
 
 async function shutdown() {
