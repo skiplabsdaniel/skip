@@ -5,7 +5,12 @@ import {
   SkipResourceInstanceInUseError,
   SkipRESTError,
 } from "@skipruntime/core";
-import type { CollectionUpdate, Entry, Json } from "@skipruntime/core";
+import type {
+  CollectionUpdate,
+  DebugInstance,
+  Entry,
+  Json,
+} from "@skipruntime/core";
 
 export function controlService(service: ServiceInstance): express.Express {
   const app = express();
@@ -182,6 +187,52 @@ export function streamingService(service: ServiceInstance): express.Express {
       } else {
         res.sendStatus(500);
       }
+    }
+  });
+
+  return app;
+}
+
+export function debugService(
+  service: DebugInstance,
+  config: (app: express.Express) => void,
+): express.Express {
+  const app = express();
+  config(app);
+  app.use(express.json({ strict: false }));
+  // Streaming control API.
+
+  app.get("/v1/service", (req, res) => {
+    try {
+      const info = service.service(req.headers.host ?? `anonymous`);
+      res.status(200).json(info);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.get("/v1/shared", (_req, res) => {
+    try {
+      const graph = service.sharedGraph();
+      res.status(200).json(graph);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.get("/v1/resource/:resource", (req, res) => {
+    try {
+      const graph = service.resourceGraph(
+        req.params.resource,
+        req.body as Json,
+      );
+      if (!graph) res.sendStatus(404);
+      else res.status(200).json(graph);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
     }
   });
 
