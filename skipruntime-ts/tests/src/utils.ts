@@ -8,7 +8,7 @@ import type {
   Graph,
   ServiceInstance,
   Entry,
-  BuildInfo,
+  Constructor,
 } from "@skipruntime/core";
 
 export async function timeout(ms: number) {
@@ -203,11 +203,11 @@ export function inputOpEntity(data: {
 }): Entity {
   return {
     name: data.name,
-    metadata: {
-      buildinfos: [
+    type: {
+      constructors: [
         {
           name: data.clazzName,
-          params: data.params ?? [],
+          parameters: data.params ?? [],
         },
       ],
       operator: data.operator ?? "lazy",
@@ -225,20 +225,20 @@ export function opEntity(data: {
   inputs?: string[];
   reads?: string[];
   outputs?: string[];
-  buildinfos?: BuildInfo[];
+  constructors?: Constructor[];
 }): Entity {
-  const buildinfos = data.buildinfos ?? [];
+  const constructors = data.constructors ?? [];
   return {
     name: {
       name: data.name,
     },
-    metadata: {
-      buildinfos: [
+    type: {
+      constructors: [
         {
           name: data.clazzName,
-          params: data.params ?? [],
+          parameters: data.params ?? [],
         },
-        ...buildinfos,
+        ...constructors,
       ],
       operator: data.operator ?? "map",
     },
@@ -259,7 +259,7 @@ export function internOpEntity(data: {
     name: {
       name: data.name,
     },
-    metadata: {
+    type: {
       operator: data.operator ?? "lazy",
     },
     inputs: data.inputs ?? [],
