@@ -1335,7 +1335,7 @@ export function initTests(
           name: mapReduceName,
           clazzName: "TestOddEven",
           inputs: ["/input/"],
-          buildinfos: [{ name: "sum" }],
+          constructors: [{ name: "sum" }],
         }),
         u.inputEntity({
           name: "/input/",
@@ -1407,7 +1407,7 @@ export function initTests(
           name: mapReduceName,
           clazzName: "TestOddEven",
           inputs: ["/input/"],
-          buildinfos: [{ name: "UserSum", params: [] }],
+          constructors: [{ name: "UserSum", parameters: [] }],
         }),
         u.inputEntity({
           name: "/input/",
@@ -1640,7 +1640,7 @@ export function initTests(
             clazzName: "OffsetMapper",
             params: [u.dataParam(5)],
             inputs: [mergeName],
-            buildinfos: [{ name: "sum" }],
+            constructors: [{ name: "sum" }],
           }),
           u.internOpEntity({
             operator: "merge",
