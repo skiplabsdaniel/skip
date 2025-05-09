@@ -9,6 +9,7 @@ import type {
   ServiceInstance,
   Entry,
   Constructor,
+  Name,
 } from "@skipruntime/core";
 
 export async function timeout(ms: number) {
@@ -147,24 +148,12 @@ export class Notifier {
 
 /// Graph
 
-export function getName(entity: Entity): string {
-  const name = entity.name;
-  const result = name
-    ? typeof name == "string"
-      ? name
-      : name.name
-    : "unknonw";
-  return result;
-}
-
 export function getEntityName(graph: Graph, idx: number): string {
-  return getName(graph.entities[idx]!);
+  return graph.entities[idx]!.name;
 }
 
 export function inputEntity(data: {
   name: string;
-  alias?: string;
-  outputs?: string[];
   metadata?: {
     name: string;
     params?: { type: string; value: Json }[];
@@ -173,24 +162,16 @@ export function inputEntity(data: {
 }): Entity {
   return {
     inputs: [],
-    name: data.alias
-      ? {
-          alias: data.alias,
-          name: data.name,
-        }
-      : {
-          name: data.name,
-        },
-    outputs: data.outputs ?? [],
+    name: data.name,
     reads: [],
   };
 }
 
 export function input(name: string) {
-  return inputEntity({
+  return {
     name: `/${name}/`,
     alias: name,
-  });
+  };
 }
 
 export function inputOpEntity(data: {
@@ -199,9 +180,9 @@ export function inputOpEntity(data: {
   params?: { type: string; value: Json }[];
   operator?: string;
   reads?: string[];
-  outputs?: string[];
 }): Entity {
   return {
+    inputs: [],
     name: data.name,
     type: {
       constructors: [
@@ -213,7 +194,6 @@ export function inputOpEntity(data: {
       operator: data.operator ?? "lazy",
     },
     reads: data.reads ?? [],
-    outputs: data.outputs ?? [],
   };
 }
 
@@ -224,14 +204,11 @@ export function opEntity(data: {
   operator?: string;
   inputs?: string[];
   reads?: string[];
-  outputs?: string[];
   constructors?: Constructor[];
 }): Entity {
   const constructors = data.constructors ?? [];
   return {
-    name: {
-      name: data.name,
-    },
+    name: data.name,
     type: {
       constructors: [
         {
@@ -244,7 +221,6 @@ export function opEntity(data: {
     },
     inputs: data.inputs ?? [],
     reads: data.reads ?? [],
-    outputs: data.outputs ?? [],
   };
 }
 
@@ -253,18 +229,14 @@ export function internOpEntity(data: {
   operator?: string;
   inputs?: string[];
   reads?: string[];
-  outputs?: string[];
 }): Entity {
   return {
-    name: {
-      name: data.name,
-    },
+    name: data.name,
     type: {
       operator: data.operator ?? "lazy",
     },
     inputs: data.inputs ?? [],
     reads: data.reads ?? [],
-    outputs: data.outputs ?? [],
   };
 }
 
@@ -320,10 +292,13 @@ export function checkResourceInnerName(
 
 export function sorted(graph: Graph): Graph {
   const entities = graph.entities
-    .map((e) => [getName(e), e] as [string, Entity])
+    .map((e) => [e.name, e] as [string, Entity])
     .sort()
     .map((v) => v[1]);
+  const compare = (a: Name, b: Name) => a.name.localeCompare(b.name);
   return {
+    inputs: graph.inputs.sort(compare),
+    outputs: graph.outputs.sort(compare),
     entities,
     reads: graph.reads.sort(),
   };
