@@ -975,9 +975,10 @@ export function initTests(
     mit(`${title}[${category}]`, fn);
 
   it("testMap1", async () => {
+    const resource = "map1";
     const service = await initService(map1Service);
     await service.update("input", [["1", [10]]]);
-    expect(await service.getArray("map1", "1")).toEqual([12]);
+    expect(await service.getArray(resource, "1")).toEqual([12]);
     const info = service.debug().service("testMap1");
     const version = info.version;
     expect(version).toMatchRegex(/^[0-9a-f]{8} \([0-9]{4} [0-9]{2}\)$/);
@@ -986,27 +987,28 @@ export function initTests(
       platform: category.toLowerCase(),
       version,
       inputs: ["input"],
-      resources: ["map1"],
+      resources: [resource],
       remotesResources: [],
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input")],
+      inputs: [u.input("input")],
+      outputs: [u.input("input")],
+      entities: [u.inputEntity({ name: "/input/" })],
       reads: [],
     });
-    const resourceGraph = service.debug().resourceGraph("map1")!;
-    const mapName = u.checkResourceOpName(resourceGraph, 0, "map1");
+    const resourceGraph = service.debug().resourceGraph(resource)!;
+    const mapName = u.checkResourceOpName(resourceGraph, 0, resource);
     expect(resourceGraph).toEqual({
+      inputs: [u.input("input")],
+      outputs: [{ name: mapName, alias: resource }],
       entities: [
         u.opEntity({
           name: mapName,
           clazzName: "Map1",
           inputs: ["/input/"],
         }),
-        u.inputEntity({
-          name: "/input/",
-          outputs: [mapName],
-        }),
+        u.inputEntity({ name: "/input/" }),
       ],
       reads: [],
     });
@@ -1094,12 +1096,19 @@ export function initTests(
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input1"), u.input("input2")],
+      inputs: [u.input("input1"), u.input("input2")],
+      outputs: [u.input("input1"), u.input("input2")],
+      entities: [
+        u.inputEntity({ name: "/input1/" }),
+        u.inputEntity({ name: "/input2/" }),
+      ],
       reads: [],
     });
     const resourceGraph = service.debug().resourceGraph(resource)!;
     const mapName = u.checkResourceOpName(resourceGraph, 0, "size");
     expect(resourceGraph).toEqual({
+      inputs: [u.input("input1"), u.input("input2")],
+      outputs: [{ name: mapName, alias: resource }],
       entities: [
         u.opEntity({
           name: mapName,
@@ -1107,15 +1116,9 @@ export function initTests(
           clazzName: "SizeMapper",
           inputs: ["/input1/"],
           reads: ["/input2/"],
-          outputs: [],
         }),
-        u.inputEntity({
-          name: "/input1/",
-          outputs: [mapName],
-        }),
-        u.inputEntity({
-          name: "/input2/",
-        }),
+        u.inputEntity({ name: "/input1/" }),
+        u.inputEntity({ name: "/input2/" }),
       ],
       reads: [],
     });
@@ -1151,19 +1154,23 @@ export function initTests(
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input")],
+      inputs: [u.input("input")],
+      outputs: [u.input("input")],
+      entities: [u.inputEntity({ name: "/input/" })],
       reads: [],
     });
     const resourceGraph = service.debug().resourceGraph(resource)!;
     const checkName = (index: number) =>
-      u.checkResourceInnerName(resourceGraph, index, "slice", "slices");
+      u.checkResourceInnerName(resourceGraph, index, resource, "slices");
     const slicesNames = [checkName(0), checkName(1), checkName(4)];
     const takeName = u.getEntityName(resourceGraph, 2);
     expect(takeName).toMatchRegex(
       /^\/sk\/resource_mappers\/slice\/b64_e30.\/take_7\/[0-9]+\/$/,
     );
-    const mapName = u.checkResourceOpName(resourceGraph, 3, "slice");
+    const mapName = u.checkResourceOpName(resourceGraph, 3, resource);
     expect(resourceGraph).toEqual({
+      inputs: [u.input("input")],
+      outputs: [{ name: slicesNames[0]!, alias: resource }],
       entities: [
         u.internOpEntity({
           name: slicesNames[0]!,
@@ -1174,29 +1181,24 @@ export function initTests(
           name: slicesNames[1]!,
           operator: "slices",
           inputs: [takeName],
-          outputs: [slicesNames[0]!],
         }),
         u.internOpEntity({
           name: takeName,
           operator: "take",
           inputs: [mapName],
-          outputs: [slicesNames[1]!],
         }),
         u.opEntity({
           name: mapName,
           clazzName: "SquareValues",
           inputs: [slicesNames[2]!],
-          outputs: [takeName],
         }),
         u.internOpEntity({
           name: slicesNames[2]!,
           operator: "slices",
           inputs: ["/input/"],
-          outputs: [mapName],
         }),
         u.inputEntity({
           name: "/input/",
-          outputs: [slicesNames[2]!],
         }),
       ],
       reads: [],
@@ -1238,13 +1240,17 @@ export function initTests(
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input")],
+      inputs: [u.input("input")],
+      outputs: [u.input("input")],
+      entities: [u.inputEntity({ name: "/input/" })],
       reads: [],
     });
     const resourceGraph = service.debug().resourceGraph(resource)!;
     const mapName = u.checkResourceOpName(resourceGraph, 0, "lazy");
     const lazyName = u.checkResourceOpName(resourceGraph, 2, "lazy", "lazy");
     expect(resourceGraph).toEqual({
+      inputs: [u.input("input")],
+      outputs: [{ name: mapName, alias: resource }],
       entities: [
         u.opEntity({
           name: mapName,
@@ -1255,8 +1261,6 @@ export function initTests(
         }),
         u.inputEntity({
           name: "/input/",
-          outputs: [mapName],
-          // alias: "input",
         }),
         u.inputOpEntity({
           name: lazyName,
@@ -1318,7 +1322,9 @@ export function initTests(
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input")],
+      inputs: [u.input("input")],
+      outputs: [u.input("input")],
+      entities: [u.inputEntity({ name: "/input/" })],
       reads: [],
     });
     const resourceGraph = service.debug().resourceGraph(resource)!;
@@ -1329,6 +1335,8 @@ export function initTests(
       "map_reduce",
     );
     expect(resourceGraph).toEqual({
+      inputs: [u.input("input")],
+      outputs: [{ name: mapReduceName, alias: resource }],
       entities: [
         u.opEntity({
           operator: "map_reduce",
@@ -1337,10 +1345,7 @@ export function initTests(
           inputs: ["/input/"],
           constructors: [{ name: "sum" }],
         }),
-        u.inputEntity({
-          name: "/input/",
-          outputs: [mapReduceName],
-        }),
+        u.inputEntity({ name: "/input/" }),
       ],
       reads: [],
     });
@@ -1390,7 +1395,9 @@ export function initTests(
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input")],
+      inputs: [u.input("input")],
+      outputs: [u.input("input")],
+      entities: [u.inputEntity({ name: "/input/" })],
       reads: [],
     });
     const resourceGraph = service.debug().resourceGraph(resource)!;
@@ -1401,6 +1408,8 @@ export function initTests(
       "map_reduce",
     );
     expect(resourceGraph).toEqual({
+      inputs: [u.input("input")],
+      outputs: [{ name: mapReduceName, alias: resource }],
       entities: [
         u.opEntity({
           operator: "map_reduce",
@@ -1409,10 +1418,7 @@ export function initTests(
           inputs: ["/input/"],
           constructors: [{ name: "UserSum", parameters: [] }],
         }),
-        u.inputEntity({
-          name: "/input/",
-          outputs: [mapReduceName],
-        }),
+        u.inputEntity({ name: "/input/" }),
       ],
       reads: [],
     });
@@ -1479,7 +1485,12 @@ export function initTests(
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input1"), u.input("input2")],
+      inputs: [u.input("input1"), u.input("input2")],
+      outputs: [u.input("input1"), u.input("input2")],
+      entities: [
+        u.inputEntity({ name: "/input1/" }),
+        u.inputEntity({ name: "/input2/" }),
+      ],
       reads: [],
     });
     const resourceGraph = service.debug().resourceGraph(resource)!;
@@ -1491,20 +1502,16 @@ export function initTests(
     );
     expect(u.sorted(resourceGraph)).toEqual(
       u.sorted({
+        inputs: [u.input("input1"), u.input("input2")],
+        outputs: [{ name: mergeName, alias: resource }],
         entities: [
           u.internOpEntity({
             operator: "merge",
             name: mergeName,
             inputs: ["/input1/", "/input2/"],
           }),
-          u.inputEntity({
-            name: "/input1/",
-            outputs: [mergeName],
-          }),
-          u.inputEntity({
-            name: "/input2/",
-            outputs: [mergeName],
-          }),
+          u.inputEntity({ name: "/input1/" }),
+          u.inputEntity({ name: "/input2/" }),
         ],
         reads: [],
       }),
@@ -1541,7 +1548,12 @@ export function initTests(
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input1"), u.input("input2")],
+      inputs: [u.input("input1"), u.input("input2")],
+      outputs: [u.input("input1"), u.input("input2")],
+      entities: [
+        u.inputEntity({ name: "/input1/" }),
+        u.inputEntity({ name: "/input2/" }),
+      ],
       reads: [],
     });
     const resourceGraph = service.debug().resourceGraph(resource)!;
@@ -1559,6 +1571,8 @@ export function initTests(
     );
     expect(u.sorted(resourceGraph)).toEqual(
       u.sorted({
+        inputs: [u.input("input1"), u.input("input2")],
+        outputs: [{ name: reduceName, alias: resource }],
         entities: [
           u.internOpEntity({
             operator: "reduce",
@@ -1569,16 +1583,9 @@ export function initTests(
             operator: "merge",
             name: mergeName,
             inputs: ["/input1/", "/input2/"],
-            outputs: [reduceName],
           }),
-          u.inputEntity({
-            name: "/input1/",
-            outputs: [mergeName],
-          }),
-          u.inputEntity({
-            name: "/input2/",
-            outputs: [mergeName],
-          }),
+          u.inputEntity({ name: "/input1/" }),
+          u.inputEntity({ name: "/input2/" }),
         ],
         reads: [],
       }),
@@ -1615,7 +1622,12 @@ export function initTests(
     });
     const shared = service.debug().sharedGraph();
     expect(shared).toEqual({
-      entities: [u.input("input1"), u.input("input2")],
+      inputs: [u.input("input1"), u.input("input2")],
+      outputs: [u.input("input1"), u.input("input2")],
+      entities: [
+        u.inputEntity({ name: "/input1/" }),
+        u.inputEntity({ name: "/input2/" }),
+      ],
       reads: [],
     });
     const resourceGraph = service.debug().resourceGraph(resource)!;
@@ -1633,6 +1645,8 @@ export function initTests(
     );
     expect(u.sorted(resourceGraph)).toEqual(
       u.sorted({
+        inputs: [u.input("input1"), u.input("input2")],
+        outputs: [{ name: mapReduceName, alias: resource }],
         entities: [
           u.opEntity({
             operator: "map_reduce",
@@ -1646,16 +1660,9 @@ export function initTests(
             operator: "merge",
             name: mergeName,
             inputs: ["/input1/", "/input2/"],
-            outputs: [mapReduceName],
           }),
-          u.inputEntity({
-            name: "/input1/",
-            outputs: [mergeName],
-          }),
-          u.inputEntity({
-            name: "/input2/",
-            outputs: [mergeName],
-          }),
+          u.inputEntity({ name: "/input1/" }),
+          u.inputEntity({ name: "/input2/" }),
         ],
         reads: [],
       }),
@@ -1812,7 +1819,12 @@ export function initTests(
       });
       const shared = service.debug().sharedGraph();
       expect(shared).toEqual({
-        entities: [u.input("input1"), u.input("input2")],
+        inputs: [u.input("input1"), u.input("input2")],
+        outputs: [u.input("input1"), u.input("input2")],
+        entities: [
+          u.inputEntity({ name: "/input1/" }),
+          u.inputEntity({ name: "/input2/" }),
+        ],
         reads: [],
       });
       const resourceGraph = service.debug().resourceGraph(resource)!;
@@ -1820,6 +1832,8 @@ export function initTests(
       const remoteName =
         "/sk/resource_mappers/external/b64_e30./remote/external/mock/b64_eyJ2MSI6ICI2IiwgInYyIjogIjExIn0./";
       expect(resourceGraph).toEqual({
+        inputs: [u.input("input1"), u.input("input2")],
+        outputs: [{ name: mapName, alias: resource }],
         entities: [
           u.opEntity({
             name: mapName,
@@ -1830,8 +1844,6 @@ export function initTests(
           }),
           u.inputEntity({
             name: "/input1/",
-            outputs: [mapName],
-            // alias: "input1",
           }),
           u.opEntity({
             operator: "remote",
