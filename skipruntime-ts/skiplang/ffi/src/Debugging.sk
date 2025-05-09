@@ -109,7 +109,7 @@ private fun entityToJson(entity: Entity): SKJSON.CJObject {
       name,
     )
   };
-  metadata(name).each(m -> vector.push(("metadata", m)));
+  type(name).each(m -> vector.push(("type", m)));
   SKJSON.CJObject(SKJSON.CJFields::create(vector.toArray(), x -> x))
 }
 
@@ -163,7 +163,7 @@ base class MDId {
     )
 }
 
-private fun metadata(name: String): ?SKJSON.CJObject {
+private fun type(name: String): ?SKJSON.CJObject {
   collectInfo = (path, expected) -> {
     elements = path.split("/");
     size = elements.size();
@@ -185,19 +185,19 @@ private fun metadata(name: String): ?SKJSON.CJObject {
         );
         Some((elements[expected - 1], ids.toArray(), Array[]))
       } else {
-        invariant_violation(`metadata[1]: Unknown name ${name}`)
+        invariant_violation(`type[1]: Unknown name ${name}`)
       }
     } else if (size == expected + 5 || size == expected + 4) {
       invariant(
         elements[expected - 1] == "remote",
-        `metadata[2]: Unknown name ${name}`,
+        `type[2]: Unknown name ${name}`,
       );
       supplier = elements[expected];
       resource = elements[expected + 1];
       params = unbase64(elements[expected + 2], SKJSON.decode);
       Some(("remote", Array[], Array[externalInfo(supplier, resource, params)]))
     } else {
-      invariant_violation(`metadata[3]: Unknown name ${name}`)
+      invariant_violation(`type[3]: Unknown name ${name}`)
     }
   };
   (op, ids, infos) = if (name.startsWith("/sk/mappers/")) {
@@ -210,21 +210,21 @@ private fun metadata(name: String): ?SKJSON.CJObject {
       // Input
       return None()
     };
-    invariant_violation(`TODO:[metadata] ${name}`);
+    invariant_violation(`TODO:[type] ${name}`);
   };
-  metadata = mutable Vector<(String, SKJSON.CJSON)>[
+  type = mutable Vector<(String, SKJSON.CJSON)>[
     ("operator", SKJSON.CJString(op)),
   ];
   if (!ids.isEmpty() || !infos.isEmpty()) {
-    metadata.push(
+    type.push(
       (
-        "buildinfos",
+        "constructors",
         SKJSON.CJArray(ids.map(i -> i.toDebuggingInfo()).concat(infos)),
       ),
     )
   };
 
-  Some(SKJSON.CJObject(SKJSON.CJFields::create(metadata.toArray())))
+  Some(SKJSON.CJObject(SKJSON.CJFields::create(type.toArray())))
 }
 
 private fun externalInfo(
@@ -252,7 +252,7 @@ private fun externalInfo(
     SKJSON.CJFields::create(
       Array<(String, SKJSON.CJSON)>[
         ("name", SKJSON.CJString(supplier)),
-        ("params", SKJSON.CJArray(Array[p1, p2])),
+        ("parameters", SKJSON.CJArray(Array[p1, p2])),
       ],
     ),
   )
