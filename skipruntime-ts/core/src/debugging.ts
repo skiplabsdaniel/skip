@@ -52,14 +52,15 @@ export type EType = {
 };
 
 export type Entity = {
-  name: Name | string;
+  name: string;
   type?: EType;
   inputs?: string[];
   reads: string[];
-  outputs: string[];
 };
 
 export type Graph = {
+  inputs: Name[];
+  outputs: Name[];
   entities: Entity[];
   reads: Read[];
 };

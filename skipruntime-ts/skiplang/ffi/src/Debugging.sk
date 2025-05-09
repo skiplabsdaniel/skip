@@ -78,38 +78,23 @@ private fun graphToJson(graph: Graph): SKJSON.CJObject {
   SKJSON.CJObject(
     SKJSON.CJFields::create(
       Array<(String, SKJSON.CJSON)>[
+        ("inputs", SKJSON.CJArray(graph.inputs.map(nameToJson))),
+        ("outputs", SKJSON.CJArray(graph.outputs.map(nameToJson))),
         ("entities", SKJSON.CJArray(graph.entities.map(entityToJson))),
         ("reads", SKJSON.CJArray(graph.reads.map(readToJson))),
       ],
-      x -> x,
     ),
   )
 }
 
 private fun entityToJson(entity: Entity): SKJSON.CJObject {
   toJSONString = v -> SKJSON.CJString(v);
-  (vector, name) = entity match {
-  | EEager(name, inputs, reads, outputs) ->
-    (
-      mutable Vector<(String, SKJSON.CJSON)>[
-        ("name", nameToJson(name)),
-        ("inputs", SKJSON.CJArray(inputs.sorted().map(toJSONString))),
-        ("reads", SKJSON.CJArray(reads.sorted().map(toJSONString))),
-        ("outputs", SKJSON.CJArray(outputs.sorted().map(toJSONString))),
-      ],
-      name.name,
-    )
-  | ELazy(name, reads, outputs) ->
-    (
-      mutable Vector<(String, SKJSON.CJSON)>[
-        ("name", toJSONString(name)),
-        ("reads", SKJSON.CJArray(reads.sorted().map(toJSONString))),
-        ("outputs", SKJSON.CJArray(outputs.sorted().map(toJSONString))),
-      ],
-      name,
-    )
-  };
-  type(name).each(m -> vector.push(("type", m)));
+  vector = mutable Vector<(String, SKJSON.CJSON)>[
+    ("name", SKJSON.CJString(entity.name)),
+    ("inputs", SKJSON.CJArray(entity.inputs.sorted().map(toJSONString))),
+    ("reads", SKJSON.CJArray(entity.reads.sorted().map(toJSONString))),
+  ];
+  type(entity.name).each(m -> vector.push(("type", m)));
   SKJSON.CJObject(SKJSON.CJFields::create(vector.toArray(), x -> x))
 }
 
