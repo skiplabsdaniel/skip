@@ -1137,7 +1137,7 @@ export class ToBinding {
     const skjson = this.getJsonConverter();
     const object = this.handles.get(skobject);
     const name = object.name;
-    const params = object.params.map((v) => {
+    const parameters = object.params.map((v) => {
       if (v instanceof EagerCollectionImpl) {
         return {
           type: "collection",
@@ -1152,7 +1152,7 @@ export class ToBinding {
       }
       return { type: "data", value: v as Json };
     });
-    return skjson.exportJSON({ name, params });
+    return skjson.exportJSON({ name, parameters });
   }
 
   //

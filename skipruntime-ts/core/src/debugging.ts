@@ -38,20 +38,22 @@ export type Read = {
   key: Json;
 };
 
-export type BuildInfo = {
+export type Constructor = {
   name: string;
-  params?: {
+  parameters?: {
     type: string;
     value: Json;
   }[];
 };
 
+export type EType = {
+  operator: string;
+  constructors?: Constructor[];
+};
+
 export type Entity = {
   name: Name | string;
-  metadata?: {
-    operator: string;
-    buildinfos?: BuildInfo[];
-  };
+  type?: EType;
   inputs?: string[];
   reads: string[];
   outputs: string[];
