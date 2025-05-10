@@ -1186,6 +1186,7 @@ export function initTests(
           name: takeName,
           operator: "take",
           inputs: [mapName],
+          params: [{ type: "data", value: 7 }],
         }),
         u.opEntity({
           name: mapName,

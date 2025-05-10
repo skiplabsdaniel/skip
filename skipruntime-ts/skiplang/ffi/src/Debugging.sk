@@ -154,11 +154,13 @@ private fun type(name: String): ?SKJSON.CJObject {
     size = elements.size();
     if (size == expected + 2 || size == expected + 3) {
       if (!elements[expected].startsWith("ext_")) {
-        op = elements[expected - 1];
-        if (op.startsWith("take_")) {
-          !op = "take";
+        v = elements[expected - 1];
+        (op, infos) = if (v.startsWith("take_")) {
+          ("take", Array[takeInfo(v.substring(v.getIter().forward(5)).toInt())])
+        } else {
+          (v, Array[])
         };
-        Some((op, Array[], Array[]))
+        Some((op, Array[], infos))
       } else if (size == expected + 2) {
         strid = elements[expected];
         ids = strid.split(".").map(v ->
@@ -210,6 +212,22 @@ private fun type(name: String): ?SKJSON.CJObject {
   };
 
   Some(SKJSON.CJObject(SKJSON.CJFields::create(type.toArray())))
+}
+
+private fun takeInfo(limit: Int): SKJSON.CJObject {
+  p = SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("type", SKJSON.CJString("data")),
+        ("value", SKJSON.CJInt(limit)),
+      ],
+    ),
+  );
+  SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[("parameters", SKJSON.CJArray(Array[p]))],
+    ),
+  )
 }
 
 private fun externalInfo(
