@@ -229,7 +229,19 @@ export function internOpEntity(data: {
   operator?: string;
   inputs?: string[];
   reads?: string[];
+  params?: { type: string; value: Json }[];
 }): Entity {
+  if (data.params) {
+    return {
+      name: data.name,
+      type: {
+        operator: data.operator ?? "lazy",
+        constructors: [{ parameters: data.params }],
+      },
+      inputs: data.inputs ?? [],
+      reads: data.reads ?? [],
+    };
+  }
   return {
     name: data.name,
     type: {
