@@ -39,7 +39,7 @@ export type Read = {
 };
 
 export type Constructor = {
-  name: string;
+  name?: string;
   parameters?: {
     type: string;
     value: Json;
