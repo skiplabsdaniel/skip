@@ -1,0 +1,185 @@
+module Monitor;
+
+mutable class NoopCounter<T: frozen>() extends Counter<T> {
+  //
+  readonly fun chill(): Counter<T> {
+    NoopCounter()
+  }
+
+  readonly fun clone(): mutable Counter<T> {
+    mutable NoopCounter()
+  }
+
+  mutable fun add(
+    _value: T,
+    _service: ?Service = None(),
+    _attributes: Sequence<(String, Value)> = Array[],
+  ): void {
+    void
+  }
+}
+
+mutable class NoopHistogram<T: frozen>() extends Histogram<T> {
+  //
+  readonly fun chill(): Histogram<T> {
+    NoopHistogram()
+  }
+
+  readonly fun clone(): mutable Histogram<T> {
+    mutable NoopHistogram()
+  }
+
+  mutable fun add(
+    _value: T,
+    _service: ?Service = None(),
+    _attributes: Sequence<(String, Value)> = Array[],
+  ): void {
+    void
+  }
+}
+
+mutable class NoopSpan() extends Span {
+  //
+  readonly fun getName(): String {
+    "noop"
+  }
+
+  readonly fun getTraceId(): String {
+    ""
+  }
+
+  readonly fun getSpanId(): String {
+    ""
+  }
+
+  readonly fun getParentId(): ?String {
+    None()
+  }
+
+  readonly fun getStart(): Time {
+    Time(0, 0)
+  }
+
+  readonly fun getEnd(): ?Time {
+    None()
+  }
+
+  readonly fun getKind(): Kind {
+    Internal()
+  }
+
+  readonly fun hasAttributes(): Bool {
+    false
+  }
+
+  readonly fun hasEvents(): Bool {
+    false
+  }
+
+  //
+  readonly fun attributes(): mutable Iterator<(String, Value)> {
+    Array[].values()
+  }
+
+  readonly fun events(): mutable Iterator<Event> {
+    Array[].values()
+  }
+
+  readonly fun status(): (Status, String) {
+    (SUnset(), "")
+  }
+
+  protected readonly fun isRoot(): Bool {
+    false
+  }
+
+  mutable fun setAttribute(_key: String, _value: Value): void {
+    void
+  }
+
+  mutable fun addEvent(_event: Event): void {
+    void
+  }
+
+  /**
+   * Sets the status of the span.
+   * @param status The status to set (e.g., SUnset, SError, SOk).
+   * @param description An optional description of the status.
+   */
+  mutable fun setStatus(_status: Status, _description: String = ""): void {
+    void
+  }
+
+  readonly fun chill(): Span {
+    NoopSpan()
+  }
+
+  readonly fun clone(): mutable Span {
+    mutable NoopSpan()
+  }
+
+  protected mutable fun flush(_monitor: mutable .Monitor): void {
+    void
+  }
+}
+
+mutable class NoopMonitor() extends .Monitor {
+  //
+  mutable fun startSpan(
+    _name: String,
+    _kind: Kind = Internal(),
+    _optService: ?Service = None(),
+  ): mutable Span {
+    mutable NoopSpan()
+  }
+
+  mutable fun endSpan(): void {
+    void
+  }
+
+  mutable fun log(_level: Level, _msg: String, _meta: Logger.Metadata): void {
+    void
+  }
+
+  mutable fun intCounter(
+    _name: String,
+    _unit: ?String = None(),
+    _description: ?String = None(),
+  ): mutable Counter<Int> {
+    mutable NoopCounter<Int>()
+  }
+
+  mutable fun floatCounter(
+    _name: String,
+    _unit: ?String = None(),
+    _description: ?String = None(),
+  ): mutable Counter<Float> {
+    mutable NoopCounter<Float>()
+  }
+
+  mutable fun intHistogram(
+    _name: String,
+    _unit: ?String = None(),
+    _description: ?String = None(),
+  ): mutable Histogram<Int> {
+    mutable NoopHistogram<Int>()
+  }
+
+  mutable fun floatHistogram(
+    _name: String,
+    _unit: ?String = None(),
+    _description: ?String = None(),
+  ): mutable Histogram<Float> {
+    mutable NoopHistogram<Float>()
+  }
+
+  readonly fun clone(): mutable Monitor {
+    mutable NoopMonitor()
+  }
+
+  readonly fun chill(): Monitor {
+    NoopMonitor()
+  }
+}
+
+module end;

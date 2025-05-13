@@ -1,0 +1,130 @@
+module Monitor;
+
+class ConsoleFormater() extends Formater {
+  fun span(span: readonly Span): String {
+    buffer = mutable Vector[
+      `[SPAN]
+Name: ${span.getName()}
+TraceID: ${span.getTraceId()}
+SpanID: ${span.getSpanId()}`,
+    ];
+    span.getParentId().each(parentId ->
+      buffer.push(`ParentSpanID: ${parentId}`)
+    );
+    buffer.push(`Kind: ${span.getKind()}`);
+    buffer.push(`Start: ${span.getStart()}`);
+    span.getEnd().each(time -> buffer.push(`End: ${time}`));
+    if (span.hasAttributes()) {
+      buffer.push("Attributes:");
+      span.attributes().each(item -> buffer.push(`  - ${item.i0}: ${item.i1}`));
+    };
+    if (span.hasEvents()) {
+      buffer.push("Events:");
+      span.events().each(event -> {
+        buffer.push("  - [${event.time}] ${event.name}");
+        event.attributes.items().each(item ->
+          buffer.push(`     ${item.i0}: ${item.i1}`)
+        )
+      });
+    };
+    (status, cause) = span.status();
+    buffer.push(`Status: ${status}`);
+    if (!cause.isEmpty()) {
+      buffer.push(`Cause: ${cause}`);
+    };
+    buffer.join("\n")
+  }
+
+  fun log(
+    traceId: String,
+    time: Time,
+    level: Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): String {
+    `[LOG]
+Timestamp: ${time}
+TraceID: ${traceId}
+Severity: ${level}
+Message:  ${msg}
+Attributes:
+  - code.function: ${
+      meta.typename
+    },
+  - code.filepath: ${meta.filename},
+  - code.lineno: ${meta.lineno}`
+  }
+}
+
+class MarkdownFormater() extends Formater {
+  //
+  fun span(span: readonly Span): String {
+    buffer = mutable Vector[
+      `## [SPAN] ${span.getName()}
+
+- **TraceID**: \`${span.getTraceId()}\`  
+- **SpanID**: \`${span.getSpanId()}\``,
+    ];
+    span.getParentId().each(parentId ->
+      buffer.push(`- **ParentSpanID**: \`${parentId}\``)
+    );
+    buffer.push(`- **Kind**: ${span.getKind()}`);
+    buffer.push(`- **Start**: ${span.getStart()}`);
+    span.getEnd().each(time -> buffer.push(`- **End**: ${time}`));
+    (status, cause) = span.status();
+    buffer.push(`- **Status**: \`${status}\``);
+    if (!cause.isEmpty()) {
+      buffer.push(`**Cause**: ${cause}`);
+    };
+    if (span.hasAttributes()) {
+      buffer.push("### Attributes");
+      buffer.push("| Key | Value |");
+      buffer.push("|-----|-------|");
+      span.attributes().each(item ->
+        buffer.push(`| ${item.i0} | ${item.i1} |`)
+      );
+    };
+    if (span.hasEvents()) {
+      buffer.push("### Events");
+      buffer.push("| Time | Name | Attributes |");
+      span.events().each(event -> {
+        attributes = event.attributes
+          .items()
+          .map(item -> `${item.i0}: ${item.i1}`)
+          .collect(Array)
+          .join(", ");
+        buffer.push(`| ${event.time} | ${event.name} | ${attributes} |`);
+      });
+    };
+    buffer.join("\n")
+  }
+
+  fun log(
+    traceId: String,
+    time: Time,
+    level: Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): String {
+    `## [LOG] ${msg}
+
+- **Timestamp**: ${time}
+- **TraceID**: \`${traceId}\` 
+- **Severity**: \`${level}\`
+
+### Attributes
+
+| Key           | Value |
+|---------------|-------|
+| code.function | ${
+      meta.typename
+    } |
+| code.filepath | ${meta.filename} |
+| code.lineno   | ${
+      meta.lineno
+    } |
+`
+  }
+}
+
+module end;

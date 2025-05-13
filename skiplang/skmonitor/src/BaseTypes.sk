@@ -1,0 +1,386 @@
+module Monitor;
+
+/**
+ * Class for monitoring spans and logging, using a Manager instance.
+ */
+mutable base class .Monitor extends SKStore.ContextExtension uses Logger {
+  /**
+   * Starts a new span with an optional service.
+   * @param optService The optional service associated with the span.
+   * @return The newly created span.
+   */
+  mutable fun startSpan(
+    name: String,
+    kind: Kind = Internal(),
+    optService: ?Service = None(),
+  ): mutable Span;
+
+  mutable fun log(level: Level, msg: String, meta: Logger.Metadata): void;
+
+  mutable fun intCounter(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Counter<Int>;
+
+  mutable fun floatCounter(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Counter<Float>;
+
+  mutable fun intHistogram(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Histogram<Int>;
+
+  mutable fun floatHistogram(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Histogram<Float>;
+}
+
+/**
+ * Trait for logging functionality with various log levels.
+ */
+trait Logger {
+  /**
+   * Logs a message with a specified log level and metadata.
+   * @param level The log level.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun log(level: Level, msg: String, meta: Logger.Metadata): void;
+
+  /**
+   * Logs a trace-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun trace(msg: String, meta: Logger.Metadata): void {
+    this.log(Trace(), msg, meta)
+  }
+
+  /**
+   * Logs a debug-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun debug(msg: String, meta: Logger.Metadata): void {
+    this.log(Debug(), msg, meta)
+  }
+
+  /**
+   * Logs an info-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun info(msg: String, meta: Logger.Metadata): void {
+    this.log(Info(), msg, meta)
+  }
+
+  /**
+   * Logs a warn-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun warn(msg: String, meta: Logger.Metadata): void {
+    this.log(Warn(), msg, meta)
+  }
+
+  /**
+   * Logs an error-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun error(msg: String, meta: Logger.Metadata): void {
+    this.log(Error(), msg, meta)
+  }
+
+  /**
+   * Logs a fatal-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun fatal(msg: String, meta: Logger.Metadata): void {
+    this.log(Fatal(), msg, meta)
+  }
+}
+
+base class Kind uses Show {
+  children =
+  | Internal()
+  | Server()
+  | Client()
+  | Producer()
+  | Consumer()
+
+  fun toString(): String
+  | Internal() -> "INTERNAL"
+  | Server() -> "SERVER"
+  | Client() -> "CLIENT"
+  | Producer() -> "PRODUCER"
+  | Consumer() -> "CONSUMER"
+}
+
+/**
+ * Represents the status of a span.
+ */
+base class Status uses Show {
+  /**
+   * Possible status values: Unset, Error, and Ok.
+   */
+  children =
+  | SUnset()
+  | SError()
+  | SOk()
+
+  /**
+   * Converts the status to a string representation.
+   * @return The string representation of the status.
+   */
+  fun toString(): String
+  | SUnset() -> "Unset"
+  | SError() -> "Error"
+  | SOk() -> "Ok"
+}
+
+/**
+ * A mutable class that represents a span, which is a unit of work in a trace.
+ */
+mutable base class Span uses Logger {
+  //
+  readonly fun chill(): Span;
+
+  readonly fun clone(): mutable Span;
+
+  readonly fun getName(): String;
+
+  readonly fun getTraceId(): String;
+
+  readonly fun getSpanId(): String;
+
+  readonly fun getParentId(): ?String;
+
+  readonly fun getStart(): Time;
+
+  readonly fun getEnd(): ?Time;
+
+  readonly fun getKind(): Kind;
+
+  readonly fun hasAttributes(): Bool;
+
+  readonly fun hasEvents(): Bool;
+
+  //
+  readonly fun attributes(): mutable Iterator<(String, Value)>;
+
+  readonly fun events(): mutable Iterator<Event>;
+
+  readonly fun status(): (Status, String);
+
+  /**
+   * Sets a generic attribute for the span.
+   * @param key The attribute key.
+   * @param value The value of the attribute.
+   */
+  mutable fun setAttribute(key: String, value: Value): void;
+
+  /**
+   * Adds an event to the span.
+   * @param event The event to add.
+   */
+  mutable fun addEvent(event: Event): void;
+
+  /**
+   * Sets the status of the span.
+   * @param status The status to set (e.g., SUnset, SError, SOk).
+   * @param description An optional description of the status.
+   */
+  mutable fun setStatus(status: Status, description: String = ""): void;
+
+  protected mutable fun flush(monitor: mutable .Monitor): void;
+
+  protected readonly fun isRoot(): Bool;
+
+  /**
+   * Ends a span and updates its attributes.
+   */
+  mutable fun end(monitor: mutable .Monitor): void {
+    if (this.isRoot()) {
+      memory = memory();
+      this.setIntAttribute(
+        "skruntime.memory.persistent",
+        memory.persistent.value,
+      );
+      this.setIntAttribute(
+        "skruntime.memory.freetable",
+        memory.freetable.value,
+      );
+      this.setIntAttribute("skruntime.obstack.peak", memory.obstack_peak.value);
+    };
+    this.flush(monitor)
+  }
+
+  /**
+   * Logs a message as an event in the span.
+   * @param level The log level.
+   * @param msg The log message.
+   * @param meta Metadata about the log (e.g., file name, line number).
+   */
+  mutable fun log(level: Level, msg: String, meta: Logger.Metadata): void {
+    this.addEvent(
+      Event::create(
+        "log",
+        Map[
+          "log.severity" => VString(level.toString()),
+          "log.message" => VString(msg),
+          "code.function" => VString(meta.typename),
+          "code.filepath" => VString(meta.filename),
+          "code.lineno" => VInt(meta.lineno),
+        ],
+      ),
+    )
+  }
+
+  /**
+   * Sets a string attribute for the span.
+   * @param key The attribute key.
+   * @param value The string value of the attribute.
+   */
+  mutable fun setStringAttribute(key: String, value: String): void {
+    this.setAttribute(key, VString(value))
+  }
+
+  /**
+   * Sets an integer attribute for the span.
+   * @param key The attribute key.
+   * @param value The integer value of the attribute.
+   */
+  mutable fun setIntAttribute(key: String, value: Int): void {
+    this.setAttribute(key, VInt(value))
+  }
+
+  /**
+   * Sets a float attribute for the span.
+   * @param key The attribute key.
+   * @param value The float value of the attribute.
+   */
+  mutable fun setFloatAttribute(key: String, value: Float): void {
+    this.setAttribute(key, VFloat(value));
+  }
+
+  /**
+   * Sets a boolean attribute for the span.
+   * @param key The attribute key.
+   * @param value The boolean value of the attribute.
+   */
+  mutable fun setBoolAttribute(key: String, value: Bool): void {
+    this.setAttribute(key, VBool(value));
+  }
+
+  /**
+   * Sets an array attribute for the span.
+   * @param key The attribute key.
+   * @param value The array of values for the attribute.
+   */
+  mutable fun setArrayAttribute(key: String, value: Array<Value>): void {
+    this.setAttribute(key, VArray(value));
+  }
+
+  mutable fun setStringArrayAttribute(
+    name: String,
+    value: Array<String>,
+  ): void {
+    this.setArrayAttribute(name, value.map(v ~> VString(v)))
+  }
+
+  mutable fun setIntArrayAttribute(name: String, value: Array<Int>): void {
+    this.setArrayAttribute(name, value.map(v ~> VInt(v)))
+  }
+
+  mutable fun setFloatArrayAttribute(name: String, value: Array<Float>): void {
+    this.setArrayAttribute(name, value.map(v ~> VFloat(v)))
+  }
+
+  mutable fun setBoolArrayAttribute(name: String, value: Array<Bool>): void {
+    this.setArrayAttribute(name, value.map(v ~> VBool(v)))
+  }
+
+  /**
+   * Sets the status of the current span to "Ok".
+   */
+  mutable fun setOkStatus(): void {
+    this.setStatus(SOk())
+  }
+
+  /**
+   * Sets the status of the span to "Error".
+   * @param reason An optional reason for the error status.
+   */
+  mutable fun setErrorStatus(reason: String = ""): void {
+    this.setStatus(SError(), reason)
+  }
+
+  /**
+   * Sets the status of the span to "Unset".
+   */
+  mutable fun setUnsetStatus(): void {
+    this.setStatus(SUnset())
+  }
+}
+
+mutable base class Counter<T: frozen> {
+  //
+  readonly fun chill(): Counter<T>;
+
+  readonly fun clone(): mutable Counter<T>;
+
+  mutable fun add(
+    value: T,
+    service: ?Service = None(),
+    attributes: Sequence<(String, Value)> = Array[],
+  ): void;
+}
+
+mutable base class Histogram<T: frozen> {
+  //
+  readonly fun chill(): Histogram<T>;
+
+  readonly fun clone(): mutable Histogram<T>;
+
+  mutable fun record(
+    value: T,
+    service: ?Service = None(),
+    attributes: Sequence<(String, Value)> = Array[],
+  ): void;
+}
+
+mutable base class FloatMetric {
+  //
+  readonly fun chill(): FloatMetric;
+
+  readonly fun clone(): mutable FloatMetric;
+
+  mutable fun update(value: Float): void;
+}
+
+module end;
+
+module SKStore;
+
+extension class Context {
+  mutable fun monitor(): mutable .Monitor {
+    this.extension match {
+    | Some(m @ .Monitor _) -> m
+    | _ ->
+      invariant_violation(
+        "The extension does not implements .Monitor base class",
+      )
+    }
+  }
+}
+
+module end;

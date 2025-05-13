@@ -1,0 +1,71 @@
+module alias T = SKTest;
+module alias M = Monitor;
+
+module MonitorTest;
+
+mutable class Buffer(
+  private mutable current: ?mutable M.Span = None(),
+  result: mutable Vector<M.Span> = mutable Vector[],
+  logs: mutable Vector<
+    (String, M.Time, M.Level, String, Logger.Metadata),
+  > = mutable Vector[],
+) extends M.Buffer {
+  //
+  readonly fun chill(): M.Buffer {
+    Buffer(this.current.map(s -> s.chill()))
+  }
+
+  readonly fun clone(): mutable M.Buffer {
+    mutable Buffer(this.current.map(s -> s.clone()))
+  }
+
+  mutable fun getCurrentSpan(): ?mutable M.Span {
+    this.current
+  }
+
+  mutable fun setCurrentSpan(span: ?mutable M.Span): void {
+    this.!current = span;
+  }
+
+  mutable fun flush(span: readonly M.Span): void {
+    this.result.push(span.chill());
+  }
+
+  mutable fun log(
+    traceId: String,
+    time: M.Time,
+    level: M.Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): void {
+    this.logs.push((traceId, time, level, msg, meta))
+  }
+}
+
+fun run(buffer: mutable M.Buffer): void {
+  monitor = mutable M.BufferedMonitor(buffer);
+  span = monitor.startSpan("skmonitor.test.trace");
+  span.setIntAttribute("int.attribute", 5);
+  span.setStringAttribute("string.attribute", "my value");
+  span.setFloatAttribute("float.attribute", 2.345);
+  span.setBoolAttribute("bool.attribute", false);
+  #log (span.debug, "Event debug message");
+  #log (span.info, "Event info message");
+  span.setStringArrayAttribute("string.array.attribute", Array["v1", "v2"]);
+  span.setErrorStatus("It's the error");
+  subspan = monitor.startSpan("skmonitor.test.child");
+  subspan.setStringAttribute("child.string.attribute", "I'm a child span.");
+  subspan.end(monitor);
+  span.end(monitor);
+  #log (monitor.info, "Log outside span");
+}
+
+@test
+fun monitor(): void {
+  buffer = mutable Buffer();
+  run(buffer);
+  T.expectEq(buffer.logs.size(), 1);
+  T.expectEq(buffer.result.size(), 2);
+}
+
+module end;

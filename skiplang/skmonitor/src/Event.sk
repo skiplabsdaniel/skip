@@ -1,0 +1,53 @@
+module Monitor;
+
+/**
+ * Represents the log level for an event.
+ */
+base class Level {
+  /**
+   * Possible log levels:
+   * - Error: Represents an error log level.
+   * - Fatal: Represents a fatal log level.
+   * - Trace: Represents a trace log level.
+   * - Debug: Represents a debug log level.
+   * - Info: Represents an informational log level.
+   * - Warn: Represents a warning log level.
+   */
+  children =
+  | Error() /**< Error log level. */
+  | Fatal() /**< Fatal log level. */
+  | Trace() /**< Trace log level. */
+  | Debug() /**< Debug log level. */
+  | Info() /**< Info log level. */
+  | Warn() /**< Warn log level. */
+
+  /**
+   * Converts the log level to its string representation.
+   * @return The string representation of the log level.
+   */
+  fun toString(): String
+  | Error() -> "Error" /**< Converts Error to "Error". */
+  | Fatal() -> "Fatal" /**< Converts Fatal to "Fatal". */
+  | Trace() -> "Trace" /**< Converts Trace to "Trace". */
+  | Debug() -> "Debug" /**< Converts Debug to "Debug". */
+  | Info() -> "Info" /**< Converts Info to "Info". */
+  | Warn() -> "Warn" /**< Converts Warn to "Warn". */
+}
+
+/**
+ * Represents an event with a name, attributes, and a timestamp.
+ */
+class Event(name: String, attributes: Map<String, Value>, time: Time) {
+  //
+  /**
+   * Creates a new event with the current timestamp.
+   * @param name The name of the event.
+   * @param attributes A map of attributes associated with the event.
+   * @return A new Event instance.
+   */
+  static fun create(name: String, attributes: Map<String, Value>): this {
+    Event(name, attributes, now())
+  }
+}
+
+module end;

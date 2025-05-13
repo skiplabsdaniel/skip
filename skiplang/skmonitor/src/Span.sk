@@ -1,0 +1,151 @@
+module Monitor;
+
+/**
+ * Represents a service with a name and version.
+ */
+value class Service(name: String, version: String)
+
+/**
+ * A mutable class that represents a span, which is a unit of work in a trace.
+ */
+mutable class BufferdSpan(
+  name: String, /**< The name of the span. */
+  start: Time, /**< The start time of the span. */
+  traceId: String, /**< The trace ID associated with the span. */
+  spanId: String, /**< The unique ID of the span. */
+  kind: Kind = Internal(),
+  optParent: ?mutable Span = None(), /**< The optional parent span. */
+  mutable optEnd: ?Time = None(), /**< The optional end time of the span. */
+  private attributes_: mutable Map<
+    String,
+    Value,
+  > = mutable Map[], /**< Attributes of the span. */
+  private events_: mutable Vector<
+    Event,
+  > = mutable Vector[], /**< Events associated with the span. */
+  private mutable optStatus: ?(
+    Status,
+    String,
+  ) = None(), /**< The optional status of the span. */
+) extends Span {
+  //
+  readonly fun getName(): String {
+    this.name
+  }
+
+  readonly fun getTraceId(): String {
+    this.traceId
+  }
+
+  readonly fun getSpanId(): String {
+    this.spanId
+  }
+
+  readonly fun getParentId(): ?String {
+    this.optParent.map(p -> p.getSpanId())
+  }
+
+  readonly fun getStart(): Time {
+    this.start
+  }
+
+  readonly fun getEnd(): ?Time {
+    this.optEnd
+  }
+
+  readonly fun getKind(): Kind {
+    this.kind
+  }
+
+  readonly fun hasAttributes(): Bool {
+    !this.attributes_.isEmpty();
+  }
+
+  readonly fun hasEvents(): Bool {
+    !this.events_.isEmpty();
+  }
+
+  //
+  readonly fun attributes(): mutable Iterator<(String, Value)> {
+    this.attributes_.items()
+  }
+
+  readonly fun events(): mutable Iterator<Event> {
+    this.events_.values();
+  }
+
+  readonly fun status(): (Status, String) {
+    this.optStatus.default((SUnset(), ""));
+  }
+
+  protected readonly fun isRoot(): Bool {
+    this.optParent.isNone()
+  }
+
+  /**
+   * Sets a generic attribute for the span.
+   * @param key The attribute key.
+   * @param value The value of the attribute.
+   */
+  mutable fun setAttribute(key: String, value: Value): void {
+    this.attributes_.set(key, value)
+  }
+
+  /**
+   * Adds an event to the span.
+   * @param event The event to add.
+   */
+  mutable fun addEvent(event: Event): void {
+    this.events_.push(event)
+  }
+
+  /**
+   * Sets the status of the span.
+   * @param status The status to set (e.g., SUnset, SError, SOk).
+   * @param description An optional description of the status.
+   */
+  mutable fun setStatus(status: Status, description: String = ""): void {
+    this.!optStatus = if (status is SUnset _) None() else {
+      Some((status, description))
+    }
+  }
+
+  readonly fun chill(): Span {
+    BufferdSpan(
+      this.name,
+      this.start,
+      this.traceId,
+      this.spanId,
+      this.kind,
+      this.optParent.map(p -> p.chill()),
+      this.optEnd,
+      this.attributes_.chill(),
+      this.events_.chill(),
+      this.optStatus,
+    )
+  }
+
+  readonly fun clone(): mutable Span {
+    mutable BufferdSpan(
+      this.name,
+      this.start,
+      this.traceId,
+      this.spanId,
+      this.kind,
+      this.optParent.map(p -> p.clone()),
+      this.optEnd,
+      this.attributes_.clone(),
+      this.events_.clone(),
+      this.optStatus,
+    )
+  }
+
+  protected mutable fun flush(monitor: mutable .Monitor): void {
+    monitor match {
+    | m @ BufferedMonitor _ -> m.flush(this, this.optParent)
+    | _ -> invariant_violation("Must be a Monitor.BufferedMonitor")
+    }
+  }
+}
+
+module end;

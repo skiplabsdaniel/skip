@@ -20,13 +20,12 @@ base class Postponable {
  * @brief Represents an extension that can be started, stopped, cloned as mutable or immutable.
  *
  * This mutable class provides a simple interface for managing the lifecycle and behavior
- * of an extension-like component. It allows for starting and stopping actions, as well as
- * safe mutable or immutable cloning.
+ * of an extension-like component. It allows safe mutable or immutable cloning.
  */
 mutable base class ContextExtension {
   /**
-   * @brief Puts the extension into an immutable state.
-   * @return Returns the current immutable instance.
+   * @brief Creates a immutable clone of the current extension instance.
+   * @return A new, immutable instance that is a copy of the current one.
    */
   readonly fun chill(): this;
 
@@ -35,18 +34,6 @@ mutable base class ContextExtension {
    * @return A new, mutable instance that is a copy of the current one.
    */
   readonly fun clone(): mutable this;
-
-  /**
-   * @brief Starts or activates the extension.
-   * @return Nothing (void).
-   */
-  mutable fun start(): void;
-
-  /**
-   * @brief Stops or deactivates the extension.
-   * @return Nothing (void).
-   */
-  mutable fun stop(): void;
 }
 
 /*****************************************************************************/
@@ -378,14 +365,6 @@ mutable class Context private {
 
   static fun mcreate{}: mutable this {
     mutable static{}
-  }
-
-  mutable fun start(): void {
-    this.extension.each(e -> e.start());
-  }
-
-  mutable fun stop(): void {
-    this.extension.each(e -> e.stop());
   }
 
   fun withGlobals(globals: SortedMap<String, File>): this {
@@ -1636,9 +1615,7 @@ fun runLocked(
   root = gContextGetNoLock();
   start = root.getTick();
   context = root.mclone();
-  context.start();
   f(context);
-  context.stop();
   newRoot = gContextSyncNoLock(
     root.getTick(),
     root,
@@ -1663,9 +1640,7 @@ fun runWithGc(
     initCtx,
     icontext ~> {
       context = icontext.mclone();
-      context.start();
       cop = f(context);
-      context.stop();
       (context.clone(), cop);
     },
     synchronizer,
@@ -1683,9 +1658,7 @@ fun runWithGcReturnContext(
     initCtx,
     icontext ~> {
       context = icontext.mclone();
-      context.start();
       cop = f(context);
-      context.stop();
       (context.clone(), cop);
     },
     synchronizer,
@@ -1971,9 +1944,7 @@ fun runWithResult<T, F>(
   };
   try {
     context = current.mclone();
-    context.start();
     res = f(context);
-    context.stop();
     startTick = current.getTick();
     synchronizer match {
     | None() ->
