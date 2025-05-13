@@ -6,6 +6,13 @@ module alias T = SKTest;
 
 module SKStoreTest;
 
+fun runContext(f: (mutable SKStore.Context) -> void): mutable SKStore.Context {
+  context = SKStore.Context::mcreate{};
+  f(context);
+  context.initPre();
+  context
+}
+
 base class RNbr {
   children =
   | RFixed(Int)
@@ -650,7 +657,7 @@ fun testStress(): void {
     };
     if (context.debugMode) print_string("Running program from scratch");
     newProg = prog;
-    context2 = SKStore.run(context ~> {
+    context2 = runContext(context ~> {
       eval(context, newProg);
     });
     if (context.debugMode) {

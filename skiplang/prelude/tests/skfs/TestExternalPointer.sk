@@ -12,7 +12,7 @@ native fun getFreeTestCounter(): Int;
 fun testExternalPointer(): void {
   gcontext = SKStore.Context::create{};
 
-  SKStore.runWithGc(gcontext, context ~> {
+  runContextWithGc(gcontext, context ~> {
     if (context.getGlobal("Count") is None()) {
       context.setGlobal("Count", SKStore.IntFile(0));
     };

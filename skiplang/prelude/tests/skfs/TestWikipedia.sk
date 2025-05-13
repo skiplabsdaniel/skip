@@ -30,7 +30,7 @@ fun testWikipedia(path: String): mutable SKStore.Context {
     })
     .toArray();
   debug("Loaded the files");
-  SKStore.run(context ~> {
+  runContext(context ~> {
     pages = context.mkdir(
       SKStore.IID::keyType,
       WikiPage::type,
