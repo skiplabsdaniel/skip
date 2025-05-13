@@ -9,7 +9,7 @@ module SKStoreTest;
 @test
 fun testChangesAfter(): void {
   dirName = SKStore.DirName::create("/sinput/");
-  context = SKStore.run(context ~> {
+  context = runContext(context ~> {
     _ = context.mkdir(
       SKStore.IID::keyType,
       SKStore.StringFile::type,
