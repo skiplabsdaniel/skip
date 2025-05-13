@@ -2,7 +2,7 @@
 module SKStoreTest;
 
 fun testUnion(): mutable SKStore.Context {
-  SKStore.run(context ~> {
+  runContext(context ~> {
     getData = (dir, key) -> context.unsafeGetDir(dir.dirName).getArrayRaw(key);
 
     dirInput1 = context.mkdir(
