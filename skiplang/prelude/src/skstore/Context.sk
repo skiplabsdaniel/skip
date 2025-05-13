@@ -15,6 +15,27 @@ base class Postponable {
   fun perform(context: mutable Context): void;
 }
 
+/**
+ * @class ContextExtension
+ * @brief Represents an extension that can be started, stopped, cloned as mutable or immutable.
+ *
+ * This mutable class provides a simple interface for managing the lifecycle and behavior
+ * of an extension-like component. It allows safe mutable or immutable cloning.
+ */
+mutable base class ContextExtension {
+  /**
+   * @brief Creates a immutable clone of the current extension instance.
+   * @return A new, immutable instance that is a copy of the current one.
+   */
+  mutable fun chill(): this;
+
+  /**
+   * @brief Creates a mutable clone of the current extension instance.
+   * @return A new, mutable instance that is a copy of the current one.
+   */
+  readonly fun clone(): mutable this;
+}
+
 /*****************************************************************************/
 /* Sessions. */
 /*****************************************************************************/
@@ -338,6 +359,7 @@ mutable class Context private {
   mutable purgeFrom: (readonly Context, Dir) ~> Tick = (ctx, _) ~>
     Tick(ctx.getTick().value - 1000),
   mutable sourceOverride: ?Path = None(),
+  private mutable extension: ?mutable ContextExtension = None(),
 } {
   static fun create{canReuse: CanReuse = CRIfMatch()}: this {
     static{canReuse}
@@ -445,6 +467,7 @@ mutable class Context private {
       writeChecker => this.writeChecker.map(x -> x.mclone()),
       purgeFrom => this.purgeFrom,
       sourceOverride => this.sourceOverride,
+      extension => this.extension.map(e -> e.clone()),
     }
   }
 
@@ -476,6 +499,7 @@ mutable class Context private {
     this.!writeChecker = ctx.writeChecker.map(x -> x.mclone());
     this.!purgeFrom = ctx.purgeFrom;
     this.!sourceOverride = ctx.sourceOverride;
+    this.!extension = ctx.extension.map(e -> e.clone());
   }
 
   readonly fun getReads(): SortedSet<Path> {
