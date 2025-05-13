@@ -62,7 +62,7 @@ fun toInt(f: SKStore.File): Int {
 
 @test
 fun testCount(): void {
-  context = SKStore.run(context ~> {
+  context = runContext(context ~> {
     inputFiles = SortedMap[
       SKStore.IID(0) => SKStore.StringFile("23"),
       SKStore.IID(1) => SKStore.StringFile("35"),
