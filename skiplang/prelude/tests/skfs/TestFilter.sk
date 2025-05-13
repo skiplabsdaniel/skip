@@ -345,7 +345,7 @@ fun testFilterRun(
 @test
 fun testFilter(): void {
   config = FilterTestConfig::create();
-  _ = SKStore.run(context ~> {
+  _ = runContext(context ~> {
     for (round in Range(0, config.nbrRounds)) {
       result = testFilterRun(context, config, round);
       T.expectEq(true, result, "Test limit " + round);

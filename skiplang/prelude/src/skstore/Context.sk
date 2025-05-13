@@ -118,17 +118,6 @@ value class ArrowKey private {
 }
 
 /*****************************************************************************/
-/* The function used to start the system. */
-/*****************************************************************************/
-
-fun run(f: (mutable Context) -> void): mutable Context {
-  context = Context::mcreate{};
-  f(context);
-  context.initPre();
-  context
-}
-
-/*****************************************************************************/
 /* Dependencies tracking. */
 /*****************************************************************************/
 
