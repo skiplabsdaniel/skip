@@ -15,7 +15,7 @@ fun testMap(): mutable SKStore.Context {
     (SKStore.IID(1), SKStore.IntFile(1)),
     (SKStore.IID(2), SKStore.IntFile(2)),
   ];
-  SKStore.run(context ~> {
+  runContext(context ~> {
     dir1 = context.mkdir(
       SKStore.IID::keyType,
       SKStore.IntFile::type,
@@ -50,7 +50,7 @@ fun testMap2(): mutable SKStore.Context {
     (SKStore.IID(1), SKStore.StringFile("3")),
     (SKStore.IID(2), SKStore.StringFile("4")),
   ];
-  SKStore.run(context ~> {
+  runContext(context ~> {
     dirStr1 = context.mkdir(
       SKStore.IID::keyType,
       SKStore.StringFile::type,
@@ -104,7 +104,7 @@ fun testMultiMap(): void {
   dirName1 = SKStore.DirName::create("/sinput1/");
   dirName2 = SKStore.DirName::create("/sinput2/");
   dirNameResult = SKStore.DirName::create("/result/");
-  context = SKStore.run(context ~> {
+  context = runContext(context ~> {
     dir1 = context.mkdir(
       SKStore.IID::keyType,
       SKStore.StringFile::type,
@@ -199,7 +199,7 @@ fun testMultiMap(): void {
 fun testMultiMapSameParent(): void {
   dirName1 = SKStore.DirName::create("/sinput1/");
   dirNameResult = SKStore.DirName::create("/result/");
-  context = SKStore.run(context ~> {
+  context = runContext(context ~> {
     dir1 = context.mkdir(
       SKStore.IID::keyType,
       SKStore.StringFile::type,
