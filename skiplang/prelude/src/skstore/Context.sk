@@ -156,17 +156,6 @@ class TArrowKey<K: Orderable & Show>{key: K} extends ArrowKey {
 }
 
 /*****************************************************************************/
-/* The function used to start the system. */
-/*****************************************************************************/
-
-fun run(f: (mutable Context) -> void): mutable Context {
-  context = Context::mcreate{};
-  f(context);
-  context.initPre();
-  context
-}
-
-/*****************************************************************************/
 /* Dependencies tracking. */
 /*****************************************************************************/
 

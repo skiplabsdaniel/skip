@@ -5,7 +5,7 @@ module SKStoreTest;
 @test
 fun testEagerInLazy(): void {
   T.expectThrow(() ->
-    _ = SKStore.run(context ~> {
+    _ = runContext(context ~> {
       dirInput = context.mkdir(
         SKStore.IID::keyType,
         SKStore.IntFile::type,

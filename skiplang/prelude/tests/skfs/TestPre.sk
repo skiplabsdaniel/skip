@@ -4,7 +4,7 @@ module SKStoreTest;
 
 @test
 fun testPre(): void {
-  context = SKStore.run(context ~> {
+  context = runContext(context ~> {
     dirSInput1 = context.mkdir(
       SKStore.IID::keyType,
       SKStore.StringFile::type,

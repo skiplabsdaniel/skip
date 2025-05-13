@@ -4,7 +4,7 @@ module SKStoreTest;
 
 @test
 fun testLazy(): void {
-  context = SKStore.run(context ~> {
+  context = runContext(context ~> {
     dirInput = context.mkdir(
       SKStore.IID::keyType,
       SKStore.IntFile::type,

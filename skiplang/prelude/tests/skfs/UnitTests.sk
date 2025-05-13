@@ -183,7 +183,7 @@ fun testDirs(): void {
 
 @test
 fun testSubDirUnit(): void {
-  _ = SKStore.run(context ~> {
+  _ = runContext(context ~> {
     dir1 = context.mkdir(
       SKStore.IID::keyType,
       SKStore.StringFile::type,

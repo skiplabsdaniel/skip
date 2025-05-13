@@ -8,7 +8,7 @@ fun testSubDir(): void {
     (SKStore.IID(1), SKStore.StringFile("1")),
     (SKStore.IID(2), SKStore.StringFile("2")),
   ];
-  context = SKStore.run(context ~> {
+  context = runContext(context ~> {
     dirStr1 = context.mkdir(
       SKStore.IID::keyType,
       SKStore.StringFile::type,
@@ -124,7 +124,7 @@ fun testSubDir(): void {
 
 @test
 fun testSubSubDirUnit(): void {
-  context = SKStore.run(context ~> {
+  context = runContext(context ~> {
     dir1 = context.mkdir(
       SKStore.IID::keyType,
       SKStore.IntFile::type,
