@@ -102,6 +102,7 @@ class Graph private (
           replace.add(filterSink, n);
           dir
         };
+        lazy = false;
         entity = optDir match {
         | Some(dir) ->
           dir.kind match {
@@ -120,14 +121,16 @@ class Graph private (
               Entity(n, from, rds(n))
             }
 
-          | Lazy _ -> Entity(n, Array[], rds(n))
+          | Lazy _ ->
+            !lazy = true;
+            Entity(n, Array[], rds(n))
           | Deleted _ -> invariant_violation("Cannot be a deleted dir.")
           }
         | _ -> Entity(n, Array[], rds(n))
         };
         entity.getSources().each(next.insert);
         done.add(entity.name);
-        entities.push(entity)
+        if (lazy || !entity.inputs.isEmpty()) entities.push(entity)
       };
       if (next.isEmpty()) {
         break void;
