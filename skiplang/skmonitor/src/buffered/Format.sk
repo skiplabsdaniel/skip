@@ -1,0 +1,237 @@
+module Monitor;
+
+class ConsoleFormater() extends Formater {
+  fun span(span: readonly Span): String {
+    buffer = mutable Vector[
+      `[SPAN]
+Name: ${span.getName()}
+TraceID: ${span.getTraceId()}
+SpanID: ${span.getSpanId()}`,
+    ];
+    span.getParentId().each(parentId ->
+      buffer.push(`ParentSpanID: ${parentId}`)
+    );
+    buffer.push(`Kind: ${span.getKind()}`);
+    buffer.push(`Start: ${span.getStart()}`);
+    span.getEnd().each(time -> buffer.push(`End: ${time}`));
+    attributes = span.getAttributes();
+    if (!attributes.isEmpty()) {
+      buffer.push("Attributes:");
+      attributes.items().each(item ->
+        buffer.push(`  - ${item.i0}: ${item.i1}`)
+      );
+    };
+    events = span.getEvents();
+    if (!events.isEmpty()) {
+      buffer.push("Events:");
+      events.items().each(event -> {
+        buffer.push("  - [${event.time}] ${event.name}");
+        event.attributes.items().each(item ->
+          buffer.push(`     ${item.i0}: ${item.i1}`)
+        )
+      });
+    };
+    (status, cause) = span.status();
+    buffer.push(`Status: ${status}`);
+    if (!cause.isEmpty()) {
+      buffer.push(`Cause: ${cause}`);
+    };
+    buffer.join("\n")
+  }
+
+  fun log(
+    traceId: String,
+    time: Time,
+    level: Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): String {
+    `[LOG]
+Timestamp: ${time}
+TraceID: ${traceId}
+Severity: ${level}
+Message:  ${msg}
+Attributes:
+  - code.function: ${
+      meta.typename
+    },
+  - code.filepath: ${meta.filename},
+  - code.lineno: ${meta.lineno}`
+  }
+
+  fun metric<T: Number>(
+    traceId: String,
+    name: String,
+    kind: String,
+    unit: ?String,
+    description: ?String,
+    attributes: Attributes,
+    data: AData<T>,
+  ): String {
+    buffer = mutable Vector[
+      `[METRIC]
+Name: ${name}
+TraceID: ${traceId}
+Type: ${kind}
+Timestamp:  ${
+        data.time
+      }`,
+    ];
+    description.each(d -> buffer.push(`Description: ${d}`));
+    if (!attributes.isEmpty()) {
+      buffer.push("Attributes:");
+      attributes.items().each(item ->
+        buffer.push(`  - ${item.i0}: ${item.i1}`)
+      );
+    };
+    data match {
+    | AValue(v, _) -> buffer.push(`Value: ${v}`)
+    | ABucket(count, sum, min, max, buckets, _) ->
+      buffer.push(
+        `Data:
+  Count: ${count}
+  Sum: ${sum}
+  Min: ${min}
+  Max: ${max}`,
+      );
+      if (!buckets.isEmpty()) {
+        buffer.push("  Buckets:");
+        buckets.each(bucket ->
+          buffer.push(`    - <= ${bucket.i0}: ${bucket.i1}`)
+        );
+      }
+    };
+    unit.each(u -> buffer.push(`Unit: ${u}`));
+    buffer.join("\n")
+  }
+}
+
+class MarkdownFormater() extends Formater {
+  //
+  fun span(span: readonly Span): String {
+    buffer = mutable Vector[
+      `## [SPAN] ${span.getName()}
+
+- **TraceID**: \`${span.getTraceId()}\`
+- **SpanID**: \`${span.getSpanId()}\``,
+    ];
+    span.getParentId().each(parentId ->
+      buffer.push(`- **ParentSpanID**: \`${parentId}\``)
+    );
+    buffer.push(`- **Kind**: ${span.getKind()}`);
+    buffer.push(`- **Start**: ${span.getStart()}`);
+    span.getEnd().each(time -> buffer.push(`- **End**: ${time}`));
+    (status, cause) = span.status();
+    buffer.push(`- **Status**: \`${status}\``);
+    if (!cause.isEmpty()) {
+      buffer.push(`**Cause**: ${cause}`);
+    };
+    attributes = span.getAttributes();
+    if (!attributes.isEmpty()) {
+      buffer.push("### Attributes\n");
+      buffer.push("| Key | Value |");
+      buffer.push("|-----|-------|");
+      attributes.items().each(item ->
+        buffer.push(`| ${item.i0} | ${item.i1} |`)
+      );
+      buffer.push("");
+    };
+    events = span.getEvents();
+    if (!events.isEmpty()) {
+      buffer.push("### Events\n");
+      buffer.push("| Time | Name | Attributes |");
+      events.items().each(event -> {
+        eAttributes = event.attributes
+          .items()
+          .map(item -> `${item.i0}: ${item.i1}`)
+          .collect(Array)
+          .join(", ");
+        buffer.push(`| ${event.time} | ${event.name} | ${eAttributes} |`);
+        buffer.push("");
+      });
+    };
+    buffer.join("\n")
+  }
+
+  fun log(
+    traceId: String,
+    time: Time,
+    level: Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): String {
+    `## [LOG] ${msg}
+
+- **Timestamp**: ${time}
+- **TraceID**: \`${traceId}\`
+- **Severity**: \`${level}\`
+
+### Attributes
+
+| Key           | Value |
+|---------------|-------|
+| code.function | ${
+      meta.typename
+    } |
+| code.filepath | ${meta.filename} |
+| code.lineno   | ${
+      meta.lineno
+    } |
+`
+  }
+
+  fun metric<T: Number>(
+    traceId: String,
+    name: String,
+    kind: String,
+    unit: ?String,
+    description: ?String,
+    attributes: Attributes,
+    data: AData<T>,
+  ): String {
+    buffer = mutable Vector[
+      `## [SPAN] ${name}
+
+- **TraceID**: \`${traceId}\`
+- **Type**: \`${kind}\`
+- **Timestamp**: ${
+        data.time
+      }`,
+    ];
+    description.each(d -> buffer.push(`- **TraceID**: \`${d}\``));
+    if (!attributes.isEmpty()) {
+      buffer.push("### Attributes\n");
+      buffer.push("| Key | Value |");
+      buffer.push("|-----|-------|");
+      attributes.items().each(item ->
+        buffer.push(`| ${item.i0} | ${item.i1} |`)
+      );
+      buffer.push("");
+    };
+    data match {
+    | AValue(v, _) -> buffer.push(`- **Value**: \`${v}\``)
+    | ABucket(count, sum, min, max, buckets, _) ->
+      buffer.push("### Data\n");
+      buffer.push("| Field | Value |");
+      buffer.push("|-------|-------|");
+      buffer.push(`| Count | \`${count}\` |`);
+      buffer.push(`| Sum   | \`${sum}\` |`);
+      buffer.push(`| Min   | \`${min}\` |`);
+      buffer.push(`| Max   | \`${max}\` |`);
+      if (!buckets.isEmpty()) {
+        buffer.push("  Buckets:");
+        buffer.push("### Buckets\n");
+        buffer.push("| Bucket | Count |");
+        buffer.push("|--------|-------|");
+        buckets.each(bucket ->
+          buffer.push(`| \`<=  ${bucket.i0}\` | \`${bucket.i1}\` |`)
+        );
+        buffer.push("");
+      }
+    };
+    unit.each(u -> buffer.push(`- **Unit**: \`${u}\``));
+    buffer.join("\n")
+  }
+}
+
+module end;
