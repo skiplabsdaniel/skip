@@ -1,0 +1,109 @@
+module Monitor;
+
+/**
+ * Class for monitoring spans and logging, using a Manager instance.
+ */
+mutable base class .Monitor extends SKStore.ContextExtension uses Logger {
+  /**
+   * Starts a new span with an optional service.
+   * @param name The name of the span.
+   * @param kind The kind of span (default: Internal).
+   * @param optService The optional service associated with the span.
+   * @return The newly created span.
+   */
+  mutable fun startSpan(
+    name: String,
+    kind: Kind = Internal(),
+    optService: ?Service = None(),
+  ): mutable Span;
+
+  /**
+   * Logs a message with a specified log level and metadata.
+   * @param level The log level.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun log(level: Level, msg: String, meta: Logger.Metadata): void;
+
+  /**
+   * Creates or retrieves an integer counter metric.
+   * @param name The name of the counter.
+   * @param unit The unit of measurement (optional).
+   * @param description The description of the counter (optional).
+   * @return The integer counter.
+   */
+  mutable fun intCounter(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Counter<Int>;
+
+  /**
+   * Creates or retrieves a float counter metric.
+   * @param name The name of the counter.
+   * @param unit The unit of measurement (optional).
+   * @param description The description of the counter (optional).
+   * @return The float counter.
+   */
+  mutable fun floatCounter(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Counter<Float>;
+
+  /**
+   * Creates or retrieves an integer histogram metric.
+   * @param name The name of the histogram.
+   * @param unit The unit of measurement (optional).
+   * @param description The description of the histogram (optional).
+   * @return The integer histogram.
+   */
+  mutable fun intHistogram(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Histogram<Int>;
+
+  /**
+   * Creates or retrieves a float histogram metric.
+   * @param name The name of the histogram.
+   * @param unit The unit of measurement (optional).
+   * @param description The description of the histogram (optional).
+   * @return The float histogram.
+   */
+  mutable fun floatHistogram(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Histogram<Float>;
+
+  /**
+   * Flushes all collected metrics.
+   */
+  mutable fun flushMetrics(): void;
+}
+
+module end;
+
+module SKStore;
+
+/**
+ * Extension for context to retrieve the monitor instance.
+ */
+extension class Context {
+  /**
+   * Retrieves the monitor instance from the context extension.
+   * @return The monitor instance.
+   */
+  mutable fun monitor(): mutable .Monitor {
+    this.extension match {
+    | Some(m @ .Monitor _) -> m
+    | _ ->
+      invariant_violation(
+        "The extension does not implements .Monitor base class",
+      )
+    }
+  }
+}
+
+module end;
