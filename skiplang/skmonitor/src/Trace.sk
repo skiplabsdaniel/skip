@@ -1,0 +1,497 @@
+module Monitor;
+
+/**
+ * Represents the log level for an event.
+ */
+base class Level {
+  /**
+   * Possible log levels:
+   * - Error: Represents an error log level.
+   * - Fatal: Represents a fatal log level.
+   * - Trace: Represents a trace log level.
+   * - Debug: Represents a debug log level.
+   * - Info: Represents an informational log level.
+   * - Warn: Represents a warning log level.
+   */
+  children =
+  | Error() /**< Error log level. */
+  | Fatal() /**< Fatal log level. */
+  | Trace() /**< Trace log level. */
+  | Debug() /**< Debug log level. */
+  | Info() /**< Info log level. */
+  | Warn() /**< Warn log level. */
+
+  /**
+   * Converts the log level to its string representation.
+   * @return The string representation of the log level.
+   */
+  fun toString(): String
+  | Error() -> "Error" /**< Converts Error to "Error". */
+  | Fatal() -> "Fatal" /**< Converts Fatal to "Fatal". */
+  | Trace() -> "Trace" /**< Converts Trace to "Trace". */
+  | Debug() -> "Debug" /**< Converts Debug to "Debug". */
+  | Info() -> "Info" /**< Converts Info to "Info". */
+  | Warn() -> "Warn" /**< Converts Warn to "Warn". */
+}
+
+/**
+ * Represents an event with a name, attributes, and a timestamp.
+ */
+value class Event(name: String, attributes: Attributes, time: Time)
+
+/**
+ * Represents a service with a name and version.
+ */
+value class Service(name: String, version: String) uses Hashable, Equality
+
+/**
+ * Represents a collection of attributes.
+ */
+mutable base class AttributesBase {
+  /**
+   * Sets a string attribute.
+   * @param key The attribute key.
+   * @param value The string value.
+   */
+  mutable fun setStringAttribute(key: String, value: String): void;
+
+  /**
+   * Sets an integer attribute.
+   * @param key The attribute key.
+   * @param value The integer value.
+   */
+  mutable fun setIntAttribute(key: String, value: Int): void;
+
+  /**
+   * Sets a float attribute.
+   * @param key The attribute key.
+   * @param value The float value.
+   */
+  mutable fun setFloatAttribute(key: String, value: Float): void;
+
+  /**
+   * Sets a boolean attribute.
+   * @param key The attribute key.
+   * @param value The boolean value.
+   */
+  mutable fun setBoolAttribute(key: String, value: Bool): void;
+
+  /**
+   * Sets an array of strings as an attribute.
+   * @param name The attribute key.
+   * @param value The array of string values.
+   */
+  mutable fun setStringArrayAttribute(name: String, value: Array<String>): void;
+
+  /**
+   * Sets an array of integers as an attribute.
+   * @param name The attribute key.
+   * @param value The array of integer values.
+   */
+  mutable fun setIntArrayAttribute(name: String, value: Array<Int>): void;
+
+  /**
+   * Sets an array of floats as an attribute.
+   * @param name The attribute key.
+   * @param value The array of float values.
+   */
+  mutable fun setFloatArrayAttribute(name: String, value: Array<Float>): void;
+
+  /**
+   * Sets an array of booleans as an attribute.
+   * @param name The attribute key.
+   * @param value The array of boolean values.
+   */
+  mutable fun setBoolArrayAttribute(name: String, value: Array<Bool>): void;
+}
+
+/**
+ * Represents a collection of attributes for a span or event.
+ */
+mutable base class Attributes extends AttributesBase uses Hashable, Equality {
+  /**
+   * Returns a read-only version of the attributes.
+   * @return A read-only Attributes instance.
+   */
+  readonly fun chill(): this;
+
+  /**
+   * Clones the attributes.
+   * @return A mutable copy of the attributes.
+   */
+  readonly fun clone(): mutable this;
+
+  /**
+   * Checks if the attributes are empty.
+   * @return True if empty, false otherwise.
+   */
+  readonly fun isEmpty(): Bool;
+
+  /**
+   * Returns an iterator over the attribute items.
+   * @return An iterator of (key, value) pairs.
+   */
+  readonly fun items(): mutable Iterator<(String, Value)>;
+}
+
+/**
+ * Represents a collection of events for a span.
+ */
+mutable base class Events {
+  /**
+   * Returns a read-only version of the events.
+   * @return A read-only Events instance.
+   */
+  readonly fun chill(): Events;
+
+  /**
+   * Clones the events.
+   * @return A mutable copy of the events.
+   */
+  readonly fun clone(): mutable Events;
+
+  /**
+   * Checks if the events are empty.
+   * @return True if empty, false otherwise.
+   */
+  readonly fun isEmpty(): Bool;
+
+  /**
+   * Returns an iterator over the events.
+   * @return An iterator of Event instances.
+   */
+  readonly fun items(): mutable Iterator<Event>;
+
+  /**
+   * Adds an event and returns its attributes.
+   * @param name The name of the event.
+   * @return The mutable Attributes for the event.
+   */
+  mutable fun addEvent(name: String): mutable Attributes;
+}
+
+/**
+ * Trait for logging functionality with various log levels.
+ */
+trait Logger {
+  /**
+   * Logs a message with a specified log level and metadata.
+   * @param level The log level.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun log(level: Level, msg: String, meta: Logger.Metadata): void;
+
+  /**
+   * Logs a trace-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun trace(msg: String, meta: Logger.Metadata): void {
+    this.log(Trace(), msg, meta)
+  }
+
+  /**
+   * Logs a debug-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun debug(msg: String, meta: Logger.Metadata): void {
+    this.log(Debug(), msg, meta)
+  }
+
+  /**
+   * Logs an info-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun info(msg: String, meta: Logger.Metadata): void {
+    this.log(Info(), msg, meta)
+  }
+
+  /**
+   * Logs a warn-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun warn(msg: String, meta: Logger.Metadata): void {
+    this.log(Warn(), msg, meta)
+  }
+
+  /**
+   * Logs an error-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun error(msg: String, meta: Logger.Metadata): void {
+    this.log(Error(), msg, meta)
+  }
+
+  /**
+   * Logs a fatal-level message.
+   * @param msg The message to log.
+   * @param meta Additional metadata for the log.
+   */
+  mutable fun fatal(msg: String, meta: Logger.Metadata): void {
+    this.log(Fatal(), msg, meta)
+  }
+}
+
+/**
+ * Represents the kind of a span.
+ */
+base class Kind uses Show {
+  /**
+   * Possible kinds of spans:
+   * - Internal
+   * - Server
+   * - Client
+   * - Producer
+   * - Consumer
+   */
+  children =
+  | Internal() /**< Internal span. */
+  | Server() /**< Server span. */
+  | Client() /**< Client span. */
+  | Producer() /**< Producer span. */
+  | Consumer() /**< Consumer span. */
+
+  /**
+   * Converts the kind to a string representation.
+   * @return The string representation of the kind.
+   */
+  fun toString(): String
+  | Internal() -> "INTERNAL"
+  | Server() -> "SERVER"
+  | Client() -> "CLIENT"
+  | Producer() -> "PRODUCER"
+  | Consumer() -> "CONSUMER"
+}
+
+/**
+ * Represents the status of a span.
+ */
+base class Status uses Show {
+  /**
+   * Possible status values: Unset, Error, and Ok.
+   */
+  children =
+  | SUnset() /**< Unset status. */
+  | SError() /**< Error status. */
+  | SOk() /**< Ok status. */
+
+  /**
+   * Converts the status to a string representation.
+   * @return The string representation of the status.
+   */
+  fun toString(): String
+  | SUnset() -> "Unset"
+  | SError() -> "Error"
+  | SOk() -> "Ok"
+}
+
+/**
+ * A mutable class that represents a span, which is a unit of work in a trace.
+ * Provides methods for managing span lifecycle, attributes, events, and status.
+ */
+mutable base class Span uses Logger {
+  //
+  /**
+   * Returns a read-only version of the span.
+   * @return A read-only Span instance.
+   */
+  readonly fun chill(): Span;
+
+  /**
+   * Clones the span.
+   * @return A mutable copy of the span.
+   */
+  readonly fun clone(): mutable Span;
+
+  /**
+   * Gets the name of the span.
+   * @return The span name.
+   */
+  readonly fun getName(): String;
+
+  /**
+   * Gets the trace ID associated with the span.
+   * @return The trace ID.
+   */
+  readonly fun getTraceId(): String;
+
+  /**
+   * Gets the unique span ID.
+   * @return The span ID.
+   */
+  readonly fun getSpanId(): String;
+
+  /**
+   * Gets the parent span ID, if any.
+   * @return The parent span ID or None.
+   */
+  readonly fun getParentId(): ?String;
+
+  /**
+   * Gets the start time of the span.
+   * @return The start time.
+   */
+  readonly fun getStart(): Time;
+
+  /**
+   * Gets the end time of the span, if ended.
+   * @return The end time or None.
+   */
+  readonly fun getEnd(): ?Time;
+
+  /**
+   * Gets the kind of the span (e.g., Internal, Server).
+   * @return The span kind.
+   */
+  readonly fun getKind(): Kind;
+
+  /**
+   * Gets the mutable attributes of the span.
+   * @return The mutable Attributes instance.
+   */
+  mutable fun attributes(): mutable Attributes;
+
+  /**
+   * Gets the read-only attributes of the span.
+   * @return The read-only Attributes instance.
+   */
+  readonly fun getAttributes(): readonly Attributes;
+
+  /**
+   * Gets the mutable events of the span.
+   * @return The mutable Events instance.
+   */
+  mutable fun events(): mutable Events;
+
+  /**
+   * Gets the read-only events of the span.
+   * @return The read-only Events instance.
+   */
+  readonly fun getEvents(): readonly Events;
+
+  /**
+   * Gets the status and description of the span.
+   * @return A tuple of (Status, description).
+   */
+  readonly fun status(): (Status, String);
+
+  /**
+   * Sets the status of the span.
+   * @param status The status to set (e.g., SUnset, SError, SOk).
+   * @param description An optional description of the status.
+   */
+  mutable fun setStatus(status: Status, description: String = ""): void;
+
+  /**
+   * Flushes the span data to the monitor.
+   * @param monitor The monitor instance.
+   */
+  protected mutable fun flush(monitor: mutable .Monitor): void;
+
+  /**
+   * Checks if the span is a root span (has no parent).
+   * @return True if root, false otherwise.
+   */
+  protected readonly fun isRoot(): Bool;
+
+  /**
+   * Ends a span and updates its attributes.
+   * If the span is a root span, memory usage attributes are set.
+   * @param monitor The monitor instance.
+   */
+  mutable fun end(monitor: mutable .Monitor): void {
+    if (this.isRoot()) {
+      memory = memory();
+      attributes = this.attributes();
+      attributes.setIntAttribute(
+        "skruntime.memory.persistent",
+        memory.persistent.value,
+      );
+      attributes.setIntAttribute(
+        "skruntime.memory.freetable",
+        memory.freetable.value,
+      );
+      attributes.setIntAttribute(
+        "skruntime.obstack.peak",
+        memory.obstack_peak.value,
+      );
+    };
+    this.flush(monitor)
+  }
+
+  /**
+   * Logs a message as an event in the span.
+   * @param level The log level.
+   * @param msg The log message.
+   * @param meta Metadata about the log (e.g., file name, line number).
+   */
+  mutable fun log(level: Level, msg: String, meta: Logger.Metadata): void {
+    attributes = this.events().addEvent("log");
+    attributes.setStringAttribute("log.severity", level.toString());
+    attributes.setStringAttribute("log.message", msg);
+    attributes.setStringAttribute("code.function", meta.typename);
+    attributes.setStringAttribute("code.filepath", meta.filename);
+    attributes.setStringAttribute("code.lineno", meta.lineno.toString());
+  }
+
+  /**
+   * Sets the status of the current span to "Ok".
+   */
+  mutable fun setOkStatus(): void {
+    this.setStatus(SOk())
+  }
+
+  /**
+   * Sets the status of the span to "Error".
+   * @param reason An optional reason for the error status.
+   */
+  mutable fun setErrorStatus(reason: String = ""): void {
+    this.setStatus(SError(), reason)
+  }
+
+  /**
+   * Sets the status of the span to "Unset".
+   */
+  mutable fun setUnsetStatus(): void {
+    this.setStatus(SUnset())
+  }
+}
+
+/**
+ * Retrieves the current memory usage.
+ * @return The current memory usage as a Memory instance.
+ */
+@debug
+@cpp_extern
+native fun memory(): Memory;
+
+/**
+ * Generates a new trace ID.
+ * @return The generated trace ID.
+ */
+fun traceId(): String {
+  low = get_session_low();
+  high = get_session_high();
+  TraceId::fromHighAndLow(high, low)
+}
+
+/**
+ * Retrieves the high part of the session ID.
+ * @return The high part of the session ID.
+ */
+@cpp_extern
+native fun get_session_high(): Int;
+
+/**
+ * Retrieves the low part of the session ID.
+ * @return The low part of the session ID.
+ */
+@cpp_extern
+native fun get_session_low(): Int;
+
+module end;

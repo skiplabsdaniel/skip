@@ -1,0 +1,42 @@
+module Monitor;
+
+/**
+ * Represents a value that can be of various types, such as integer, float, boolean, string, or an array of values.
+ */
+base class Value uses Show, Hashable, Equality {
+  /**
+   * Possible types of values:
+   * - VInt: Represents an integer value.
+   * - VFloat: Represents a floating-point value.
+   * - VBool: Represents a boolean value.
+   * - VString: Represents a string value.
+   * - VArray: Represents an array of values.
+   */
+  children =
+  | VInt(Int) /**< Integer value. */
+  | VFloat(Float) /**< Floating-point value. */
+  | VBool(Bool) /**< Boolean value. */
+  | VString(String) /**< String value. */
+  | VArray(Array<Value>) /**< Array of values. */
+
+  /**
+   * Converts the value to its string representation.
+   * @return The string representation of the value.
+   */
+  fun toString(): String
+  | VInt(v) -> v.toString() /**< Converts an integer value to a string. */
+  | VFloat(v) ->
+    v.toString() /**< Converts a floating-point value to a string. */
+  | VBool(v) -> v.toString() /**< Converts a boolean value to a string. */
+  | VString(v) -> v.toString() /**< Converts a string value to a string. */
+  | VArray(v) -> v.toString() /**< Converts an array of values to a string. */
+
+  fun duplicate(): Value
+  | VInt(v) -> VInt(v)
+  | VFloat(v) -> VFloat(v)
+  | VBool(v) -> VBool(v)
+  | VString(v) -> VString(v)
+  | VArray(v) -> VArray(v.map(e -> e.duplicate()))
+}
+
+module end;

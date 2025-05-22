@@ -1,0 +1,12 @@
+[package]
+name = "skmonitor"
+version = "0.1.0"
+
+[build-dependencies]
+cc = { "path" = "../cc" }
+
+[dependencies]
+std = { path = "../prelude" }
+
+[dev-dependencies]
+sktest = { path = "../sktest" }
