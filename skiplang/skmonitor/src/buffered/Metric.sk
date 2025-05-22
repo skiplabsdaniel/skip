@@ -1,0 +1,288 @@
+module Monitor;
+
+const defaultBuckets: Array<Int> = Array[
+  0,
+  5,
+  10,
+  25,
+  50,
+  75,
+  100,
+  250,
+  500,
+  750,
+  1000,
+  2500,
+  5000,
+  7500,
+  10000,
+];
+
+class ValueKey(
+  service: ?Service,
+  attributes: Array<(String, Value)>,
+) uses Hashable, Equality {
+  fun allAttributes(): Array<(String, Value)> {
+    this.service match {
+    | Some(service) ->
+      Array[
+        ("service.name", VString(service.name)),
+        ("service.version", VString(service.version)),
+      ].concat(this.attributes)
+    | _ -> this.attributes
+    }
+  }
+}
+
+base class AData<T: frozen>(time: Time) {
+  children =
+  | AValue(t: T)
+  | ABucket(count: Int, sum: T, min: T, max: T, buckets: Array<(T, Int)>)
+}
+
+base class Aggregator<T: frozen> {
+  fun update(value: T): this;
+
+  fun getData(): AData<T>;
+}
+
+class ReduceAggregator<T: frozen>(
+  time: Time,
+  current: T,
+  compute: (T, T) ~> T,
+) extends Aggregator<T> {
+  fun update(value: T): this {
+    !this.time = now();
+    !this.current = this.compute(this.current, value);
+    this
+  }
+
+  fun getData(): AData<T> {
+    AValue(this.current, this.time)
+  }
+}
+
+mutable class BufferedMetric<T: frozen>{
+  traceId: String,
+  name: String,
+  unit: ?String = None(),
+  description: ?String = None(),
+  values: mutable Map<Attributes, Aggregator<T>> = mutable Map[],
+} {
+  readonly fun clone(): mutable BufferedMetric<T> {
+    mutable BufferedMetric{
+      traceId => this.traceId,
+      name => this.name,
+      unit => this.unit,
+      description => this.description,
+      values => this.values.clone(),
+    }
+  }
+
+  readonly fun chill(): BufferedMetric<T> {
+    BufferedMetric{
+      traceId => this.traceId,
+      name => this.name,
+      unit => this.unit,
+      description => this.description,
+      values => this.values.chill(),
+    }
+  }
+
+  readonly fun data(): mutable Iterator<(Attributes, AData<T>)> {
+    for (key => value in this.values) {
+      yield (key, value.getData())
+    }
+  }
+}
+
+mutable class BufferedValueBuilder(
+  end_: (Attributes) -> void,
+  private attributes: mutable BufferedAttributes = mutable BufferedAttributes(),
+) extends ValueBuilder {
+  //
+  mutable fun end(): void {
+    this.end_(this.attributes.chill())
+  }
+
+  mutable fun setStringAttribute(key: String, value: String): void {
+    this.attributes.setStringAttribute(key, value)
+  }
+
+  mutable fun setIntAttribute(key: String, value: Int): void {
+    this.attributes.setIntAttribute(key, value)
+  }
+
+  mutable fun setFloatAttribute(key: String, value: Float): void {
+    this.attributes.setFloatAttribute(key, value);
+  }
+
+  mutable fun setBoolAttribute(key: String, value: Bool): void {
+    this.attributes.setBoolAttribute(key, value);
+  }
+
+  mutable fun setStringArrayAttribute(
+    name: String,
+    value: Array<String>,
+  ): void {
+    this.attributes.setStringArrayAttribute(name, value)
+  }
+
+  mutable fun setIntArrayAttribute(name: String, value: Array<Int>): void {
+    this.attributes.setIntArrayAttribute(name, value)
+  }
+
+  mutable fun setFloatArrayAttribute(name: String, value: Array<Float>): void {
+    this.attributes.setFloatArrayAttribute(name, value)
+  }
+
+  mutable fun setBoolArrayAttribute(name: String, value: Array<Bool>): void {
+    this.attributes.setBoolArrayAttribute(name, value)
+  }
+}
+
+mutable class BufferedCounter<T: Number>(
+  metric: mutable BufferedMetric<T>,
+) extends Counter<T> {
+  //
+  static fun create<T1: Number>(
+    traceId: String,
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable BufferedCounter<T1> {
+    mutable BufferedCounter<T1>(
+      mutable BufferedMetric<T1>{traceId, name, unit, description},
+    )
+  }
+
+  readonly fun chill(): BufferedCounter<T> {
+    BufferedCounter(this.metric.chill())
+  }
+
+  readonly fun clone(): mutable BufferedCounter<T> {
+    mutable BufferedCounter(this.metric.clone())
+  }
+
+  mutable fun add(value: T, service: ?Service = None()): mutable ValueBuilder {
+    attributes = mutable BufferedAttributes();
+    service.each(s -> {
+      attributes.setStringAttribute("service.name", s.name);
+      attributes.setStringAttribute("service.version", s.version);
+    });
+    mutable BufferedValueBuilder(
+      key -> {
+        aggr = this.metric.values.maybeGet(key) match {
+        | Some(aggr) -> aggr.update(value)
+        | _ -> ReduceAggregator(now(), value, (v1, v2) ~> v1 + v2)
+        };
+        this.metric.values.set(key, aggr)
+      },
+      attributes,
+    )
+  }
+}
+
+class BucketAggregator<T: Number>(
+  time: Time,
+  buckets: Array<T>,
+  count: Int,
+  sum: T,
+  min: T,
+  max: T,
+  bucketsCount: SortedMap<Int, Int> = SortedMap[],
+) extends Aggregator<T> {
+  //
+  static fun create(buckets: Array<T>, value: T): this {
+    bucketsCount = SortedMap<Int, Int>[];
+    incr = (idx) ->
+      bucketsCount.maybeGet(idx) match {
+      | Some(c) -> !bucketsCount = bucketsCount.set(idx, c + 1)
+      | _ -> !bucketsCount = bucketsCount.set(idx, 1)
+      };
+    buckets.eachWithIndex((idx, comp) -> if (value < comp) incr(idx));
+    BucketAggregator(now(), buckets, 1, value, value, value, bucketsCount)
+  }
+
+  fun update(value: T): this {
+    bucketsCount = this.bucketsCount;
+    incr = (idx) ->
+      bucketsCount.maybeGet(idx) match {
+      | Some(c) -> !bucketsCount = bucketsCount.set(idx, c + 1)
+      | _ -> !bucketsCount = bucketsCount.set(idx, 1)
+      };
+    this.buckets.eachWithIndex((idx, comp) -> if (value < comp) incr(idx));
+    BucketAggregator(
+      now(),
+      this.buckets,
+      1,
+      this.sum + value,
+      if (value < this.min) value else this.min,
+      if (value > this.max) value else this.max,
+      bucketsCount,
+    )
+  }
+
+  fun getData(): AData<T> {
+    ABucket(
+      this.count,
+      this.sum,
+      this.min,
+      this.max,
+      this.buckets.mapWithIndex((idx, v) ->
+        (v, this.bucketsCount.maybeGet(idx).default(0))
+      ),
+      this.time,
+    )
+  }
+}
+
+mutable class BufferedHistogram<T: Number>(
+  metric: mutable BufferedMetric<T>,
+  buckets: Array<T>,
+) extends Histogram<T> {
+  //
+  static fun create<T1: Number>(
+    traceId: String,
+    name: String,
+    buckets: Array<T1>,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable BufferedHistogram<T1> {
+    mutable BufferedHistogram<T1>(
+      mutable BufferedMetric<T1>{traceId, name, unit, description},
+      buckets,
+    )
+  }
+
+  readonly fun chill(): BufferedHistogram<T> {
+    BufferedHistogram(this.metric.chill(), this.buckets)
+  }
+
+  readonly fun clone(): mutable BufferedHistogram<T> {
+    mutable BufferedHistogram(this.metric.clone(), this.buckets)
+  }
+
+  mutable fun record(
+    value: T,
+    service: ?Service = None(),
+  ): mutable ValueBuilder {
+    attributes = mutable BufferedAttributes();
+    service.each(s -> {
+      attributes.setStringAttribute("service.name", s.name);
+      attributes.setStringAttribute("service.version", s.version);
+    });
+    mutable BufferedValueBuilder(
+      key -> {
+        aggr = this.metric.values.maybeGet(key) match {
+        | Some(aggr) -> aggr.update(value)
+        | _ -> BucketAggregator::create(this.buckets, value)
+        };
+        this.metric.values.set(key, aggr)
+      },
+      attributes,
+    )
+  }
+}
+
+module end;

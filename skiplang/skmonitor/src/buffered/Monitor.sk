@@ -1,0 +1,426 @@
+module Monitor;
+
+base mutable class Buffer {
+  //
+  readonly fun chill(): Buffer;
+
+  readonly fun clone(): mutable Buffer;
+
+  mutable fun getCurrentSpan(): ?mutable Span;
+
+  mutable fun setCurrentSpan(?mutable Span): void;
+
+  mutable fun flush(span: readonly Span): void;
+
+  mutable fun flushCounter<T: Number>(
+    counter: readonly BufferedCounter<T>,
+  ): void;
+
+  mutable fun flushHistogram<T: Number>(
+    counter: readonly BufferedHistogram<T>,
+  ): void;
+
+  mutable fun log(
+    traceId: String,
+    time: Time,
+    level: Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): void;
+
+  overridable readonly fun getTraceId(): ?String {
+    None()
+  }
+}
+
+base class Formater {
+  fun span(readonly Span): String;
+  fun log(
+    traceId: String,
+    time: Time,
+    level: Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): String;
+
+  fun metric<T: Number>(
+    traceId: String,
+    name: String,
+    kind: String,
+    unit: ?String,
+    description: ?String,
+    attributes: Attributes,
+    data: AData<T>,
+  ): String;
+}
+
+mutable class BufferedMonitor(
+  private buffer: mutable Buffer,
+  buckets: Map<String, Array<Int>> = Map[],
+  private intCounters: mutable Map<
+    String,
+    mutable BufferedCounter<Int>,
+  > = mutable Map[],
+  private floatCounters: mutable Map<
+    String,
+    mutable BufferedCounter<Float>,
+  > = mutable Map[],
+  private intHistograms: mutable Map<
+    String,
+    mutable BufferedHistogram<Int>,
+  > = mutable Map[],
+  private floatHistograms: mutable Map<
+    String,
+    mutable BufferedHistogram<Float>,
+  > = mutable Map[],
+) extends .Monitor {
+  //
+  mutable fun flush(span: readonly Span, optParent: ?mutable Span): void {
+    this.buffer.setCurrentSpan(optParent);
+    this.buffer.flush(span)
+  }
+
+  mutable fun startSpan(
+    name: String,
+    kind: Kind = Internal(),
+    optService: ?Service = None(),
+  ): mutable Span {
+    traceId = this.buffer.getTraceId().default(traceId());
+    span = mutable BufferedSpan(
+      name,
+      now(),
+      traceId,
+      SpanId::fromInt(Random.next()),
+      kind,
+      this.buffer.getCurrentSpan(),
+    );
+    optService.each(service -> {
+      attributes = span.attributes();
+      attributes.setStringAttribute("service.name", service.name);
+      attributes.setStringAttribute("service.version", service.version);
+    });
+
+    this.buffer.setCurrentSpan(Some(span));
+    span
+  }
+
+  mutable fun log(level: Level, msg: String, meta: Logger.Metadata): void {
+    traceId = this.buffer.getTraceId().default(traceId());
+    this.buffer.log(traceId, now(), level, msg, meta)
+  }
+
+  mutable fun intCounter(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Counter<Int> {
+    this.counter(name, unit, description, this.intCounters)
+  }
+
+  mutable fun floatCounter(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Counter<Float> {
+    this.counter(name, unit, description, this.floatCounters)
+  }
+
+  mutable fun intHistogram(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Histogram<Int> {
+    this.histogram(name, unit, description, this.intHistograms, v ~> v)
+  }
+
+  mutable fun floatHistogram(
+    name: String,
+    unit: ?String = None(),
+    description: ?String = None(),
+  ): mutable Histogram<Float> {
+    this.histogram(name, unit, description, this.floatHistograms, v ~>
+      v.toFloat()
+    )
+  }
+
+  mutable fun flushMetrics(): void {
+    this.intCounters.values().each(this.buffer.flushCounter);
+    this.floatCounters.values().each(this.buffer.flushCounter);
+    this.intHistograms.values().each(this.buffer.flushHistogram);
+    this.floatHistograms.values().each(this.buffer.flushHistogram);
+  }
+
+  readonly fun clone(): mutable Monitor {
+    mutable BufferedMonitor(
+      this.buffer.clone(),
+      this.buckets,
+      this.intCounters.map((_, v) -> v.clone()).clone(),
+      this.floatCounters.map((_, v) -> v.clone()).clone(),
+      this.intHistograms.map((_, v) -> v.clone()).clone(),
+      this.floatHistograms.map((_, v) -> v.clone()).clone(),
+    )
+  }
+
+  readonly fun chill(): Monitor {
+    BufferedMonitor(
+      this.buffer.chill(),
+      this.buckets,
+      this.intCounters.map((_, v) -> v.chill()),
+      this.floatCounters.map((_, v) -> v.chill()),
+      this.intHistograms.map((_, v) -> v.chill()),
+      this.floatHistograms.map((_, v) -> v.chill()),
+    )
+  }
+
+  private mutable fun histogram<T: Number>(
+    name: String,
+    unit: ?String,
+    description: ?String,
+    existing: mutable Map<String, mutable BufferedHistogram<T>>,
+    conv: Int ~> T,
+  ): mutable Histogram<T> {
+    existing.maybeGet(name) match {
+    | Some(histogram) -> histogram
+    | _ ->
+      traceId = this.buffer.getTraceId().default(traceId());
+      buckets = this.buckets.maybeGet(name).default(defaultBuckets);
+      histogram = BufferedHistogram::create(
+        traceId,
+        name,
+        buckets.map(conv),
+        unit,
+        description,
+      );
+      existing.add(name, histogram);
+      histogram
+    }
+  }
+
+  private mutable fun counter<T: Number>(
+    name: String,
+    unit: ?String,
+    description: ?String,
+    existing: mutable Map<String, mutable BufferedCounter<T>>,
+  ): mutable Counter<T> {
+    existing.maybeGet(name) match {
+    | Some(counter) -> counter
+    | _ ->
+      traceId = this.buffer.getTraceId().default(traceId());
+      counter = BufferedCounter<T>::create(traceId, name, unit, description);
+      existing.add(name, counter);
+      counter
+    }
+  }
+}
+
+base class Mode {
+  children =
+  | StdOut()
+  | StdErr()
+  | ODebug()
+  | OLogFile(dir: ?String)
+  | OFile(path: String)
+}
+
+mutable class OuputBuffer(
+  private formater: Formater,
+  private mode: Mode = ODebug(),
+  private mutable current: ?mutable Span = None(),
+) extends Buffer {
+  //
+  readonly fun chill(): Buffer {
+    OuputBuffer(this.formater, this.mode, this.current.map(s -> s.chill()))
+  }
+
+  readonly fun clone(): mutable Buffer {
+    mutable OuputBuffer(
+      this.formater,
+      this.mode,
+      this.current.map(s -> s.clone()),
+    )
+  }
+
+  mutable fun getCurrentSpan(): ?mutable Span {
+    this.current
+  }
+
+  mutable fun setCurrentSpan(span: ?mutable Span): void {
+    this.!current = span;
+  }
+
+  mutable fun flush(span: readonly Span): void {
+    this.write(span.getTraceId(), this.formater.span(span))
+  }
+
+  mutable fun log(
+    traceId: String,
+    time: Time,
+    level: Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): void {
+    this.write(traceId, this.formater.log(traceId, time, level, msg, meta))
+  }
+
+  mutable fun flushCounter<T: Number>(
+    counter: readonly BufferedCounter<T>,
+  ): void {
+    counter.metric.data().each(data ->
+      this.write(
+        counter.metric.traceId,
+        this.formater.metric(
+          counter.metric.traceId,
+          counter.metric.name,
+          "Counter",
+          counter.metric.unit,
+          counter.metric.description,
+          data.i0,
+          data.i1,
+        ),
+      )
+    )
+  }
+
+  mutable fun flushHistogram<T: Number>(
+    histogram: readonly BufferedHistogram<T>,
+  ): void {
+    histogram.metric.data().each(data ->
+      this.write(
+        histogram.metric.traceId,
+        this.formater.metric(
+          histogram.metric.traceId,
+          histogram.metric.name,
+          "Histogram",
+          histogram.metric.unit,
+          histogram.metric.description,
+          data.i0,
+          data.i1,
+        ),
+      )
+    )
+  }
+
+  private mutable fun write(traceId: String, text: String): void {
+    this.mode match {
+    | StdOut() -> print_string(text)
+    | StdErr() -> print_error(text)
+    | ODebug() -> print_debug(text)
+    | OLogFile(dir) ->
+      name = `${traceId}.log`;
+      path = dir.map(d -> Path.join(d, name)).default(name);
+      this.writeToFile(path, text)
+    | OFile(path) -> this.writeToFile(path, text)
+    }
+  }
+
+  private mutable fun writeToFile(path: String, text: String): void {
+    dstFile = IO.File::open(
+      path,
+      IO.OpenOptions{write => true, create => true, append => true},
+    );
+    _ = dstFile.write(text.bytes());
+    _ = dstFile.write("\n".bytes());
+    dstFile.close();
+  }
+}
+
+fun duplicate(str: String): String {
+  String::fromChars(Array::createFromIterator(str.getIter()))
+}
+
+/**
+ * Array of unit strings for human-readable memory sizes.
+ */
+const units: Array<String> = Array[
+  "kB",
+  "MB",
+  "GB",
+  "TB",
+  "PB",
+  "EB",
+  "ZB",
+  "YB",
+];
+
+/**
+ * Represents a point in time with seconds and nanoseconds.
+ */
+value class Time(s: Int, ns: Int) uses Show {
+  //
+  fun toString(): String {
+    date = Time.strftime("%Y-%m-%dT%H:%M:%S", this.s);
+    millis = (this.ns / 1000000);
+    buffer = Vector::mcreate(3);
+    if (millis < 100) {
+      buffer.push("0");
+      if (millis < 10) {
+        buffer.push("0");
+      }
+    };
+    buffer.push(millis.toString());
+    `${date}.${buffer.join("")}`
+  }
+}
+
+/**
+ * Represents a memory chunk with a value, implementing the Show trait.
+ */
+value class Chunck(value: Int) uses Show {
+  /**
+   * Converts the chunk value to a human-readable string.
+   * @return The human-readable string representation.
+   */
+  fun toString(): String {
+    toHumanReadable(this.value)
+  }
+}
+
+/**
+ * Represents memory usage with persistent, freetable, and obstack peak chunks.
+ */
+value class Memory(persistent: Chunck, freetable: Chunck, obstack_peak: Chunck)
+
+/**
+ * Creates a Memory instance from raw integer values.
+ * @param persistent The persistent memory value.
+ * @param freetable The freetable memory value.
+ * @param obstack_peak The obstack peak memory value.
+ * @return A Memory instance.
+ */
+@export("SKIP_Monitor_createMemory")
+fun createMemory(persistent: Int, freetable: Int, obstack_peak: Int): Memory {
+  Memory(Chunck(persistent), Chunck(freetable), Chunck(obstack_peak))
+}
+
+/**
+ * Converts a size in bytes to a human-readable string.
+ * @param size The size in bytes.
+ * @param precision The number of decimal places for the result.
+ * @return The human-readable string representation.
+ */
+fun toHumanReadable(size: Int, precision: Int = 2): String {
+  if (size < 0) return `-${toHumanReadable(-size)}`;
+  thresh = 1024.0;
+  fBytes = size.toFloat();
+  if (fBytes < thresh) {
+    return `${size}B`;
+  };
+  u = -1;
+  r = 10.0;
+  loop {
+    !fBytes = fBytes / thresh;
+    !u = u + 1;
+    if (!(Math.round(fBytes * r) / r >= thresh && u < 7)) break void;
+  };
+  p = Math.pow(10.0, precision.toFloat());
+  `${Math.round(fBytes * p) / p}${units[u]}`;
+}
+
+fun now(): Time {
+  milliseconds = Time.time_ms();
+  seconds = milliseconds / 1000;
+  nanoseconds = (milliseconds % 1000) * 1000000;
+  Time(seconds, nanoseconds)
+}
+
+module end;
