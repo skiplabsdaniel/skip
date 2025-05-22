@@ -1,0 +1,10 @@
+@debug
+fun main(): void {
+  target = Environ.var("TARGET");
+  isWasm32 = target.startsWith("wasm32");
+  srcs = Array["cc/monitor.c"];
+  srcs.each(src -> print_string(`skargo:rerun-if-changed=${src}`));
+  cc = Cc.Build().flags(Cc.kRecommendedCflags).files(srcs);
+  if (isWasm32) !cc = cc.flag("-nostdlibinc");
+  cc.compile("monitor");
+}
