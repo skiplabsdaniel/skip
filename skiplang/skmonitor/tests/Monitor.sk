@@ -1,0 +1,116 @@
+module alias T = SKTest;
+module alias M = Monitor;
+
+module MonitorTest;
+
+const formater: M.Formater = M.ConsoleFormater();
+
+mutable class Buffer(
+  private mutable current: ?mutable M.Span = None(),
+  spans: mutable Vector<String> = mutable Vector[],
+  logs: mutable Vector<String> = mutable Vector[],
+  metrics: mutable Vector<String> = mutable Vector[],
+) extends M.Buffer {
+  //
+  readonly fun chill(): M.Buffer {
+    Buffer(this.current.map(s -> s.chill()))
+  }
+
+  readonly fun clone(): mutable M.Buffer {
+    mutable Buffer(this.current.map(s -> s.clone()))
+  }
+
+  mutable fun getCurrentSpan(): ?mutable M.Span {
+    this.current
+  }
+
+  mutable fun setCurrentSpan(span: ?mutable M.Span): void {
+    this.!current = span;
+  }
+
+  mutable fun flush(span: readonly M.Span): void {
+    this.spans.push(formater.span(span));
+  }
+
+  mutable fun flushCounter<T1: Number>(
+    counter: readonly M.BufferedCounter<T1>,
+  ): void {
+    counter.metric.data().each(data ->
+      this.metrics.push(
+        formater.metric(
+          counter.metric.traceId,
+          counter.metric.name,
+          "Counter",
+          counter.metric.unit,
+          counter.metric.description,
+          data.i0,
+          data.i1,
+        ),
+      )
+    )
+  }
+
+  mutable fun flushHistogram<T1: Number>(
+    histogram: readonly M.BufferedHistogram<T1>,
+  ): void {
+    histogram.metric.data().each(data ->
+      this.metrics.push(
+        formater.metric(
+          histogram.metric.traceId,
+          histogram.metric.name,
+          "Histogram",
+          histogram.metric.unit,
+          histogram.metric.description,
+          data.i0,
+          data.i1,
+        ),
+      )
+    )
+  }
+
+  mutable fun log(
+    traceId: String,
+    time: M.Time,
+    level: M.Level,
+    msg: String,
+    meta: Logger.Metadata,
+  ): void {
+    this.logs.push(formater.log(traceId, time, level, msg, meta))
+  }
+}
+
+fun run(buffer: mutable M.Buffer): void {
+  monitor = mutable M.BufferedMonitor(buffer);
+  span = monitor.startSpan("skmonitor.test.trace");
+  attributes = span.attributes();
+  attributes.setIntAttribute("int.attribute", 5);
+  attributes.setStringAttribute("string.attribute", "my value");
+  attributes.setFloatAttribute("float.attribute", 2.345);
+  attributes.setBoolAttribute("bool.attribute", false);
+  #log (span.debug, "Event debug message");
+  #log (span.info, "Event info message");
+  attributes.setStringArrayAttribute(
+    "string.array.attribute",
+    Array["v1", "v2"],
+  );
+  span.setErrorStatus("It's the error");
+  subspan = monitor.startSpan("skmonitor.test.child");
+  subattributes = subspan.attributes();
+  subattributes.setStringAttribute(
+    "child.string.attribute",
+    "I'm a child span.",
+  );
+  subspan.end(monitor);
+  span.end(monitor);
+  #log (monitor.info, "Log outside span");
+}
+
+@test
+fun monitor(): void {
+  buffer = mutable Buffer();
+  run(buffer);
+  T.expectEq(buffer.logs.size(), 1);
+  T.expectEq(buffer.spans.size(), 2);
+}
+
+module end;
