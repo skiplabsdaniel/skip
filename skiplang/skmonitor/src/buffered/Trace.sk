@@ -1,0 +1,219 @@
+module Monitor;
+
+mutable class BufferedEvent(
+  name: String,
+  attributes: mutable Attributes,
+  time: Time,
+) {
+  readonly fun chill(): BufferedEvent {
+    BufferedEvent(this.name, this.attributes.chill(), this.time)
+  }
+
+  readonly fun clone(): mutable BufferedEvent {
+    mutable BufferedEvent(this.name, this.attributes.clone(), this.time)
+  }
+}
+
+mutable class BufferedEvents(
+  private events: mutable Vector<mutable BufferedEvent> = mutable Vector[],
+) extends Events {
+  readonly fun chill(): Events {
+    BufferedEvents(this.events.map(e -> e.chill()))
+  }
+
+  readonly fun clone(): mutable Events {
+    mutable BufferedEvents(this.events.map(e -> e.clone()).clone())
+  }
+
+  readonly fun isEmpty(): Bool {
+    this.events.isEmpty()
+  }
+
+  readonly fun items(): mutable Iterator<Event> {
+    this.events.map(e -> Event(e.name, e.attributes.chill(), e.time)).values()
+  }
+
+  mutable fun addEvent(name: String): mutable Attributes {
+    attributes = mutable BufferedAttributes();
+    this.events.push(mutable BufferedEvent(name, attributes, now()));
+    attributes
+  }
+}
+
+mutable class BufferedAttributes(
+  private mutable attributes: SortedMap<String, Value> = SortedMap[],
+) extends AttributesBase, Attributes {
+  //
+  readonly fun chill(): BufferedAttributes {
+    BufferedAttributes(this.attributes)
+  }
+
+  readonly fun clone(): mutable BufferedAttributes {
+    mutable BufferedAttributes(this.attributes)
+  }
+
+  mutable fun setStringAttribute(key: String, value: String): void {
+    this.setAttribute(key, VString(value))
+  }
+
+  mutable fun setIntAttribute(key: String, value: Int): void {
+    this.setAttribute(key, VInt(value))
+  }
+
+  mutable fun setFloatAttribute(key: String, value: Float): void {
+    this.setAttribute(key, VFloat(value));
+  }
+
+  mutable fun setBoolAttribute(key: String, value: Bool): void {
+    this.setAttribute(key, VBool(value));
+  }
+
+  mutable fun setStringArrayAttribute(
+    name: String,
+    value: Array<String>,
+  ): void {
+    this.setArrayAttribute(name, value.map(v ~> VString(v)))
+  }
+
+  mutable fun setIntArrayAttribute(name: String, value: Array<Int>): void {
+    this.setArrayAttribute(name, value.map(v ~> VInt(v)))
+  }
+
+  mutable fun setFloatArrayAttribute(name: String, value: Array<Float>): void {
+    this.setArrayAttribute(name, value.map(v ~> VFloat(v)))
+  }
+
+  mutable fun setBoolArrayAttribute(name: String, value: Array<Bool>): void {
+    this.setArrayAttribute(name, value.map(v ~> VBool(v)))
+  }
+
+  readonly fun isEmpty(): Bool {
+    this.attributes.isEmpty();
+  }
+
+  readonly fun items(): mutable Iterator<(String, Value)> {
+    this.attributes.items()
+  }
+
+  private mutable fun setAttribute(key: String, value: Value): void {
+    this.!attributes = this.attributes.set(key, value)
+  }
+
+  private mutable fun setArrayAttribute(
+    key: String,
+    value: Array<Value>,
+  ): void {
+    this.setAttribute(key, VArray(value));
+  }
+}
+
+mutable class BufferedSpan(
+  name: String,
+  start: Time,
+  traceId: String,
+  spanId: String,
+  kind: Kind = Internal(),
+  optParent: ?mutable Span = None(),
+  mutable optEnd: ?Time = None(),
+  private attributes_: mutable Attributes = mutable BufferedAttributes(),
+  private events_: mutable Events = mutable BufferedEvents(),
+  private mutable optStatus: ?(Status, String) = None(),
+) extends Span {
+  //
+  readonly fun getName(): String {
+    this.name
+  }
+
+  readonly fun getTraceId(): String {
+    this.traceId
+  }
+
+  readonly fun getSpanId(): String {
+    this.spanId
+  }
+
+  readonly fun getParentId(): ?String {
+    this.optParent.map(p -> p.getSpanId())
+  }
+
+  readonly fun getStart(): Time {
+    this.start
+  }
+
+  readonly fun getEnd(): ?Time {
+    this.optEnd
+  }
+
+  readonly fun getKind(): Kind {
+    this.kind
+  }
+
+  mutable fun attributes(): mutable Attributes {
+    this.attributes_
+  }
+
+  readonly fun getAttributes(): readonly Attributes {
+    this.attributes_
+  }
+
+  mutable fun events(): mutable Events {
+    this.events_
+  }
+
+  readonly fun getEvents(): readonly Events {
+    this.events_
+  }
+
+  readonly fun status(): (Status, String) {
+    this.optStatus.default((SUnset(), ""));
+  }
+
+  protected readonly fun isRoot(): Bool {
+    this.optParent.isNone()
+  }
+
+  mutable fun setStatus(status: Status, description: String = ""): void {
+    this.!optStatus = if (status is SUnset _) None() else {
+      Some((status, description))
+    }
+  }
+
+  readonly fun chill(): Span {
+    BufferedSpan(
+      this.name,
+      this.start,
+      this.traceId,
+      this.spanId,
+      this.kind,
+      this.optParent.map(p -> p.chill()),
+      this.optEnd,
+      this.attributes_.chill(),
+      this.events_.chill(),
+      this.optStatus,
+    )
+  }
+
+  readonly fun clone(): mutable Span {
+    mutable BufferedSpan(
+      this.name,
+      this.start,
+      this.traceId,
+      this.spanId,
+      this.kind,
+      this.optParent.map(p -> p.clone()),
+      this.optEnd,
+      this.attributes_.clone(),
+      this.events_.clone(),
+      this.optStatus,
+    )
+  }
+
+  protected mutable fun flush(monitor: mutable .Monitor): void {
+    monitor match {
+    | m @ BufferedMonitor _ -> m.flush(this, this.optParent)
+    | _ -> invariant_violation("Must be a Monitor.BufferedMonitor")
+    }
+  }
+}
+
+module end;
