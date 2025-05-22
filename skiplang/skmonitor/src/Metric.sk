@@ -1,0 +1,70 @@
+module Monitor;
+
+/**
+ * Builder for metric values, allowing additional configuration before finalizing.
+ */
+mutable base class ValueBuilder extends AttributesBase {
+  /**
+   * Finalizes the value builder.
+   */
+  mutable fun end(): void;
+}
+
+/**
+ * Represents a counter metric for integer or float values.
+ * Provides methods for adding values to the counter.
+ */
+mutable base class Counter<T: Number> {
+  //
+  /**
+   * Returns a read-only version of the counter.
+   * @return A read-only Counter instance.
+   */
+  readonly fun chill(): this;
+
+  /**
+   * Clones the counter.
+   * @return A mutable copy of the counter.
+   */
+  readonly fun clone(): mutable this;
+
+  /**
+   * Adds a value to the counter.
+   * @param value The value to add.
+   * @param service The optional service associated with the metric.
+   * @return A ValueBuilder for further configuration.
+   */
+  mutable fun add(value: T, service: ?Service = None()): mutable ValueBuilder;
+}
+
+/**
+ * Represents a histogram metric for integer or float values.
+ * Provides methods for recording values in the histogram.
+ */
+mutable base class Histogram<T: Number> {
+  //
+  /**
+   * Returns a read-only version of the histogram.
+   * @return A read-only Histogram instance.
+   */
+  readonly fun chill(): this;
+
+  /**
+   * Clones the histogram.
+   * @return A mutable copy of the histogram.
+   */
+  readonly fun clone(): mutable this;
+
+  /**
+   * Records a value in the histogram.
+   * @param value The value to record.
+   * @param service The optional service associated with the metric.
+   * @return A ValueBuilder for further configuration.
+   */
+  mutable fun record(
+    value: T,
+    service: ?Service = None(),
+  ): mutable ValueBuilder;
+}
+
+module end;
