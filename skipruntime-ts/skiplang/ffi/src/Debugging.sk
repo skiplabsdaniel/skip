@@ -70,6 +70,16 @@ fun debuggerResourceGraph(
   };
 }
 
+@export("SkipRuntime_Debugger__resourceInstances")
+fun debuggerResourceInstances(resource: String): SKJSON.CJSON {
+  SKStore.runWithResult(context ~> {
+    SKJSON.CJArray(getResourceInstances(context, resource).map(instanceToJson))
+  }) match {
+  | Success(json) -> json
+  | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
+  };
+}
+
 @cpp_extern("SkipRuntime_Debugging_getInfo")
 @debug
 native fun getDebuggingInfo(reducer: UInt32): SKJSON.CJObject;
@@ -82,6 +92,20 @@ private fun graphToJson(graph: Graph): SKJSON.CJObject {
         ("outputs", SKJSON.CJArray(graph.outputs.map(nameToJson))),
         ("entities", SKJSON.CJArray(graph.entities.map(entityToJson))),
         ("reads", SKJSON.CJArray(graph.reads.map(readToJson))),
+      ],
+    ),
+  )
+}
+
+private fun instanceToJson(instance: Instance): SKJSON.CJObject {
+  SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("params", instance.params),
+        (
+          "clients",
+          SKJSON.CJArray(instance.clients.map(c -> SKJSON.CJString(c))),
+        ),
       ],
     ),
   )

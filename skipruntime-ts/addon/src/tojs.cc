@@ -76,6 +76,7 @@ double SkipRuntime_Runtime__update(char* input, CJSON values,
 CJSON SkipRuntime_Debugger__service();
 CJSON SkipRuntime_Debugger__sharedGraph();
 CJSON SkipRuntime_Debugger__resourceGraph(char* resource, CJObject jsonParams);
+CJSON SkipRuntime_Debugger__resourceInstances(char* resource);
 }
 
 using skbinding::AddFunction;
@@ -1122,6 +1123,21 @@ void GetDebuggerResourceGraph(const FunctionCallbackInfo<Value>& args) {
   });
 }
 
+void GetDebuggerResourceInstances(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  if (!args[0]->IsString()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The first parameter must be a string.")));
+    return;
+  }
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    char* skresource = ToSKString(isolate, args[0].As<String>());
+    CJSON skresult = SkipRuntime_Debugger__resourceInstances(skresource);
+    args.GetReturnValue().Set(External::New(isolate, skresult));
+  });
+}
+
 void GetToJSBinding(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   Local<Object> binding = Object::New(isolate);
@@ -1211,6 +1227,8 @@ void GetToJSBinding(const FunctionCallbackInfo<Value>& args) {
               GetDebuggerSharedGraph);
   AddFunction(isolate, binding, "SkipRuntime_Debugger__resourceGraph",
               GetDebuggerResourceGraph);
+  AddFunction(isolate, binding, "SkipRuntime_Debugger__resourceInstances",
+              GetDebuggerResourceInstances);
 
   args.GetReturnValue().Set(binding);
 }

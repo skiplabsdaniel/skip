@@ -152,19 +152,20 @@ fun getDirInfos(
 ): (Map<String, DirInfo>, Array<Read>) {
   created = context
     .listDirs()
-    .map(item -> {
-      item.i1 match {
+    .map(dir -> {
+      dir match {
       | SKStore.EagerDir{creator}
       | SKStore.LazyDir{creator} ->
-        strName = item.i0.toString();
+        dirname = dir.getDirName();
+        strName = dirname.toString();
         creator match {
         | Some(c) if (c == arrowKey || includes.contains(strName)) ->
-          readers = context.getReaders(item.i0).map(v -> v.toString());
-          Some(DirInfo::create(item.i0, item.i1, readers))
+          readers = context.getReaders(dirname).map(v -> v.toString());
+          Some(DirInfo::create(dirname, dir, readers))
         | _ ->
           if (includes.contains(strName)) {
-            readers = context.getReaders(item.i0).map(v -> v.toString());
-            Some(DirInfo::create(item.i0, item.i1, readers))
+            readers = context.getReaders(dirname).map(v -> v.toString());
+            Some(DirInfo::create(dirname, dir, readers))
           } else {
             None()
           }
@@ -209,6 +210,8 @@ fun getSharedGraph(context: readonly SKStore.Context): Graph {
   )
 }
 
+class Instance(params: SKJSON.CJSON, clients: Array<String>)
+
 fun getResourceGraph(
   context: readonly SKStore.Context,
   resource: String,
@@ -250,6 +253,33 @@ fun getResourceGraph(
     )
   | None() -> None()
   }
+}
+
+fun getResourceInstances(
+  context: readonly SKStore.Context,
+  resource: String,
+): Array<Instance> {
+  resourceHdl = SKStore.EHandle(
+    SKStore.SID::keyType,
+    ResourceDef::type,
+    kResourceSessionDir,
+  );
+  clients = mutable Vector[];
+  paramsArray = resourceHdl
+    .unsafeItems(context)
+    .map(kv -> {
+      kv.i1.collect(Array).maybeGet(0).flatMap(def ->
+        if (def.name == resource) {
+          clients.push(kv.i0.value);
+          Some(def.params)
+        } else {
+          None()
+        }
+      )
+    })
+    .collect(Array)
+    .filterNone();
+  paramsArray.map(pa -> Instance(pa, clients.toArray()))
 }
 
 fun getService(context: readonly SKStore.Context): Service {
