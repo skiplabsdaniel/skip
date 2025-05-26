@@ -222,6 +222,16 @@ export function debugService(
     }
   });
 
+  app.get("/v1/instances/:resource", (req, res) => {
+    try {
+      const instances = service.resourceInstances(req.params.resource);
+      res.status(200).json(instances);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
   app.get("/v1/resource/:resource", (req, res) => {
     try {
       const graph = service.resourceGraph(

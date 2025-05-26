@@ -44,7 +44,7 @@ const kGraphHdl: SKStore.EHandle<SKStore.SID, ServiceFile> = SKStore.EHandle(
 );
 
 fun resourceArrow(def: ResourceDef): SKStore.ArrowKey {
-  SKStore.ArrowKey{
+  SKStore.ArrowKey::create{
     parentName => kResourceStatusDir,
     childName => kResourceInstancesDir,
     key => def,
@@ -52,7 +52,7 @@ fun resourceArrow(def: ResourceDef): SKStore.ArrowKey {
 }
 
 fun serviceArrow(runId: SKStore.SID): SKStore.ArrowKey {
-  SKStore.ArrowKey{
+  SKStore.ArrowKey::create{
     parentName => kSessionDir.build("inputs"),
     childName => kGraphDir,
     key => runId,

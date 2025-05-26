@@ -273,6 +273,10 @@ export interface FromWasm {
     resource: ptr<Internal.String>,
     jsonParams: ptr<Internal.CJObject>,
   ): ptr<Internal.CJSON>;
+
+  SkipRuntime_Debugger__resourceInstances(
+    resource: ptr<Internal.String>,
+  ): ptr<Internal.CJSON>;
 }
 
 interface ToWasm {
@@ -822,6 +826,14 @@ export class WasmFromBinding implements FromBinding {
     return this.fromWasm.SkipRuntime_Debugger__resourceGraph(
       this.utils.exportString(resource),
       toPtr(jsonParams),
+    );
+  }
+
+  SkipRuntime_Debugger__resourceInstances(
+    resource: string,
+  ): ptr<Internal.CJSON> {
+    return this.fromWasm.SkipRuntime_Debugger__resourceInstances(
+      this.utils.exportString(resource),
     );
   }
 }
