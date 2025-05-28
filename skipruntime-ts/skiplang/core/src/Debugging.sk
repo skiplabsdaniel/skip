@@ -152,19 +152,20 @@ fun getDirInfos(
 ): (Map<String, DirInfo>, Array<Read>) {
   created = context
     .listDirs()
-    .map(item -> {
-      item.i1 match {
+    .map(dir -> {
+      dir match {
       | SKStore.EagerDir{creator}
       | SKStore.LazyDir{creator} ->
-        strName = item.i0.toString();
+        dirname = dir.getDirName();
+        strName = dirname.toString();
         creator match {
         | Some(c) if (c == arrowKey || includes.contains(strName)) ->
-          readers = context.getReaders(item.i0).map(v -> v.toString());
-          Some(DirInfo::create(item.i0, item.i1, readers))
+          readers = context.getReaders(dirname).map(v -> v.toString());
+          Some(DirInfo::create(dirname, dir, readers))
         | _ ->
           if (includes.contains(strName)) {
-            readers = context.getReaders(item.i0).map(v -> v.toString());
-            Some(DirInfo::create(item.i0, item.i1, readers))
+            readers = context.getReaders(dirname).map(v -> v.toString());
+            Some(DirInfo::create(dirname, dir, readers))
           } else {
             None()
           }

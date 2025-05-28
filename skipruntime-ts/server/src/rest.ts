@@ -222,6 +222,15 @@ export function debugService(
     }
   });
 
+  app.get("/v1/instances/:resource", (req, res) => {
+    try {
+      res.status(200).json([`todo: Get resource of ${req.params.resource}`]);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
   app.get("/v1/resource/:resource", (req, res) => {
     try {
       const graph = service.resourceGraph(
