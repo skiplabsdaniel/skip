@@ -210,6 +210,8 @@ fun getSharedGraph(context: readonly SKStore.Context): Graph {
   )
 }
 
+class Instance(params: SKJSON.CJSON, clients: Array<String>)
+
 fun getResourceGraph(
   context: readonly SKStore.Context,
   resource: String,
@@ -251,6 +253,33 @@ fun getResourceGraph(
     )
   | None() -> None()
   }
+}
+
+fun getResourceInstances(
+  context: readonly SKStore.Context,
+  resource: String,
+): Array<Instance> {
+  resourceHdl = SKStore.EHandle(
+    SKStore.SID::keyType,
+    ResourceDef::type,
+    kResourceSessionDir,
+  );
+  clients = mutable Vector[];
+  paramsArray = resourceHdl
+    .unsafeItems(context)
+    .map(kv -> {
+      kv.i1.collect(Array).maybeGet(0).flatMap(def ->
+        if (def.name == resource) {
+          clients.push(kv.i0.value);
+          Some(def.params)
+        } else {
+          None()
+        }
+      )
+    })
+    .collect(Array)
+    .filterNone();
+  paramsArray.map(pa -> Instance(pa, clients.toArray()))
 }
 
 fun getService(context: readonly SKStore.Context): Service {

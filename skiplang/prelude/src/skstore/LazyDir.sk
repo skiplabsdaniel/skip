@@ -237,7 +237,7 @@ class LazyDir protected {
     context: mutable Context,
     key: Key,
     values: Array<File>,
-    reads: Array<Path> = Array[]
+    reads: Array<Path> = Array[],
   ): void {
     data = this.data;
     !data[key] = LDefined(values, reads);

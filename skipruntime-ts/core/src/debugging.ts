@@ -17,6 +17,10 @@ export interface FromBinding {
     resource: string,
     jsonParams: Pointer<Internal.CJObject>,
   ): Pointer<Internal.CJSON>;
+
+  SkipRuntime_Debugger__resourceInstances(
+    resource: string,
+  ): Pointer<Internal.CJSON>;
 }
 
 export type ServiceInfo = {
@@ -65,6 +69,11 @@ export type Graph = {
   reads: Read[];
 };
 
+export type Instance = {
+  params: Json;
+  clients: string[];
+};
+
 export class DebugInstance {
   private binding: FromBinding;
 
@@ -109,5 +118,17 @@ export class DebugInstance {
     if (typeof result == "number")
       throw this.refs.handles.deleteHandle(result as Handle<Error>);
     return result ? (result as unknown as Graph) : null;
+  }
+
+  resourceInstances(resource: string): Instance[] {
+    const result = this.refs.runWithGC(() => {
+      return this.refs.skjson.importJSON(
+        this.binding.SkipRuntime_Debugger__resourceInstances(resource),
+        true,
+      );
+    });
+    if (typeof result == "number")
+      throw this.refs.handles.deleteHandle(result as Handle<Error>);
+    return result as Instance[];
   }
 }
