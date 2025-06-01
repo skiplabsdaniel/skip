@@ -1,31 +1,30 @@
 module Skargo;
 
-fun check(): (Cli.Command, (GlobalContext, Cli.ParseResults) ~> void) {
-  (
-    Cli.Command("check")
-      .short("c")
-      .about(
-        "Analyze the current package and report errors, but don't build object files",
-      )
-      .arg(
-        Cli.Arg::string("manifest-path")
-          .value_name("PATH")
-          .about("Path to Skargo.toml"),
-      )
-      .arg(
-        Cli.Arg::string("target")
-          .value_name("TRIPLE")
-          .about("Check for the target triple"),
-      )
-      .arg(
-        Cli.Arg::string("target-dir")
-          .value_name("PATH")
-          .about("Directory for all generated artifacts"),
-      )
-      .args(kProfileArgs)
-      .arg(kSkcOptArg),
-    execCheck,
+const kCheckCommand: Cli.Command = Cli.Command("check")
+  .short("c")
+  .about(
+    "Analyze the current package and report errors, but don't build object files",
   )
+  .arg(
+    Cli.Arg::string("manifest-path")
+      .value_name("PATH")
+      .about("Path to Skargo.toml"),
+  )
+  .arg(
+    Cli.Arg::string("target")
+      .value_name("TRIPLE")
+      .about("Check for the target triple"),
+  )
+  .arg(
+    Cli.Arg::string("target-dir")
+      .value_name("PATH")
+      .about("Directory for all generated artifacts"),
+  )
+  .args(kProfileArgs)
+  .arg(kSkcOptArg);
+
+fun check(): (Cli.Command, (GlobalContext, Cli.ParseResults) ~> void) {
+  (kCheckCommand, execCheck)
 }
 
 fun execCheck(gctx: GlobalContext, args: Cli.ParseResults): void {

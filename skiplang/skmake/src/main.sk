@@ -1,0 +1,31 @@
+module alias SK = SKStore;
+
+module Skmake;
+
+fun main(): void {
+  suppliers = Array[
+    Skargo.clean,
+    Skargo.format,
+    Skargo.init,
+    Skargo.help,
+    check,
+  ];
+  Skargo.perform("skmake", suppliers);
+}
+
+fun checkAndRunContext(fn: mutable SK.Context ~> void): void {
+  if (SK.gHasContext() == 0) {
+    SK.gContextInit(initCtx(SK.DirName::create("/skmake/")));
+  };
+  SK.runWithResult(
+    fn,
+    Some(SK.Synchronizer(SK.import, SK.export, _ ~> void)),
+  ) match {
+  | Success _ -> void
+  | Failure(exn) ->
+    print_error(exn.getMessage());
+    skipExit(1)
+  }
+}
+
+module end;

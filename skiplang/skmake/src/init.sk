@@ -1,0 +1,476 @@
+module alias SK = SKStore;
+
+module Skmake;
+
+const kEnvProperty: String = "Skmake.Environment";
+
+class TimedFile(filename: String, modified: Int) extends SK.File uses Orderable
+
+class Files(files: Array<TimedFile>) extends SK.File
+
+class PackageFile(package: Skargo.Package) extends SK.File
+
+class PackageIdKey(id: Skargo.PackageId) extends SK.Key
+
+class Options{
+  profile: String,
+  output: String,
+  arch: Skargo.TargetArch,
+  check: Bool = false,
+  noStd: Bool = false,
+  isLib: Bool = false,
+}
+
+class BuildScriptError(error: String) extends .Exception {
+  fun getMessage(): String {
+    this.error
+  }
+}
+
+class Dependency(dep: Skargo.Dependency) extends SK.Key {
+  fun toString(): String {
+    `${this.dep.name}@${this.dep.req}`
+  }
+}
+
+class BuildSources{
+  sources_: SortedSet<TimedFile> = SortedSet[],
+  env_: SortedSet<(String, String)> = SortedSet[],
+  preambles_: SortedSet<TimedFile> = SortedSet[],
+  link_args_: SortedSet<String> = SortedSet[],
+  libraries_: SortedSet<TimedFile> = SortedSet[],
+} extends SK.File {
+  fun union(other: BuildSources): BuildSources {
+    BuildSources{
+      sources_ => this.sources_.union(other.sources_),
+      env_ => this.env_.union(other.env_),
+      preambles_ => this.preambles_.union(other.preambles_),
+      link_args_ => this.link_args_.union(other.link_args_),
+      libraries_ => this.libraries_.union(other.libraries_),
+    }
+  }
+
+  fun sources(files: Array<String>): BuildSources {
+    files.each(f ->
+      !this.sources_ = this.sources_.set(
+        TimedFile(f, FileSystem.getLastModificationTime(f)),
+      )
+    );
+    this
+  }
+}
+
+class Environment(toml: SK.EHandle<SKStore.UnitID, TimedFile>) extends SK.File {
+  //
+  fun setManifestPath(context: mutable SK.Context, filename: String): void {
+    mtime = FileSystem.getLastModificationTime(filename);
+    this.toml.writeArray(
+      context,
+      SKStore.UnitID::singleton,
+      Array[TimedFile(filename, mtime)],
+    );
+    context.update()
+  }
+}
+
+fun fillPackages(
+  context: mutable SK.Context,
+  package: Skargo.Package,
+  contains: (Skargo.PackageId) -> Bool,
+  writer: (Skargo.PackageId, Int) -> void,
+  loader: (mutable SK.Context, Skargo.SourceId) ~> Skargo.Package,
+): void {
+  packageId = package.manifest.package_id;
+  if (contains(packageId)) return void;
+  debug(packageId);
+  writer(packageId, packageId.source_id.getLastModificationTime());
+  package.manifest.dependencies.each(dependency -> {
+    fillPackages(
+      context,
+      loader(context, dependency.source_id),
+      contains,
+      writer,
+      loader,
+    )
+  });
+}
+
+fun init(context: mutable SK.Context, dirName: SK.DirName): void {
+  loadPackage = SKStore.LHandle::create(
+    SK.SID::keyType,
+    PackageFile::type,
+    context,
+    dirName.sub("loader"),
+    (_, _self, key) ~> {
+      Array[PackageFile(Skargo.Package::read(key.value))]
+    },
+  );
+  tomlHdl = context.mkdir(
+    SKStore.UnitID::keyType,
+    TimedFile::type,
+    dirName.sub("toml"),
+  );
+  pckHdl = tomlHdl.map(
+    SKStore.UnitID::keyType,
+    PackageFile::type,
+    context,
+    dirName.sub("package"),
+    (ctx, writer, key, it) ~> {
+      package = loadPackage.get(ctx, SK.SID(it.first.filename));
+      debug(package);
+      writer.set(key, package)
+    },
+  );
+  allPackage = pckHdl
+    .map(
+      PackageIdKey::keyType,
+      SK.IntFile::type,
+      context,
+      dirName.sub("allPackages/ids"),
+      (ctx, writer, _, it) ~> {
+        fillPackages(
+          ctx,
+          it.first.package,
+          (id) -> writer.contains(PackageIdKey(id)),
+          (id, time) -> writer.set(PackageIdKey(id), SK.IntFile(time)),
+          (context, source) ~> {
+            path = source.kind match {
+            | Skargo.PathSource() -> Path.join(source.url, Skargo.kManifestFile)
+            };
+            loadPackage.get(context, SK.SID(path)).package
+          },
+        )
+      },
+    )
+    .map(
+      PackageIdKey::keyType,
+      PackageFile::type,
+      context,
+      dirName.sub("allPackages"),
+      (ctx, writer, key, _) ~> {
+        source = key.id.source_id;
+        path = source.kind match {
+        | Skargo.PathSource() -> Path.join(source.url, Skargo.kManifestFile)
+        };
+        package = loadPackage.get(ctx, SK.SID(path));
+        writer.set(key, package)
+      },
+    )
+    .map(
+      SK.SID::keyType,
+      PackageFile::type,
+      context,
+      dirName.sub("allPackages/byname"),
+      (_ctx, writer, key, it) ~> {
+        writer.set(SK.SID(key.id.name), it.first)
+      },
+    )
+    .map(
+      SK.SID::keyType,
+      PackageFile::type,
+      context,
+      dirName.sub("allPackages/sorted"),
+      (_ctx, writer, key, it) ~> {
+        array = it
+          .toArray()
+          .sortedBy(
+            p ~> p.package.manifest.package_id.version,
+            (v1, v2) ~> v2.compare(v1),
+          );
+        writer.setArray(key, array)
+      },
+    );
+
+  collectBuildInfo = SKStore.LHandle::create(
+    Dependency::keyType,
+    BuildSources::type,
+    context,
+    dirName.sub("buildInfos"),
+    (ctx, self, key) ~> {
+      package = allPackage.getArray(ctx, SK.SID(key.dep.name)).filter(p ->
+        key.dep.req.matches(p.package.manifest.package_id.version)
+      )[0].package;
+      manifest = package.manifest;
+      source = manifest.package_id.source_id;
+      path = source.kind match {
+      | Skargo.PathSource() -> source.url
+      };
+      buildSources = BuildSources{};
+      manifest.targets.each(target -> {
+        if (target.kind is Skargo.LibTarget(Skargo.LibraryTypeSklib())) {
+          !buildSources = buildSources.sources(
+            target.srcs.map(src -> Path.join(path, src)),
+          )
+        } else if (target.kind is Skargo.CustomBuildTarget()) {
+          manifest.dependencies
+            .filter(t -> t.kind is Skargo.BuildDep())
+            .each(dep -> {
+              customSourced = self.get(ctx, Dependency(dep));
+              debug(customSourced)
+            })
+        }
+      });
+      Array[buildSources]
+    },
+  );
+  _builds = allPackage.map(
+    SK.SID::keyType,
+    Files::type,
+    context,
+    dirName.sub("builds"),
+    (ctx, writer, _, it) ~> {
+      manifest = it.first.package.manifest;
+      source = manifest.package_id.source_id;
+      path = source.kind match {
+      | Skargo.PathSource() -> source.url
+      };
+      it.first.package.manifest.targets
+        .filter(t -> t.kind is Skargo.CustomBuildTarget())
+        .each(build -> {
+          buildSources = BuildSources{};
+          it.first.package.manifest.dependencies
+            .filter(t -> t.kind is Skargo.BuildDep())
+            .each(dep -> {
+              !buildSources = buildSources.union(
+                collectBuildInfo.get(ctx, Dependency(dep)),
+              );
+            });
+          files = Files(
+            build.srcs
+              .map(src -> {
+                srcPath = Path.join(path, src);
+                TimedFile(srcPath, FileSystem.getLastModificationTime(srcPath))
+              })
+              .sortedBy(f ~> f.filename, (v1, v2) ~> v1.compare(v2)),
+          );
+          debug((build.name, buildSources, files));
+          writer.set(SK.SID(build.name), files)
+        });
+    },
+  );
+
+  context.setPersistent(kEnvProperty, Environment(tomlHdl))
+}
+
+fun run_build_script(
+  package: Skargo.Package,
+  outdir: String,
+  name: String,
+  profile: String,
+  host: Skargo.TargetArch,
+  target: Skargo.TargetArch,
+  relocation_model: String,
+  console: Skargo.Console,
+): Skargo.BuildScriptOutput {
+  cmd = Skargo.ProcessBuilder::create{cmd => Path.join(outdir, name)};
+
+  cmd.cwd(package.root());
+
+  cmd.env("SKARGO_MANIFEST_DIR", package.root());
+  cmd.env("OUT_DIR", FileSystem.realpath(outdir));
+  cmd.env("NAME", package.name());
+  cmd.env("PROFILE", profile);
+  cmd.env(
+    "OPT_LEVEL",
+    profile match {
+    | "release" -> "3"
+    | "debug" | "dev" -> "0"
+    | p -> invariant_violation(`Unrecognized profile ${p}`)
+    },
+  );
+  cmd.env("DEBUG", (profile != "release").toString());
+  cmd.env(
+    "VERBOSE",
+    (console.verbosity >= Skargo.VerbosityVerbose()).toString(),
+  );
+  cmd.env("HOST", host.toString());
+  cmd.env("TARGET", target.toString());
+  cmd.env("RELOCATION_MODEL", relocation_model);
+  p = run_cmd(cmd, console);
+  FileSystem.writeTextFile(Path.join(outdir, "stdout"), p.stdout);
+  FileSystem.writeTextFile(Path.join(outdir, "stderr"), p.stderr);
+  Skargo.BuildScriptOutput::create(p.stdout);
+}
+
+fun run_cmd(
+  cmd: readonly Skargo.ProcessBuilder,
+  console: Skargo.Console,
+): System.CompletedProcess {
+  console.verbose(() -> {
+    env = if (console.verbosity >= Skargo.VerbosityProlix()) {
+      cmd.get_env().items().map(kv -> `${kv.i0}=${kv.i1}`).collect(Array)
+    } else {
+      Array[]
+    };
+    args = cmd.get_argv();
+    console.status("Running", "`" + env.concat(args).join(" ") + "`")
+  });
+
+  p = if (console.verbosity >= Skargo.VerbosityProlix()) {
+    cmd.run(print_raw, print_error_raw)
+  } else {
+    cmd.run()
+  };
+
+  if (!p.success()) {
+    throw BuildScriptError(Skargo.subprocess_error_message(p));
+  };
+  p
+}
+
+fun skc(
+  skc: mutable Skargo.ProcessBuilder,
+  console: Skargo.Console,
+  package: Skargo.Package,
+  target: Skargo.Target,
+  sources: BuildSources,
+  options: Options,
+  state: String,
+): void {
+  skc.cwd(package.root());
+
+  options.arch match {
+  | Skargo.TargetArchHost() -> void
+  | Skargo.TargetArchTriple(t) -> skc.arg(`--target=${t}`)
+  };
+
+  // TODO: Support this in a more generic way.
+  if (options.noStd) {
+    skc.arg("--no-std")
+  };
+
+  if (!sources.preambles_.isEmpty()) {
+    skc.env(
+      "SKC_PREAMBLE",
+      sources.preambles_
+        .map(p -> p.filename)
+        .toArray()
+        .join(Path.listSeparator),
+    )
+  };
+
+  sources.link_args_.each(l -> skc.args(Array["--link-args", l]));
+
+  skc.args(sources.libraries_.map(p -> p.filename).toArray());
+  skc.args(sources.sources_.map(p -> p.filename).toArray());
+
+  state_db_path = Path.join(`${state}_state.db`);
+  skc.args(
+    Array[
+      if (FileSystem.exists(state_db_path)) {
+        "--data"
+      } else {
+        "--init"
+      },
+      state_db_path,
+    ],
+  );
+  target.kind match {
+  | Skargo.LibTarget(Skargo.LibraryTypeSklib()) ->
+    skc.arg(`--sklib-name=${package.name()}`)
+  | Skargo.LibTarget(Skargo.LibraryTypeCdylib()) -> skc.arg("--emit=cdylib")
+  | Skargo.BinTarget(e)
+  | Skargo.TestTarget(e) ->
+    skc.args(Array["--export-function-as", `${e}=skip_main`])
+  | Skargo.CustomBuildTarget() -> void
+  };
+
+  // TODO: Proper Profile class.
+  options.profile match {
+  | "release" -> skc.arg("-O2")
+  | "debug" | "dev" -> skc.arg("-O0")
+  | _ -> invariant_violation("unreachable")
+  };
+
+  if (options.check) {
+    skc.arg("--check")
+  } else {
+    outputs = outputs(options.output, package, target, options.arch);
+    assert(outputs.size() == 1);
+    skc.args(Array["-o", outputs[0].path]);
+  };
+  sources.env_.each(env -> skc.env(env.i0, env.i1));
+  _ = run_cmd(skc, console)
+}
+
+fun initCtx(dirName: SK.DirName): SK.Context {
+  context = SK.Context::mcreate{};
+  init(context, dirName);
+  context.clone();
+}
+
+fun suffix_for_lib(arch: Skargo.TargetArch): String {
+  arch match {
+  | Skargo.TargetArchTriple(
+    Skargo.TargetTriple("wasm32", None(), None(), None()),
+  ) ->
+    "wasm"
+  | _ -> "so"
+  }
+}
+
+fun suffix_for_binary(arch: Skargo.TargetArch, is_test: Bool): String {
+  arch match {
+  | Skargo.TargetArchTriple(t) if (t.isWasm32() && is_test) -> ".wasm"
+  | _ -> ""
+  }
+}
+
+fun binary_file_for(
+  output: String,
+  target: Skargo.Target,
+  arch: Skargo.TargetArch,
+): String {
+  assert(target.is_bin() || target.is_test());
+  name = target.name;
+  suffix = suffix_for_binary(arch, target.is_test());
+  Path.join(output, `${name}${suffix}`)
+}
+
+fun lib_file_for(
+  output: String,
+  package: Skargo.Package,
+  target: Skargo.Target,
+): String {
+  suffix = target.kind match {
+  | Skargo.LibTarget(Skargo.LibraryTypeSklib _) -> "sklib"
+  | Skargo.LibTarget(Skargo.LibraryTypeCdylib _) -> "so"
+  | _ -> invariant_violation("Invalid target kind for lib_file_for()")
+  };
+  name = package.name();
+  Path.join(output, `lib${name}.${suffix}`)
+}
+
+fun outputs(
+  output: String,
+  package: Skargo.Package,
+  target: Skargo.Target,
+  arch: Skargo.TargetArch,
+): Array<Skargo.OutputFile> {
+  res = mutable Vector[];
+  target.kind match {
+  | Skargo.LibTarget _ ->
+    file = Skargo.OutputFile(
+      lib_file_for(output, package, target),
+      None(),
+      None(),
+    );
+    res.push(file)
+  | Skargo.BinTarget _
+  | Skargo.TestTarget _ ->
+    file = Skargo.OutputFile(
+      binary_file_for(output, target, arch),
+      None(),
+      None(),
+    );
+    res.push(file)
+  | Skargo.CustomBuildTarget _ ->
+    base_path = Path.join(output, "custom_builds");
+    res.push(
+      Skargo.OutputFile(Path.join(base_path, target.name), None(), None()),
+    )
+  };
+  res.collect(Array)
+}
+
+module end;
