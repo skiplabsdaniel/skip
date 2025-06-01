@@ -1,0 +1,10 @@
+[package]
+name = "skmake"
+version = "0.1.0"
+
+[dependencies]
+skargo = { path = "../skargo" }
+
+[[bin]]
+name = "skmake"
+main = "Skmake.main"

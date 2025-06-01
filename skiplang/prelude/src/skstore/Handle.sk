@@ -161,6 +161,10 @@ mutable class TWriter<K: Key, V: File> private {
   mutable fun remove(key: K): void {
     this.!writes[key] = Array[];
   }
+
+  readonly fun contains(key: K): Bool {
+    this.writes.containsKey(key);
+  }
 }
 
 /*****************************************************************************/

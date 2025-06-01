@@ -56,7 +56,7 @@ class Dependency(
   source_id: SourceId,
   req: Semver.VersionReq,
   kind: DepKind,
-) {
+) uses Orderable {
   static fun create(
     name: String,
     source_id: SourceId,
@@ -90,20 +90,26 @@ class Dependency(
   }
 }
 
-class SourceId(url: String, kind: SourceKind) uses Equality {
+class SourceId(url: String, kind: SourceKind) uses Orderable {
   static fun from_path(path: String): SourceId {
     SourceId(path, PathSource())
   }
+
+  fun getLastModificationTime(): Int {
+    this.kind match {
+    | PathSource() -> FileSystem.getLastModificationTime(this.url)
+    }
+  }
 }
 
-base class SourceKind uses Equality {
+base class SourceKind uses Orderable {
   children =
   | PathSource()
   // | GitSource()
   // | RegistrySource()
 }
 
-base class DepKind {
+base class DepKind uses Orderable {
   children =
   | NormalDep()
   | BuildDep()
@@ -251,10 +257,14 @@ class PackageId(
   name: String,
   version: Semver.Version,
   source_id: SourceId,
-) uses Equality, Hashable {
+) uses Orderable, Hashable, Show {
   // TODO: Proper hash
   fun hash(): Int {
-    `${this.name}@${this.version}`.hash()
+    this.toString().hash()
+  }
+
+  fun toString(): String {
+    `${this.name}@${this.version}`
   }
 }
 

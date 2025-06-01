@@ -1,0 +1,16 @@
+module Skmake;
+
+fun check(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
+  (Skargo.kCheckCommand, execCheck)
+}
+
+fun execCheck(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
+  checkAndRunContext(context ~> {
+    manifest_path = Skargo.root_manifest(args, gctx);
+    context.getPersistent(kEnvProperty).map(Environment::type).each(env -> {
+      env.setManifestPath(context, manifest_path)
+    });
+  });
+}
+
+module end;

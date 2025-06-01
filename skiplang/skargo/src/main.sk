@@ -4,8 +4,13 @@ const kManifestFile: String = "Skargo.toml";
 const kDefaultTarget: String = "host";
 const kTargetDir: String = "target";
 
-fun main(): void {
-  cmd = Cli.Command("skargo")
+fun perform(
+  name: String,
+  suppliers: Array<
+    () ~> (Cli.Command, (GlobalContext, Cli.ParseResults) ~> void),
+  >,
+): void {
+  cmd = Cli.Command(name)
     .about("Skip's package manager")
     .arg(
       Cli.Arg::bool("version")
@@ -17,7 +22,7 @@ fun main(): void {
       Cli.Arg::bool("quiet")
         .short("q")
         .long("quiet")
-        .about("Do not print skargo log messages")
+        .about(`Do not print ${name} log messages`)
         .global(),
     )
     .arg(
@@ -35,17 +40,6 @@ fun main(): void {
         .about("Coloring: auto, always, never")
         .global(),
     );
-  suppliers = Array[
-    check,
-    build,
-    test,
-    runner,
-    clean,
-    format,
-    init,
-    update,
-    help,
-  ];
   commands = mutable Map[];
   for (supplier in suppliers) {
     (subcommand, cmdFn) = supplier();
@@ -71,6 +65,21 @@ fun main(): void {
     | None() -> print_string(Cli.usage(args.cmd, true))
     }
   }
+}
+
+fun main(): void {
+  suppliers = Array[
+    check,
+    build,
+    test,
+    runner,
+    clean,
+    format,
+    init,
+    update,
+    help,
+  ];
+  perform("skargo", suppliers);
 }
 
 module end;
