@@ -180,6 +180,33 @@ fun fillPackages(
   });
 }
 
+fun fillProjectPackages(
+  context: mutable SK.Context,
+  package: Skargo.Package,
+  contains: (PackageIdKey) -> Bool,
+  writer: (PackageIdKey, PackageFile) -> void,
+  loader: (mutable SK.Context, Skargo.SourceId) ~> Skargo.Package,
+  withDev: Bool = true,
+): void {
+  packageId = PackageIdKey(package.manifest.package_id);
+  if (contains(packageId)) return void;
+  writer(packageId, PackageFile(package));
+  package.manifest.dependencies.each(dependency -> {
+    if (
+      (!withDev && dependency.kind is Skargo.DevelopmentDep()) ||
+      dependency.kind is Skargo.BuildDep()
+    ) return void;
+    fillProjectPackages(
+      context,
+      loader(context, dependency.source_id),
+      contains,
+      writer,
+      loader,
+      false,
+    )
+  });
+}
+
 fun init(context: mutable SK.Context, dirName: SK.DirName): void {
   skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
   loadPackage = SKStore.LHandle::create(
@@ -256,6 +283,16 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
         writer.set(key, package)
       },
     );
+  allPackagesByPath = allPackages.map(
+    SK.SID::keyType,
+    PackageFile::type,
+    context,
+    dirName.sub("packages/bypath"),
+    (_ctx, writer, _, it) ~> {
+      package = it.first;
+      writer.set(SK.SID(getPackagePath(package.package)), package);
+    },
+  );
   // To create dependency on file modification time
   allFiles = allPackages.map(
     SK.SID::keyType,
@@ -549,7 +586,7 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
     },
   );
   checkedrun = runned.map(
-    Script::keyType,
+    TargetedScript::keyType,
     BuildScriptOutput::type,
     context,
     dirName.sub("builds/bso/checked"),
@@ -566,7 +603,7 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
         file = Path.join(path, f);
         _ = runfiles.get(ctx, SK.SID(file))
       });
-      writer.set(key.script, runBuildScript.get(ctx, key))
+      writer.set(key, runBuildScript.get(ctx, key))
     },
   );
   buildartifacts = checkedrun.map(
@@ -605,13 +642,103 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
       writer.set(key, it.first)
     },
   );
+  projectPackages = pckHdl.map(
+    PackageIdKey::keyType,
+    PackageFile::type,
+    context,
+    dirName.sub("packages/project"),
+    (ctx, writer, _, it) ~> {
+      fillProjectPackages(
+        ctx,
+        it.first.package,
+        (id) -> writer.contains(id),
+        (id, package) -> writer.set(id, package),
+        (context, source) ~> {
+          path = source.kind match {
+          | Skargo.PathSource() -> source.url
+          };
+          allPackagesByPath.get(context, SK.SID(path)).package
+        },
+      )
+    },
+  );
+  projectFiles = projectPackages.map(
+    SK.SID::keyType,
+    SK.IntFile::type,
+    context,
+    dirName.sub("packages/project/files"),
+    (ctx, writer, _, it) ~> {
+      it.toArray().each(package -> {
+        manifest = package.package.manifest;
+        path = getPackagePath(package.package);
+        manifest.targets.each(target -> {
+          if (target.kind is Skargo.LibTarget(Skargo.LibraryTypeSklib())) {
+            target.srcs.each(src -> {
+              file = SK.SID(Path.join(path, src));
+              writer.set(file, allFiles.get(ctx, file))
+            })
+          }
+        });
+      })
+    },
+  );
   resultHdl = commandsHdl.map(
     Command::bKeyType,
     SK.StringFile::type,
     context,
     dirName.sub("commands/perform"),
-    (_ctx, writer, key, _it) ~> {
-      writer.set(key, SK.StringFile("TODO"));
+    (ctx, writer, key, _it) ~> {
+      console = getConsole(ctx);
+      package = pckHdl.get(ctx, SKStore.UnitID::singleton).package;
+      manifest = package.manifest;
+      key match {
+      | Check _ ->
+        files = projectFiles
+          .items(ctx)
+          .map(item -> item.i0.value)
+          .collect(Array);
+        manifest.targets.each(target -> {
+          if (target.kind is Skargo.CustomBuildTarget()) {
+            ts = TargetedScript(
+              Script(manifest.package_id, target.name),
+              key.arch,
+              key.host,
+              key.profile,
+            );
+            bso = checkedrun.get(ctx, ts).bso;
+            !files = files.concat(bso.extra_sources);
+          }
+        });
+        unit_name = `${package.name()} v${package.version()} [check] (${package.root()})`;
+        console.status("Check", unit_name);
+        output = `target/${key.arch}/${key.profile}`;
+        result = Result::guard(() -> {
+          skc(
+            skc_.process(),
+            console,
+            Skargo.Target(Skargo.CustomBuildTarget(), "check", Array[]),
+            package,
+            BuildSources{sources_ => SortedSet::createFromItems(files)},
+            Options{
+              output,
+              profile => key.profile,
+              arch => key.arch,
+              check => true,
+            },
+            `check_${key.profile}`,
+          )
+        });
+        writer.set(
+          key,
+          SK.StringFile(
+            result match {
+            | Success _ -> ""
+            | Failure(e) -> e.getMessage()
+            },
+          ),
+        )
+      | _ -> writer.set(key, SK.StringFile("TODO"))
+      }
     },
   );
 
@@ -664,8 +791,6 @@ fun run_build_script(
   );
   cmd.env("RELOCATION_MODEL", relocation_model);
   p = run_cmd(cmd, console);
-  FileSystem.writeTextFile(Path.join(outdir, "stdout"), p.stdout);
-  FileSystem.writeTextFile(Path.join(outdir, "stderr"), p.stderr);
   Skargo.BuildScriptOutput::create(p.stdout);
 }
 
@@ -875,11 +1000,7 @@ private fun toAbsolute(
 }
 
 private fun getPackagePath(package: Skargo.Package): String {
-  manifest = package.manifest;
-  source = manifest.package_id.source_id;
-  source.kind match {
-  | Skargo.PathSource() -> source.url
-  };
+  package.root()
 }
 
 module end;
