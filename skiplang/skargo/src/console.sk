@@ -34,8 +34,12 @@ class Console(verbosity: ConsoleVerbosity, color: Bool) {
     Console(verbosity, use_colors)
   }
 
-  fun status(status: String, message: String): void {
-    this.print(status, message, static::kHeaderColor, true)
+  fun status(
+    status: String,
+    message: String,
+    color: TermColor.Color = Console::kHeaderColor,
+  ): void {
+    this.print(status, message, color, true)
   }
 
   fun status_verbose(status: String, message: String): void {

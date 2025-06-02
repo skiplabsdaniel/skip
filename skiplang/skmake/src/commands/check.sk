@@ -5,19 +5,35 @@ fun check(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
 }
 
 fun execCheck(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
-  Skargo.withTimer(
+  withTimer(
     () -> {
       checkAndRunContext(context ~> {
         context.setGlobal("Skargo.Console", ConsoleFile(gctx.console));
         manifest_path = Skargo.root_manifest(args, gctx);
         compilerOptions = Skargo.compile_options(args);
-        context.getPersistent(kEnvProperty).map(Environment::type).each(env -> {
-          env.check(context, manifest_path, compilerOptions)
-        });
+        context.getPersistent(kEnvProperty).map(Environment::type) match {
+        | Some(env) -> env.check(context, manifest_path, compilerOptions)
+        | _ -> throw CommandError("Execution environment not found")
+        };
       });
     },
-    t -> gctx.console.status("Finished", `Check target in ${t}s`),
-  )
+    (t, failure) -> {
+      if (!failure) {
+        gctx.console.status("Finished", `Check target in ${t}s`)
+      } else {
+        gctx.console.status(
+          "Finished with error(s)",
+          `Check target in ${t}s`,
+          Skargo.Console::kErrorColor,
+        )
+      }
+    },
+  ) match {
+  | Success _ -> void
+  | Failure(e) ->
+    print_error(e.getMessage());
+    skipExit(2)
+  }
 }
 
 module end;
