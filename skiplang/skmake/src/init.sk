@@ -690,25 +690,19 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
     (ctx, writer, key, _it) ~> {
       console = getConsole(ctx);
       package = pckHdl.get(ctx, SKStore.UnitID::singleton).package;
-      manifest = package.manifest;
       key match {
       | Check _ ->
         files = projectFiles
           .items(ctx)
           .map(item -> item.i0.value)
           .collect(Array);
-        manifest.targets.each(target -> {
-          if (target.kind is Skargo.CustomBuildTarget()) {
-            ts = TargetedScript(
-              Script(manifest.package_id, target.name),
-              key.arch,
-              key.host,
-              key.profile,
-            );
-            bso = checkedrun.get(ctx, ts).bso;
-            !files = files.concat(bso.extra_sources);
-          }
-        });
+        env = Array<(String, String)>[];
+        checkedrun.items(ctx).each(item ->
+          item.i1.each(bso -> {
+            !files = files.concat(bso.bso.extra_sources);
+            !env = env.concat(bso.bso.env);
+          })
+        );
         unit_name = `${package.name()} v${package.version()} [check] (${package.root()})`;
         console.status("Check", unit_name);
         output = `target/${key.arch}/${key.profile}`;
@@ -718,12 +712,16 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
             console,
             Skargo.Target(Skargo.CustomBuildTarget(), "check", Array[]),
             package,
-            BuildSources{sources_ => SortedSet::createFromItems(files)},
+            BuildSources{
+              sources_ => SortedSet::createFromItems(files),
+              env_ => SortedSet::createFromItems(env),
+            },
             Options{
               output,
               profile => key.profile,
               arch => key.arch,
               check => true,
+              noStd => true,
             },
             `check_${key.profile}`,
           )
@@ -843,13 +841,6 @@ fun skc(
     skc.arg("--no-std")
   };
 
-  if (!sources.preambles_.isEmpty()) {
-    skc.env(
-      "SKC_PREAMBLE",
-      sources.preambles_.toArray().join(Path.listSeparator),
-    )
-  };
-
   sources.link_args_.each(l -> skc.args(Array["--link-args", l]));
 
   skc.args(sources.libraries_.toArray());
@@ -892,7 +883,20 @@ fun skc(
     skc.args(Array["-o", outputs[0].path]);
     Some(outputs[0].path)
   };
+
+  // Enviroment
+
+  skc.env("SKARGO_MANIFEST_DIR", package.root());
+  skc.env("SKARGO_PKG_NAME", package.name());
+  skc.env("SKARGO_PKG_VERSION", package.version().toString());
+  if (!sources.preambles_.isEmpty()) {
+    skc.env(
+      "SKC_PREAMBLE",
+      sources.preambles_.toArray().join(Path.listSeparator),
+    )
+  };
   sources.env_.each(env -> skc.env(env.i0, env.i1));
+
   _ = run_cmd(skc, console);
   output
 }
