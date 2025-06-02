@@ -39,6 +39,12 @@ class HostTargetError(error: String) extends .Exception {
   }
 }
 
+class CommandError(error: String) extends .Exception {
+  fun getMessage(): String {
+    this.error
+  }
+}
+
 class Dependency(dep: Skargo.Dependency) extends SK.Key {
   fun toString(): String {
     `${this.dep.name}@${this.dep.req}`
@@ -99,21 +105,17 @@ class TargetedScript(
 class Environment(
   toml: SK.EHandle<SKStore.UnitID, TimedFile>,
   commands: SK.EHandle<Command, SK.IntFile>,
+  results: SK.EHandle<Command, SK.StringFile>,
 ) extends SK.File {
   //
   fun check(
     context: mutable SK.Context,
     filename: String,
     options: Skargo.CompileOptions,
-  ): void {
-    mtime = Time.time();
-    this.toml.writeArray(
+  ): Result<void, .Exception> {
+    this.performCommand(
       context,
-      SKStore.UnitID::singleton,
-      Array[TimedFile(filename, mtime)],
-    );
-    this.commands.writeArray(
-      context,
+      filename,
       Check(
         options.build_config.requested_arch
           .map(tt -> Skargo.TargetArchTriple(tt))
@@ -121,9 +123,28 @@ class Environment(
         Skargo.TargetArchTriple(get_host_target()),
         options.build_config.requested_profile,
       ),
-      Array[SK.IntFile(mtime)],
+    )
+  }
+
+  private fun performCommand(
+    context: mutable SK.Context,
+    filename: String,
+    command: Command,
+  ): Result<void, .Exception> {
+    mtime = Time.time();
+    this.toml.writeArray(
+      context,
+      SKStore.UnitID::singleton,
+      Array[TimedFile(filename, mtime)],
     );
-    context.update()
+    this.commands.writeArray(context, command, Array[SK.IntFile(mtime)]);
+    context.update();
+    result = this.results.get(context, command).value;
+    if (!result.isEmpty()) {
+      Failure(CommandError(result))
+    } else {
+      Success(void)
+    }
   }
 }
 
@@ -581,7 +602,20 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
       writer.set(key, it.first)
     },
   );
-  context.setPersistent(kEnvProperty, Environment(tomlHdl, commandsHdl))
+  resultHdl = commandsHdl.map(
+    Command::bKeyType,
+    SK.StringFile::type,
+    context,
+    dirName.sub("commands/perform"),
+    (_ctx, writer, key, _it) ~> {
+      writer.set(key, SK.StringFile("TODO"));
+    },
+  );
+
+  context.setPersistent(
+    kEnvProperty,
+    Environment(tomlHdl, commandsHdl, resultHdl),
+  )
 }
 
 fun run_build_script(

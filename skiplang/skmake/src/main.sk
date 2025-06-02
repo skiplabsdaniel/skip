@@ -15,7 +15,9 @@ fun main(): void {
   );
 }
 
-fun checkAndRunContext(fn: mutable SK.Context ~> void): void {
+fun checkAndRunContext<T>(
+  fn: mutable SK.Context ~> Result<T, .Exception>,
+): Result<T, .Exception> {
   if (SK.gHasContext() == 0) {
     SK.gContextInit(initCtx(SK.DirName::create("/skmake/")));
   };
@@ -23,11 +25,20 @@ fun checkAndRunContext(fn: mutable SK.Context ~> void): void {
     fn,
     //Some(SK.Synchronizer(SK.import, SK.export, _ ~> void)),
   ) match {
-  | Success _ -> void
-  | Failure(exn) ->
-    print_error(exn.getMessage());
-    skipExit(1)
+  | Success(res) -> res
+  | Failure(e) -> Failure(e)
   }
+}
+
+fun withTimer<T>(
+  f: () -> Result<T, .Exception>,
+  g: (Float, Bool) -> void,
+): Result<T, .Exception> {
+  t0 = Time.time_ms();
+  res = f();
+  t1 = Time.time_ms();
+  g((t1 - t0).toFloat() / 1000.0, res.isFailure());
+  res
 }
 
 module end;
