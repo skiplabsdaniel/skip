@@ -162,17 +162,20 @@ fun fillPackages(
   contains: (Skargo.PackageId) -> Bool,
   writer: (Skargo.PackageId, Int) -> void,
   loader: (mutable SK.Context, Skargo.SourceId) ~> Skargo.Package,
+  withDev: Bool = true,
 ): void {
   packageId = package.manifest.package_id;
   if (contains(packageId)) return void;
   writer(packageId, packageId.source_id.getLastModificationTime());
   package.manifest.dependencies.each(dependency -> {
+    if (!withDev && dependency.kind is Skargo.DevelopmentDep()) return void;
     fillPackages(
       context,
       loader(context, dependency.source_id),
       contains,
       writer,
       loader,
+      false,
     )
   });
 }
