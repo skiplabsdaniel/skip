@@ -1,6 +1,6 @@
 module Skargo;
 
-base class LibraryType uses Equality, Hashable {
+base class LibraryType uses Orderable, Hashable {
   children =
   | LibraryTypeSklib()
   | LibraryTypeCdylib()
@@ -272,7 +272,7 @@ class Target(
   kind: TargetKind,
   name: String,
   srcs: Array<String>,
-) uses Equality, Hashable {
+) uses Orderable, Hashable {
   fun hash(): Int {
     (this.kind, this.name, this.srcs).hash()
   }
@@ -294,7 +294,7 @@ class Target(
   }
 }
 
-base class TargetKind uses Equality, Hashable {
+base class TargetKind uses Orderable, Hashable {
   children =
   | LibTarget(type: LibraryType)
   | BinTarget(entry_point: String)

@@ -73,7 +73,7 @@ class TargetTriple(
   }
 }
 
-private base class TargetArch uses Equality, Hashable, Show {
+private base class TargetArch uses Orderable, Hashable, Show {
   children =
   | TargetArchHost()
   | TargetArchTriple(TargetTriple)

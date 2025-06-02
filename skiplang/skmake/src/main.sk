@@ -10,7 +10,9 @@ fun main(): void {
     Skargo.help,
     check,
   ];
-  Skargo.perform("skmake", suppliers);
+  Skargo.perform("skmake", suppliers, cmd ~>
+    cmd.arg(Cli.Arg::string("data")).arg(Cli.Arg::string("init"))
+  );
 }
 
 fun checkAndRunContext(fn: mutable SK.Context ~> void): void {
@@ -19,7 +21,7 @@ fun checkAndRunContext(fn: mutable SK.Context ~> void): void {
   };
   SK.runWithResult(
     fn,
-    Some(SK.Synchronizer(SK.import, SK.export, _ ~> void)),
+    //Some(SK.Synchronizer(SK.import, SK.export, _ ~> void)),
   ) match {
   | Success _ -> void
   | Failure(exn) ->

@@ -9,6 +9,7 @@ fun perform(
   suppliers: Array<
     () ~> (Cli.Command, (GlobalContext, Cli.ParseResults) ~> void),
   >,
+  complete: Cli.Command ~> Cli.Command = cmd ~> cmd,
 ): void {
   cmd = Cli.Command(name)
     .about("Skip's package manager")
@@ -46,7 +47,7 @@ fun perform(
     !cmd = cmd.subcommand(subcommand);
     commands.set(subcommand.name, cmdFn);
   };
-  !cmd = cmd.help();
+  !cmd = complete(cmd).help();
   args = cmd.parseArgs();
   if (args.getBool("version")) {
     pkg_name = #env ("SKARGO_PKG_NAME");
