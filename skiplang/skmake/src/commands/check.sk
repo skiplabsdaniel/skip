@@ -5,12 +5,19 @@ fun check(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
 }
 
 fun execCheck(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
-  checkAndRunContext(context ~> {
-    manifest_path = Skargo.root_manifest(args, gctx);
-    context.getPersistent(kEnvProperty).map(Environment::type).each(env -> {
-      env.setManifestPath(context, manifest_path)
-    });
-  });
+  Skargo.withTimer(
+    () -> {
+      checkAndRunContext(context ~> {
+        context.setGlobal("Skargo.Console", ConsoleFile(gctx.console));
+        manifest_path = Skargo.root_manifest(args, gctx);
+        compilerOptions = Skargo.compile_options(args);
+        context.getPersistent(kEnvProperty).map(Environment::type).each(env -> {
+          env.check(context, manifest_path, compilerOptions)
+        });
+      });
+    },
+    t -> gctx.console.status("Finished", `Check target in ${t}s`),
+  )
 }
 
 module end;

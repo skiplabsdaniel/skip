@@ -10,7 +10,13 @@ class Files(files: Array<TimedFile>) extends SK.File
 
 class PackageFile(package: Skargo.Package) extends SK.File
 
+class TimedPackage(package: Skargo.Package, time: Int) extends SK.File
+
 class PackageIdKey(id: Skargo.PackageId) extends SK.Key
+
+class BytesFile(bytes: Vector<UInt8>) extends SK.File
+
+class ConsoleFile(console: Skargo.Console) extends SK.File
 
 class Options{
   profile: String,
@@ -27,18 +33,26 @@ class BuildScriptError(error: String) extends .Exception {
   }
 }
 
+class HostTargetError(error: String) extends .Exception {
+  fun getMessage(): String {
+    this.error
+  }
+}
+
 class Dependency(dep: Skargo.Dependency) extends SK.Key {
   fun toString(): String {
     `${this.dep.name}@${this.dep.req}`
   }
 }
 
+class BuildScriptOutput(bso: Skargo.BuildScriptOutput) extends SK.File
+
 class BuildSources{
-  sources_: SortedSet<TimedFile> = SortedSet[],
+  sources_: SortedSet<String> = SortedSet[],
   env_: SortedSet<(String, String)> = SortedSet[],
-  preambles_: SortedSet<TimedFile> = SortedSet[],
+  preambles_: SortedSet<String> = SortedSet[],
   link_args_: SortedSet<String> = SortedSet[],
-  libraries_: SortedSet<TimedFile> = SortedSet[],
+  libraries_: SortedSet<String> = SortedSet[],
 } extends SK.File {
   fun union(other: BuildSources): BuildSources {
     BuildSources{
@@ -51,26 +65,74 @@ class BuildSources{
   }
 
   fun sources(files: Array<String>): BuildSources {
-    files.each(f ->
-      !this.sources_ = this.sources_.set(
-        TimedFile(f, FileSystem.getLastModificationTime(f)),
-      )
-    );
+    files.each(f -> !this.sources_ = this.sources_.set(f));
     this
   }
 }
 
-class Environment(toml: SK.EHandle<SKStore.UnitID, TimedFile>) extends SK.File {
+base class Command(
+  arch: Skargo.TargetArch,
+  host: Skargo.TargetArch,
+  profile: String,
+) extends SK.Key {
+  children =
+  | Check()
+  | Build(target: Skargo.Target)
+
+  static fun bKeyType(key: SK.Key): Command {
+    key match {
+    | x @ Command _ -> x
+    | _ -> invariant_violation("Must be a Skmake.Command")
+    }
+  }
+}
+
+class Script(package: Skargo.PackageId, name: String) extends SK.Key
+
+class TargetedScript(
+  script: Script,
+  arch: Skargo.TargetArch,
+  host: Skargo.TargetArch,
+  profile: String,
+) extends SK.Key
+
+class Environment(
+  toml: SK.EHandle<SKStore.UnitID, TimedFile>,
+  commands: SK.EHandle<Command, SK.IntFile>,
+) extends SK.File {
   //
-  fun setManifestPath(context: mutable SK.Context, filename: String): void {
-    mtime = FileSystem.getLastModificationTime(filename);
+  fun check(
+    context: mutable SK.Context,
+    filename: String,
+    options: Skargo.CompileOptions,
+  ): void {
+    mtime = Time.time();
     this.toml.writeArray(
       context,
       SKStore.UnitID::singleton,
       Array[TimedFile(filename, mtime)],
     );
+    this.commands.writeArray(
+      context,
+      Check(
+        options.build_config.requested_arch
+          .map(tt -> Skargo.TargetArchTriple(tt))
+          .default(Skargo.TargetArchHost()),
+        Skargo.TargetArchTriple(get_host_target()),
+        options.build_config.requested_profile,
+      ),
+      Array[SK.IntFile(mtime)],
+    );
     context.update()
   }
+}
+
+fun getConsole(context: mutable SK.Context): Skargo.Console {
+  context
+    .getGlobal("Skargo.Console")
+    .map(ConsoleFile::type)
+    .map(c ~> c.console)
+    .default(Skargo.Console::create(Skargo.VerbosityNormal(), "auto"));
 }
 
 fun fillPackages(
@@ -82,7 +144,6 @@ fun fillPackages(
 ): void {
   packageId = package.manifest.package_id;
   if (contains(packageId)) return void;
-  debug(packageId);
   writer(packageId, packageId.source_id.getLastModificationTime());
   package.manifest.dependencies.each(dependency -> {
     fillPackages(
@@ -96,6 +157,7 @@ fun fillPackages(
 }
 
 fun init(context: mutable SK.Context, dirName: SK.DirName): void {
+  skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
   loadPackage = SKStore.LHandle::create(
     SK.SID::keyType,
     PackageFile::type,
@@ -110,23 +172,37 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
     TimedFile::type,
     dirName.sub("toml"),
   );
+  commandsHdl = context.mkdir(
+    Command::bKeyType,
+    SK.IntFile::type,
+    dirName.sub("commands"),
+  );
   pckHdl = tomlHdl.map(
     SKStore.UnitID::keyType,
-    PackageFile::type,
+    TimedPackage::type,
     context,
     dirName.sub("package"),
     (ctx, writer, key, it) ~> {
-      package = loadPackage.get(ctx, SK.SID(it.first.filename));
-      debug(package);
-      writer.set(key, package)
+      tfile = it.first;
+      package = loadPackage.get(ctx, SK.SID(tfile.filename));
+      writer.set(key, TimedPackage(package.package, tfile.modified))
     },
   );
-  allPackage = pckHdl
+  rootPathHdl = pckHdl.map(
+    SKStore.UnitID::keyType,
+    SK.StringFile::type,
+    context,
+    dirName.sub("package/path"),
+    (_ctx, writer, key, it) ~> {
+      writer.set(key, SK.StringFile(getPackagePath(it.first.package)))
+    },
+  );
+  allPackages = pckHdl
     .map(
       PackageIdKey::keyType,
       SK.IntFile::type,
       context,
-      dirName.sub("allPackages/ids"),
+      dirName.sub("packages/ids"),
       (ctx, writer, _, it) ~> {
         fillPackages(
           ctx,
@@ -146,7 +222,7 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
       PackageIdKey::keyType,
       PackageFile::type,
       context,
-      dirName.sub("allPackages"),
+      dirName.sub("packages"),
       (ctx, writer, key, _) ~> {
         source = key.id.source_id;
         path = source.kind match {
@@ -155,12 +231,53 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
         package = loadPackage.get(ctx, SK.SID(path));
         writer.set(key, package)
       },
-    )
+    );
+  // To create dependency on file modification time
+  allFiles = allPackages.map(
+    SK.SID::keyType,
+    SK.IntFile::type,
+    context,
+    dirName.sub("packages/files"),
+    (ctx, writer, _, it) ~> {
+      it.toArray().each(package -> {
+        manifest = package.package.manifest;
+        path = getPackagePath(package.package);
+        // Get dependence to update all fill data
+        _ = tomlHdl.get(ctx, SKStore.UnitID::singleton);
+        manifest.targets.each(target -> {
+          if (
+            target.kind is Skargo.LibTarget(Skargo.LibraryTypeSklib()) ||
+            target.kind is Skargo.CustomBuildTarget()
+          ) {
+            target.srcs.each(src -> {
+              file = Path.join(path, src);
+              mtile = FileSystem.getLastModificationTime(file);
+              writer.set(SK.SID(file), SK.IntFile(mtile))
+            })
+          }
+        });
+      })
+    },
+  );
+  _ = allFiles.map(
+    SK.SID::keyType,
+    SK.IntFile::type,
+    context,
+    dirName.sub("packages/files/check"),
+    (ctx, writer, key, it) ~> {
+      console = getConsole(ctx);
+      console.verbose(() -> {
+        console.status("Modified", key.value)
+      });
+      writer.set(key, it.first)
+    },
+  );
+  allPackageByName = allPackages
     .map(
       SK.SID::keyType,
       PackageFile::type,
       context,
-      dirName.sub("allPackages/byname"),
+      dirName.sub("packages/byname"),
       (_ctx, writer, key, it) ~> {
         writer.set(SK.SID(key.id.name), it.first)
       },
@@ -187,22 +304,20 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
     context,
     dirName.sub("buildInfos"),
     (ctx, self, key) ~> {
-      package = allPackage.getArray(ctx, SK.SID(key.dep.name)).filter(p ->
-        key.dep.req.matches(p.package.manifest.package_id.version)
-      )[0].package;
-      manifest = package.manifest;
-      source = manifest.package_id.source_id;
-      path = source.kind match {
-      | Skargo.PathSource() -> source.url
-      };
+      package = allPackageByName
+        .getArray(ctx, SK.SID(key.dep.name))
+        .filter(p ->
+          key.dep.req.matches(p.package.manifest.package_id.version)
+        )[0].package;
+      path = getPackagePath(package);
       buildSources = BuildSources{};
-      manifest.targets.each(target -> {
+      package.manifest.targets.each(target -> {
         if (target.kind is Skargo.LibTarget(Skargo.LibraryTypeSklib())) {
           !buildSources = buildSources.sources(
             target.srcs.map(src -> Path.join(path, src)),
           )
         } else if (target.kind is Skargo.CustomBuildTarget()) {
-          manifest.dependencies
+          package.manifest.dependencies
             .filter(t -> t.kind is Skargo.BuildDep())
             .each(dep -> {
               customSourced = self.get(ctx, Dependency(dep));
@@ -213,18 +328,19 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
       Array[buildSources]
     },
   );
-  _builds = allPackage.map(
-    SK.SID::keyType,
-    Files::type,
+  builds = allPackages.map(
+    Script::keyType,
+    BuildSources::type,
     context,
     dirName.sub("builds"),
     (ctx, writer, _, it) ~> {
-      manifest = it.first.package.manifest;
+      package = it.first.package;
+      manifest = package.manifest;
       source = manifest.package_id.source_id;
       path = source.kind match {
       | Skargo.PathSource() -> source.url
       };
-      it.first.package.manifest.targets
+      package.manifest.targets
         .filter(t -> t.kind is Skargo.CustomBuildTarget())
         .each(build -> {
           buildSources = BuildSources{};
@@ -235,34 +351,252 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
                 collectBuildInfo.get(ctx, Dependency(dep)),
               );
             });
-          files = Files(
-            build.srcs
-              .map(src -> {
-                srcPath = Path.join(path, src);
-                TimedFile(srcPath, FileSystem.getLastModificationTime(srcPath))
-              })
-              .sortedBy(f ~> f.filename, (v1, v2) ~> v1.compare(v2)),
+          !buildSources = buildSources.sources(
+            build.srcs.map(src -> Path.join(path, src)),
           );
-          debug((build.name, buildSources, files));
-          writer.set(SK.SID(build.name), files)
+          // to do while libraries
+          writer.set(Script(manifest.package_id, build.name), buildSources)
         });
     },
   );
-
-  context.setPersistent(kEnvProperty, Environment(tomlHdl))
+  torun = commandsHdl.map(
+    TargetedScript::keyType,
+    SK.IntFile::type,
+    context,
+    dirName.sub("builds/torun"),
+    (ctx, writer, key, it) ~> {
+      time = it.first;
+      key match {
+      | Check _ ->
+        builds.items(ctx).each(item ->
+          writer.set(
+            TargetedScript(item.i0, key.arch, key.host, key.profile),
+            time,
+          )
+        )
+      | _ -> invariant_violation("Not implemented")
+      }
+    },
+  );
+  tobuild = torun
+    .map(
+      Script::keyType,
+      SK.IntFile::type,
+      context,
+      dirName.sub("builds/byname"),
+      (_ctx, writer, key, it) ~> {
+        writer.setArray(key.script, it.toArray())
+      },
+    )
+    .map(
+      Script::keyType,
+      BuildSources::type,
+      context,
+      dirName.sub("builds/tobuild"),
+      // ignore the change du to command
+      (ctx, writer, key, _) ~> {
+        writer.set(key, builds.get(ctx, key));
+      },
+    );
+  built = tobuild.map(
+    Script::keyType,
+    BytesFile::type,
+    context,
+    dirName.sub("builds/built"),
+    (ctx, writer, key, it) ~> {
+      console = getConsole(ctx);
+      package = allPackages.get(ctx, PackageIdKey(key.package)).package;
+      sources = it.first;
+      // Create a dpendency on file changes
+      sources.sources_.each(f -> _ = allFiles.maybeGet(ctx, SK.SID(f)));
+      path = rootPathHdl.get(ctx, SKStore.UnitID::singleton).value;
+      unit_name = `${package.name()} v${package.version()} [${
+        key.name
+      }] (${package.root()})`;
+      console.status("Compiling", unit_name);
+      outfile = skc(
+        skc_.process(),
+        console,
+        Skargo.Target(Skargo.BinTarget("main"), key.name, Array[]),
+        package,
+        sources,
+        Options{
+          output => Path.join(path, "target/.common"),
+          profile => "dev",
+          arch => Skargo.TargetArchHost(),
+        },
+        key.name,
+      );
+      content = mutable Vector[];
+      file = IO.File::open(outfile.fromSome(), IO.OpenOptions{read => true});
+      file.read_to_end(content) match {
+      | Success _ ->
+        file.close();
+        writer.set(key, BytesFile(unsafe_chill_trust_me(content)))
+      | Failure(e) -> throw e
+      }
+    },
+  );
+  toreallyrun = torun.map(
+    TargetedScript::keyType,
+    BytesFile::type,
+    context,
+    dirName.sub("builds/toreallyrun"),
+    (ctx, writer, key, _) ~> {
+      writer.set(key, built.get(ctx, key.script))
+    },
+  );
+  runBuildScript = SKStore.LHandle::create(
+    TargetedScript::keyType,
+    BuildScriptOutput::type,
+    context,
+    dirName.sub("builds/runBuildScript"),
+    (ctx, _self, key) ~> {
+      binary = toreallyrun.get(ctx, key);
+      console = getConsole(ctx);
+      root = rootPathHdl.get(ctx, SKStore.UnitID::singleton).value;
+      package = allPackages.get(ctx, PackageIdKey(key.script.package)).package;
+      path = getPackagePath(package);
+      binaryPath = Path.join(
+        Path.join(Path.join(root, "target"), ".common"),
+        key.script.name,
+      );
+      file = IO.File::open(
+        binaryPath,
+        IO.OpenOptions{write => true, create => true, truncate => true},
+      );
+      file.write_all(binary.bytes.bytes()) match {
+      | Success _ -> file.close()
+      | Failure(e) -> throw e
+      };
+      unit_name = `${package.name()} v${package.version()} [${
+        key.script.name
+      }] (${package.root()})`;
+      console.status("Running", unit_name);
+      output = `target/${key.arch}/${key.profile}/${key.script.name}`;
+      bso = run_build_script(
+        binaryPath,
+        package,
+        // todo good dir
+        output,
+        key.profile,
+        key.host,
+        key.arch,
+        console,
+      );
+      Array[BuildScriptOutput(toAbsolute(path, bso))]
+    },
+  );
+  runned = toreallyrun.map(
+    TargetedScript::keyType,
+    BuildScriptOutput::type,
+    context,
+    dirName.sub("builds/bso"),
+    (ctx, writer, key, _) ~> {
+      writer.set(key, runBuildScript.get(ctx, key))
+    },
+  );
+  runfiles = runned.map(
+    SK.SID::keyType,
+    SK.IntFile::type,
+    context,
+    dirName.sub("builds/files"),
+    (ctx, writer, _key, it) ~> {
+      // Get dependence to update all fill data
+      _ = tomlHdl.get(ctx, SKStore.UnitID::singleton);
+      bso = it.first.bso;
+      bso.rerun_if_changed.each(f -> {
+        mtile = FileSystem.getLastModificationTime(f);
+        writer.set(SK.SID(f), SK.IntFile(mtile))
+      })
+    },
+  );
+  _ = runfiles.map(
+    SK.SID::keyType,
+    SK.IntFile::type,
+    context,
+    dirName.sub("builds/files/check"),
+    (ctx, writer, key, it) ~> {
+      console = getConsole(ctx);
+      console.verbose(() -> {
+        console.status("Modified", key.value)
+      });
+      writer.set(key, it.first)
+    },
+  );
+  checkedrun = runned.map(
+    Script::keyType,
+    BuildScriptOutput::type,
+    context,
+    dirName.sub("builds/bso/checked"),
+    (ctx, writer, key, it) ~> {
+      bso = it.first.bso;
+      package = allPackages.get(ctx, PackageIdKey(key.script.package)).package;
+      manifest = package.manifest;
+      source = manifest.package_id.source_id;
+      path = source.kind match {
+      | Skargo.PathSource() -> source.url
+      };
+      // Add dependency to rerun_files
+      bso.rerun_if_changed.each(f -> {
+        file = Path.join(path, f);
+        _ = runfiles.get(ctx, SK.SID(file))
+      });
+      writer.set(key.script, runBuildScript.get(ctx, key))
+    },
+  );
+  buildartifacts = checkedrun.map(
+    SK.SID::keyType,
+    SK.IntFile::type,
+    context,
+    dirName.sub("builds/artifacts"),
+    (ctx, writer, _key, it) ~> {
+      // Get dependence to update all fill data
+      _ = tomlHdl.get(ctx, SKStore.UnitID::singleton);
+      bso = it.first.bso;
+      bso.libraries.each(f -> {
+        mtile = FileSystem.getLastModificationTime(f);
+        writer.set(SK.SID(f), SK.IntFile(mtile))
+      });
+      bso.preambles.each(f -> {
+        mtile = FileSystem.getLastModificationTime(f);
+        writer.set(SK.SID(f), SK.IntFile(mtile))
+      });
+      bso.extra_sources.each(f -> {
+        mtile = FileSystem.getLastModificationTime(f);
+        writer.set(SK.SID(f), SK.IntFile(mtile))
+      });
+    },
+  );
+  _ = buildartifacts.map(
+    SK.SID::keyType,
+    SK.IntFile::type,
+    context,
+    dirName.sub("builds/artifacts/check"),
+    (ctx, writer, key, it) ~> {
+      console = getConsole(ctx);
+      console.verbose(() -> {
+        console.status("Modified", key.value)
+      });
+      writer.set(key, it.first)
+    },
+  );
+  context.setPersistent(kEnvProperty, Environment(tomlHdl, commandsHdl))
 }
 
 fun run_build_script(
+  binary: String,
   package: Skargo.Package,
   outdir: String,
-  name: String,
   profile: String,
   host: Skargo.TargetArch,
   target: Skargo.TargetArch,
-  relocation_model: String,
   console: Skargo.Console,
+  relocation_model: String = "static",
 ): Skargo.BuildScriptOutput {
-  cmd = Skargo.ProcessBuilder::create{cmd => Path.join(outdir, name)};
+  create_dir(outdir);
+
+  cmd = Skargo.ProcessBuilder::create{cmd => binary};
 
   cmd.cwd(package.root());
 
@@ -284,7 +618,13 @@ fun run_build_script(
     (console.verbosity >= Skargo.VerbosityVerbose()).toString(),
   );
   cmd.env("HOST", host.toString());
-  cmd.env("TARGET", target.toString());
+  cmd.env(
+    "TARGET",
+    target match {
+    | Skargo.TargetArchHost() -> host.toString()
+    | Skargo.TargetArchTriple(t) -> t.toString()
+    },
+  );
   cmd.env("RELOCATION_MODEL", relocation_model);
   p = run_cmd(cmd, console);
   FileSystem.writeTextFile(Path.join(outdir, "stdout"), p.stdout);
@@ -321,12 +661,14 @@ fun run_cmd(
 fun skc(
   skc: mutable Skargo.ProcessBuilder,
   console: Skargo.Console,
-  package: Skargo.Package,
   target: Skargo.Target,
+  package: Skargo.Package,
   sources: BuildSources,
   options: Options,
   state: String,
-): void {
+): ?String {
+  create_dir(options.output);
+
   skc.cwd(package.root());
 
   options.arch match {
@@ -342,19 +684,16 @@ fun skc(
   if (!sources.preambles_.isEmpty()) {
     skc.env(
       "SKC_PREAMBLE",
-      sources.preambles_
-        .map(p -> p.filename)
-        .toArray()
-        .join(Path.listSeparator),
+      sources.preambles_.toArray().join(Path.listSeparator),
     )
   };
 
   sources.link_args_.each(l -> skc.args(Array["--link-args", l]));
 
-  skc.args(sources.libraries_.map(p -> p.filename).toArray());
-  skc.args(sources.sources_.map(p -> p.filename).toArray());
+  skc.args(sources.libraries_.toArray());
+  skc.args(sources.sources_.toArray());
 
-  state_db_path = Path.join(`${state}_state.db`);
+  state_db_path = Path.join(options.output, `${state}_state.db`);
   skc.args(
     Array[
       if (FileSystem.exists(state_db_path)) {
@@ -382,15 +721,18 @@ fun skc(
   | _ -> invariant_violation("unreachable")
   };
 
-  if (options.check) {
-    skc.arg("--check")
+  output = if (options.check) {
+    skc.arg("--check");
+    None()
   } else {
     outputs = outputs(options.output, package, target, options.arch);
     assert(outputs.size() == 1);
     skc.args(Array["-o", outputs[0].path]);
+    Some(outputs[0].path)
   };
   sources.env_.each(env -> skc.env(env.i0, env.i1));
-  _ = run_cmd(skc, console)
+  _ = run_cmd(skc, console);
+  output
 }
 
 fun initCtx(dirName: SK.DirName): SK.Context {
@@ -471,6 +813,36 @@ fun outputs(
     )
   };
   res.collect(Array)
+}
+
+fun create_dir(path: String): void {
+  _ = system(`mkdir -p ${path}`)
+}
+
+private fun get_host_target(): Skargo.TargetTriple {
+  p = System.subprocess(Array["llvm-config", "--host-target"]).fromSuccess();
+  if (!p.success()) {
+    throw HostTargetError(Skargo.subprocess_error_message(p));
+  };
+  Skargo.TargetTriple::fromString(p.stdout.trim())
+}
+
+private fun toAbsolute(
+  base: String,
+  bso: Skargo.BuildScriptOutput,
+): Skargo.BuildScriptOutput {
+  !bso.rerun_if_changed = bso.rerun_if_changed.map(f -> Path.join(base, f));
+  !bso.preambles = bso.preambles.map(f -> Path.join(base, f));
+  !bso.extra_sources = bso.extra_sources.map(f -> Path.join(base, f));
+  bso
+}
+
+private fun getPackagePath(package: Skargo.Package): String {
+  manifest = package.manifest;
+  source = manifest.package_id.source_id;
+  source.kind match {
+  | Skargo.PathSource() -> source.url
+  };
 }
 
 module end;

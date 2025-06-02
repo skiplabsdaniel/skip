@@ -1,0 +1,66 @@
+"create context"
+"setManifestPath [/home/parallels/dev/skip/skiplang/skmake/Skargo.toml, 1748795097]"
+(
+  "toUpdate[0]",
+  SortedMap.Node{
+    h => 1,
+    key => (SKStore.TimeStack(Array[SKStore.Time(3)]), SKStore.Time(2)),
+    left => SortedMap.Nil(),
+    n => 1,
+    right => SortedMap.Nil(),
+    value => SKStore.Arrow(
+      SKStore.DirName(
+        "/skmake/toml/",
+        -1072557957617346625,
+        4629114651153731747,
+      ),
+      SKStore.DirName(
+        "/skmake/package/",
+        3578115250052072963,
+        -9184970652029615841,
+      ),
+    ),
+  },
+)
+(
+  "toUpdate[1]",
+  SortedMap.Node{
+    h => 1,
+    key => (SKStore.TimeStack(Array[SKStore.Time(3)]), SKStore.Time(2)),
+    left => SortedMap.Nil(),
+    n => 1,
+    right => SortedMap.Nil(),
+    value => SKStore.Arrow(
+      SKStore.DirName(
+        "/skmake/toml/",
+        -1072557957617346625,
+        4629114651153731747,
+      ),
+      SKStore.DirName(
+        "/skmake/package/",
+        3578115250052072963,
+        -9184970652029615841,
+      ),
+    ),
+  },
+)
+(
+  "load package",
+  Skmake.TimedFile(
+    "/home/parallels/dev/skip/skiplang/skmake/Skargo.toml",
+    1748795097,
+  ),
+)
+    Compiling: skargo v0.2.0 [build-script-skargo] (/home/parallels/dev/skip/skiplang/skargo)
+Some(
+  "/home/parallels/dev/skip/skiplang/skmake/target/.common/build-script-skargo",
+)
+    Compiling: sktest v0.1.0 [build-script-sktest] (/home/parallels/dev/skip/skiplang/sktest)
+Some(
+  "/home/parallels/dev/skip/skiplang/skmake/target/.common/build-script-sktest",
+)
+    Compiling: std v0.1.0 [build-script-std] (/home/parallels/dev/skip/skiplang/prelude)
+Some("/home/parallels/dev/skip/skiplang/skmake/target/.common/build-script-std")
+"Second update"
+("toUpdate[0]", SortedMap.Nil())
+("toUpdate[1]", SortedMap.Nil())
