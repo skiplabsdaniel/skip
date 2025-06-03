@@ -121,6 +121,8 @@ class BuildSources{
   }
 }
 
+class BuildData(buildInfo: BuildInfo, withTests: Bool) extends SK.Key
+
 base class Command(buildInfo: BuildInfo) extends SK.Key {
   children =
   | Check()
@@ -152,7 +154,7 @@ class Environment(
   toml: SK.EHandle<SKStore.UnitID, TimedFile>,
   pckHdl: SK.EHandle<SKStore.UnitID, TimedPackage>,
   commands: SK.EHandle<Command, SK.IntFile>,
-  sources: SK.EHandle<Command, BuildSources>,
+  sources: SK.EHandle<BuildData, BuildSources>,
 ) extends SK.File {
   //
   fun check(
@@ -173,7 +175,7 @@ class Environment(
     this.performCommand(context, filename, check)?;
     console = getConsole(context);
     package = this.pckHdl.get(context, SKStore.UnitID::singleton).package;
-    buildSources = this.sources.get(context, check);
+    buildSources = this.sources.get(context, BuildData(check.buildInfo, true));
     unit_name = `${package.name()} v${package.version()} [${profile}] (${package.root()})`;
     console.status("Check", unit_name);
     output = check.buildInfo.targetDir();
@@ -733,16 +735,20 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
   );
   sources = commandsHdl
     .map(
-      Command::bKeyType,
+      BuildData::keyType,
       SK.IntFile::type,
       context,
       dirName.sub("commands/nottimed"),
       (_ctx, writer, key, _it) ~> {
-        writer.set(key, SK.IntFile(0))
+        withTests = key match {
+        | Check _ -> true
+        | Build(target, _) -> target.kind is Skargo.TestTarget _
+        };
+        writer.set(BuildData(key.buildInfo, withTests), SK.IntFile(0))
       },
     )
     .map(
-      Command::bKeyType,
+      BuildData::keyType,
       BuildSources::type,
       context,
       dirName.sub("builds/sources"),
@@ -750,41 +756,35 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
         package = pckHdl.get(ctx, SKStore.UnitID::singleton).package;
         packageId = PackageId::create(package);
         path = package.root();
-        build = withTests -> {
-          buildSources = BuildSources{};
-          package.manifest.targets.each(target -> {
-            if (
-              target.kind is Skargo.LibTarget(Skargo.LibraryTypeSklib()) ||
-              (withTests && target.kind is Skargo.TestTarget _)
-            ) {
-              !buildSources = buildSources.sources(
-                target.srcs.map(src -> Path.join(path, src)),
-              )
-            } else if (target.kind is Skargo.CustomBuildTarget()) {
-              bso = checkedrun.get(
-                ctx,
-                TargetedScript(Script(packageId, target.name), key.buildInfo),
-              ).bso;
-              !buildSources = buildSources.union(
-                BuildSources::fromBuildScriptOutput(bso),
-              )
-            }
-          });
-          package.manifest.dependencies.each(dependency -> {
-            if (dependency.kind is Skargo.BuildDep()) return void;
-            !buildSources = buildSources.union(
-              specificBuildInfo.get(
-                ctx,
-                Dependency(dependency, Some(key.buildInfo)),
-              ),
+        buildSources = BuildSources{};
+        package.manifest.targets.each(target -> {
+          if (
+            target.kind is Skargo.LibTarget(Skargo.LibraryTypeSklib()) ||
+            (key.withTests && target.kind is Skargo.TestTarget _)
+          ) {
+            !buildSources = buildSources.sources(
+              target.srcs.map(src -> Path.join(path, src)),
             )
-          });
-          buildSources
-        };
-        key match {
-        | Check _ -> writer.set(key, build(true))
-        | _ -> invariant_violation("Not implemented")
-        }
+          } else if (target.kind is Skargo.CustomBuildTarget()) {
+            bso = checkedrun.get(
+              ctx,
+              TargetedScript(Script(packageId, target.name), key.buildInfo),
+            ).bso;
+            !buildSources = buildSources.union(
+              BuildSources::fromBuildScriptOutput(bso),
+            )
+          }
+        });
+        package.manifest.dependencies.each(dependency -> {
+          if (dependency.kind is Skargo.BuildDep()) return void;
+          !buildSources = buildSources.union(
+            specificBuildInfo.get(
+              ctx,
+              Dependency(dependency, Some(key.buildInfo)),
+            ),
+          )
+        });
+        writer.set(key, buildSources)
       },
     );
   context.setPersistent(
