@@ -20,10 +20,15 @@ fun execBuild(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
           args.getBool("lib", Some(false)),
           args.getBool("bins", Some(false)),
           SortedSet::createFromItems(args.getArray("bin", Some(Array[]))),
+          args.getBool("tests", Some(false)),
+          args.getBool("all-targets", Some(false)),
         );
-        context.getPersistent(kEnvProperty).map(Environment::type) match {
+        (context.getPersistent(kEnvProperty).map(Environment::type) match {
         | Some(env) -> env.build(context, manifest_path, config, filter)
         | _ -> throw CommandError("Execution environment not found")
+        }) match {
+        | Success _ -> Success(void)
+        | Failure(e) -> Failure(e)
         };
       });
     },

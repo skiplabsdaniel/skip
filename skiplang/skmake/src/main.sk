@@ -10,6 +10,7 @@ fun main(): void {
     Skargo.help,
     check,
     build,
+    test,
   ];
   Skargo.perform("skmake", suppliers, cmd ~>
     cmd
