@@ -360,7 +360,10 @@ fun getConsole(context: mutable SK.Context): Skargo.Console {
     .default(Skargo.Console::create(Skargo.VerbosityNormal(), "auto"));
 }
 
-class PackageData(time: Int, links: SortedSet<String>) extends SK.File {
+class PackageData(
+  package: Skargo.Package,
+  links: SortedSet<String>,
+) extends SK.File {
   fun addLink(link: String): PackageData {
     this with {links => this.links.set(link)};
   }
@@ -392,7 +395,7 @@ fun fillPackages(
   !data = data.set(
     packageId,
     PackageData(
-      FileSystem.getLastModificationTime(packageId.path),
+      package,
       if (sourcePath != package.root()) SortedSet[sourcePath] else SortedSet[],
     ),
   );
@@ -497,7 +500,7 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
       writer.set(key, SK.StringFile(it.first.package.root()))
     },
   );
-  allPackagesData = pckHdl.map(
+  allPackages = pckHdl.map(
     PackageId::keyType,
     PackageData::type,
     context,
@@ -515,19 +518,6 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
         },
       );
       data.items().each(item -> writer.set(item.i0, item.i1))
-    },
-  );
-  allPackages = allPackagesData.map(
-    PackageId::keyType,
-    Package::type,
-    context,
-    dirName.sub("packages"),
-    (ctx, writer, key, _) ~> {
-      package = loadPackage.get(
-        ctx,
-        SK.SID(Path.join(key.path, Skargo.kManifestFile)),
-      );
-      writer.set(key, package)
     },
   );
   // To create dependency on file modification time
@@ -577,7 +567,7 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
       context,
       dirName.sub("packages/byname"),
       (_ctx, writer, key, it) ~> {
-        writer.set(SK.SID(key.name), it.first)
+        writer.set(SK.SID(key.name), Package(it.first.package))
       },
     )
     .map(
