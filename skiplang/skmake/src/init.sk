@@ -82,7 +82,7 @@ class BuildSources{
   env_: SortedSet<(String, String)> = SortedSet[],
   preambles_: SortedSet<String> = SortedSet[],
   link_args_: SortedSet<String> = SortedSet[],
-  libraries_: SortedSet<String> = SortedSet[],
+  libraries_: Set<Array<String>> = Set[],
 } extends SK.File {
   //
   static fun fromBuildScriptOutput(
@@ -96,8 +96,7 @@ class BuildSources{
     bso.preambles.each(p -> !preambles_ = preambles_.set(p));
     link_args_ = SortedSet[];
     bso.link_args.each(l -> !link_args_ = link_args_.set(l));
-    libraries_ = SortedSet[];
-    bso.libraries.each(l -> !libraries_ = libraries_.set(l));
+    libraries_ = Set[bso.libraries];
     BuildSources{sources_, env_, preambles_, link_args_, libraries_}
   }
 
@@ -117,7 +116,7 @@ class BuildSources{
   }
 
   fun forCheck(): BuildSources {
-    this with {link_args_ => SortedSet[], libraries_ => SortedSet[]}
+    this with {link_args_ => SortedSet[], libraries_ => Set[]}
   }
 }
 
@@ -150,6 +149,35 @@ class Script(package: PackageId, name: String) extends SK.Key
 
 class TargetedScript(script: Script, buildInfo: BuildInfo) extends SK.Key
 
+class BuildFilter(lib_only: Bool, all_bins: Bool, bins: SortedSet<String>) {
+  //
+  fun check(target: Skargo.Target): Bool {
+    if (this.lib_only) {
+      target.kind match {
+      | Skargo.LibTarget _ -> true
+      | _ -> false
+      }
+    } else if (this.all_bins) {
+      target.kind match {
+      | Skargo.BinTarget _ -> true
+      | _ -> false
+      }
+    } else if (!this.bins.isEmpty()) {
+      target.kind match {
+      | Skargo.BinTarget _ -> this.bins.contains(target.name)
+      | _ -> false
+      }
+    } else {
+      target.kind match {
+      | Skargo.LibTarget(Skargo.LibraryTypeSklib _)
+      | Skargo.BinTarget _ ->
+        true
+      | _ -> false
+      }
+    }
+  }
+}
+
 class Environment(
   toml: SK.EHandle<SKStore.UnitID, TimedFile>,
   pckHdl: SK.EHandle<SKStore.UnitID, TimedPackage>,
@@ -160,23 +188,24 @@ class Environment(
   fun check(
     context: mutable SK.Context,
     filename: String,
-    options: Skargo.CompileOptions,
+    config: Skargo.BuildConfig,
   ): Result<void, .Exception> {
-    profile = options.build_config.requested_profile;
+    profile = config.requested_profile;
     check = Check(
       BuildInfo(
-        options.build_config.requested_arch
+        config.requested_arch
           .map(tt -> Skargo.TargetArchTriple(tt))
           .default(Skargo.TargetArchHost()),
         Skargo.TargetArchTriple(get_host_target()),
         profile,
       ),
     );
-    this.performCommand(context, filename, check)?;
+    this.checkProject(context, filename)?;
+    this.updateCommands(context, Array[check])?;
     console = getConsole(context);
     package = this.pckHdl.get(context, SKStore.UnitID::singleton).package;
     buildSources = this.sources.get(context, BuildData(check.buildInfo, true));
-    unit_name = `${package.name()} v${package.version()} [${profile}] (${package.root()})`;
+    unit_name = `${package.name()} v${package.version()} (${package.root()})`;
     console.status("Check", unit_name);
     output = check.buildInfo.targetDir();
     Result::guard(() -> {
@@ -194,15 +223,76 @@ class Environment(
           check => true,
           noStd => true,
         },
-        `check_${check.buildInfo.profile}`,
+        "check",
       )
     });
   }
 
-  private fun performCommand(
+  fun build(
     context: mutable SK.Context,
     filename: String,
-    command: Command,
+    config: Skargo.BuildConfig,
+    filter: BuildFilter,
+  ): Result<void, .Exception> {
+    this.checkProject(context, filename)?;
+    profile = config.requested_profile;
+    package = this.pckHdl.get(context, SKStore.UnitID::singleton).package;
+    buildInfo = BuildInfo(
+      config.requested_arch
+        .map(tt -> Skargo.TargetArchTriple(tt))
+        .default(Skargo.TargetArchHost()),
+      Skargo.TargetArchTriple(get_host_target()),
+      profile,
+    );
+    builds = package.manifest.targets
+      .map(target -> {
+        if (filter.check(target)) {
+          Some(Build(target, buildInfo))
+        } else {
+          None()
+        }
+      })
+      .filterNone();
+    this.updateCommands(context, builds)?;
+    console = getConsole(context);
+    for (build in builds) {
+      buildSources = this.sources.get(
+        context,
+        BuildData(build.buildInfo, false),
+      );
+      unit_name = `${package.name()} v${package.version()} [${
+        build.target.name
+      }] (${package.root()})`;
+      console.status("Compiling", unit_name);
+      output = build.buildInfo.targetDir();
+      Result::guard(() -> {
+        skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
+        _ = skc(
+          skc_.process(),
+          console,
+          build.target,
+          package,
+          buildSources,
+          Options{
+            output,
+            profile => build.buildInfo.profile,
+            arch => build.buildInfo.arch match {
+            | Skargo.TargetArchHost() -> build.buildInfo.host
+            | arch -> arch
+            },
+            check => false,
+            noStd => true,
+          },
+          `build_${build.target.name}`,
+        )
+      })?
+    };
+    Success(void)
+  }
+
+  private fun checkProject(
+    context: mutable SK.Context,
+    filename: String,
   ): Result<void, .Exception> {
     Result::guard(() -> {
       mtime = Time.time();
@@ -211,7 +301,19 @@ class Environment(
         SKStore.UnitID::singleton,
         Array[TimedFile(filename, mtime)],
       );
-      this.commands.writeArray(context, command, Array[SK.IntFile(mtime)]);
+      context.update();
+    });
+  }
+
+  private fun updateCommands(
+    context: mutable SK.Context,
+    commands: Array<Command>,
+  ): Result<void, .Exception> {
+    Result::guard(() -> {
+      mtime = Time.time();
+      commands.each(command ->
+        this.commands.writeArray(context, command, Array[SK.IntFile(mtime)])
+      );
       context.update();
     });
   }
@@ -513,13 +615,9 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
     dirName.sub("builds/torun"),
     (ctx, writer, key, it) ~> {
       time = it.first;
-      key match {
-      | Check _ ->
-        builds.items(ctx).each(item ->
-          writer.set(TargetedScript(item.i0, key.buildInfo), time)
-        )
-      | _ -> invariant_violation("Not implemented")
-      }
+      builds.items(ctx).each(item ->
+        writer.set(TargetedScript(item.i0, key.buildInfo), time)
+      )
     },
   );
   tobuild = torun
@@ -890,9 +988,14 @@ fun skc(
     skc.arg("--no-std")
   };
 
-  sources.link_args_.each(l -> skc.args(Array["--link-args", l]));
+  if (!sources.link_args_.isEmpty()) {
+    skc.args(Array["--link-args", sources.link_args_.toArray().join(" ")])
+  };
 
-  skc.args(sources.libraries_.toArray());
+  libraries = Array[];
+  sources.libraries_.each(l -> !libraries = libraries.concat(l.reversed()));
+
+  skc.args(libraries);
   skc.args(sources.sources_.toArray());
 
   state_db_path = Path.join(options.output, `${state}_state.db`);

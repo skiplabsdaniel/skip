@@ -1,10 +1,10 @@
 module Skmake;
 
-fun check(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
-  (Skargo.kCheckCommand, execCheck)
+fun build(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
+  (Skargo.kBuildCommand, execBuild)
 }
 
-fun execCheck(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
+fun execBuild(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
   withTimer(
     () -> {
       checkAndRunContext(context ~> {
@@ -16,19 +16,24 @@ fun execCheck(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
           release => args.getBool("release"),
           skc_extra_options => args.getArray("skcopt", Some(Array[])),
         };
+        filter = BuildFilter(
+          args.getBool("lib", Some(false)),
+          args.getBool("bins", Some(false)),
+          SortedSet::createFromItems(args.getArray("bin", Some(Array[]))),
+        );
         context.getPersistent(kEnvProperty).map(Environment::type) match {
-        | Some(env) -> env.check(context, manifest_path, config)
+        | Some(env) -> env.build(context, manifest_path, config, filter)
         | _ -> throw CommandError("Execution environment not found")
         };
       });
     },
     (t, failure) -> {
       if (!failure) {
-        gctx.console.status("Finished", `Check target in ${t}s`)
+        gctx.console.status("Finished", `Build target in ${t}s`)
       } else {
         gctx.console.status(
           "Finished with error(s)",
-          `Check target in ${t}s`,
+          `Build target in ${t}s`,
           Skargo.Console::kErrorColor,
         )
       }
