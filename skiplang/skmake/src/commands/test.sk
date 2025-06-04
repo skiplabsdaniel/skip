@@ -1,0 +1,70 @@
+module Skmake;
+
+fun test(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
+  (Skargo.kTestCommand, execTest)
+}
+
+fun execTest(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
+  withStateAndTimer(
+    () -> {
+      checkAndRunContext(context ~> {
+        context.setGlobal("Skargo.Console", ConsoleFile(gctx.console));
+        manifest_path = Skargo.root_manifest(args, gctx);
+        config = Skargo.build_config{
+          target_opt => args.maybeGetString("target", false),
+          profile_opt => args.maybeGetString("profile"),
+          release => args.getBool("release"),
+          skc_extra_options => args.getArray("skcopt", Some(Array[])),
+        };
+        filter = BuildFilter(false, false, SortedSet[], true, false);
+        (context.getPersistent(kEnvProperty).map(Environment::type) match {
+        | Some(env) ->
+          env.build(context, manifest_path, config, filter) match {
+          | Success(outputs) -> Success((config.requested_arch, outputs))
+          | Failure(e) -> Failure(e)
+          }
+        | _ -> throw CommandError("Execution environment not found")
+        })
+      });
+    },
+    args,
+    (t, failure) -> {
+      if (!failure) {
+        gctx.console.status("Finished", `Test target in ${t}s`)
+      } else {
+        gctx.console.status(
+          "Finished with error(s)",
+          `Test target in ${t}s`,
+          Skargo.Console::kErrorColor,
+        )
+      }
+    },
+  ) match {
+  | Success((arch, outputs)) ->
+    arch match {
+    | Some(t) if (t.isWasm32()) ->
+      gctx.console.error(`Tests could be runned for ${t} target.`);
+      skipExit(1)
+    | _ -> void
+    };
+    if (outputs.size() != 1) {
+      gctx.console.error("`skmake test` could not find test target.");
+      skipExit(1)
+    };
+    // TODO: Pass args directly after --.
+    filter = args.maybeGetString("filter");
+    junitxml = args.maybeGetString("junitxml").map(f -> `--junitxml=${f}`);
+    jobs = args.getInt("jobs");
+
+    list = if (args.getBool("list")) Some("--list") else None();
+    cmd_args = Array[outputs[0]].concat(
+      Array[junitxml, filter, list, Some(`-j${jobs}`)].filterNone(),
+    );
+    Posix.execvp(cmd_args)
+  | Failure(e) ->
+    print_error(e.getMessage());
+    skipExit(2)
+  };
+}
+
+module end;

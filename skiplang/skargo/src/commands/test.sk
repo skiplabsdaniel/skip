@@ -12,49 +12,48 @@ fun nproc(): Int {
   };
 }
 
-fun test(): (Cli.Command, (GlobalContext, Cli.ParseResults) ~> void) {
-  (
-    Cli.Command("test")
-      .short("t")
-      .about("Run the tests")
-      .arg(
-        Cli.Arg::string("manifest-path")
-          .value_name("PATH")
-          .about("Path to Skargo.toml"),
-      )
-      .arg(
-        Cli.Arg::string("filter")
-          .positional()
-          .about("If specified, only run tests with names matching the filter"),
-      )
-      .arg(
-        Cli.Arg::int("jobs")
-          .long("jobs")
-          .short("j")
-          .default(nproc())
-          .value_name("N")
-          .about("Number of parallel jobs, defaults to # of CPUs"),
-      )
-      .arg(
-        Cli.Arg::string("target")
-          .value_name("TRIPLE")
-          .about("Check for the target triple"),
-      )
-      .arg(
-        Cli.Arg::string("target-dir")
-          .value_name("PATH")
-          .about("Directory for all generated artifacts"),
-      )
-      .args(kProfileArgs)
-      .arg(Cli.Arg::bool("list").about("Display the list of available tests"))
-      .arg(
-        Cli.Arg::string("junitxml")
-          .value_name("PATH")
-          .about("Generate a JUnit XML report"),
-      )
-      .arg(kSkcOptArg),
-    execTest,
+const kTestCommand: Cli.Command = Cli.Command("test")
+  .short("t")
+  .about("Run the tests")
+  .arg(
+    Cli.Arg::string("manifest-path")
+      .value_name("PATH")
+      .about("Path to Skargo.toml"),
   )
+  .arg(
+    Cli.Arg::string("filter")
+      .positional()
+      .about("If specified, only run tests with names matching the filter"),
+  )
+  .arg(
+    Cli.Arg::int("jobs")
+      .long("jobs")
+      .short("j")
+      .default(nproc())
+      .value_name("N")
+      .about("Number of parallel jobs, defaults to # of CPUs"),
+  )
+  .arg(
+    Cli.Arg::string("target")
+      .value_name("TRIPLE")
+      .about("Check for the target triple"),
+  )
+  .arg(
+    Cli.Arg::string("target-dir")
+      .value_name("PATH")
+      .about("Directory for all generated artifacts"),
+  )
+  .args(kProfileArgs)
+  .arg(Cli.Arg::bool("list").about("Display the list of available tests"))
+  .arg(
+    Cli.Arg::string("junitxml")
+      .value_name("PATH")
+      .about("Generate a JUnit XML report"),
+  )
+  .arg(kSkcOptArg);
+
+fun test(): (Cli.Command, (GlobalContext, Cli.ParseResults) ~> void) {
+  (kTestCommand, execTest)
 }
 
 fun execTest(gctx: GlobalContext, args: Cli.ParseResults): void {

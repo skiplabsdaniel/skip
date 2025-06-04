@@ -149,7 +149,13 @@ class Script(package: PackageId, name: String) extends SK.Key
 
 class TargetedScript(script: Script, buildInfo: BuildInfo) extends SK.Key
 
-class BuildFilter(lib_only: Bool, all_bins: Bool, bins: SortedSet<String>) {
+class BuildFilter(
+  lib_only: Bool,
+  all_bins: Bool,
+  bins: SortedSet<String>,
+  all_tests: Bool,
+  all_targets: Bool,
+) {
   //
   fun check(target: Skargo.Target): Bool {
     if (this.lib_only) {
@@ -167,11 +173,17 @@ class BuildFilter(lib_only: Bool, all_bins: Bool, bins: SortedSet<String>) {
       | Skargo.BinTarget _ -> this.bins.contains(target.name)
       | _ -> false
       }
+    } else if (this.all_tests) {
+      target.kind match {
+      | Skargo.TestTarget _ -> true
+      | _ -> false
+      }
     } else {
       target.kind match {
       | Skargo.LibTarget(Skargo.LibraryTypeSklib _)
       | Skargo.BinTarget _ ->
         true
+      | Skargo.TestTarget _ -> this.all_targets
       | _ -> false
       }
     }
@@ -233,7 +245,7 @@ class Environment(
     filename: String,
     config: Skargo.BuildConfig,
     filter: BuildFilter,
-  ): Result<void, .Exception> {
+  ): Result<Array<String>, .Exception> {
     this.checkProject(context, filename)?;
     profile = config.requested_profile;
     package = this.pckHdl.get(context, SKStore.UnitID::singleton).package;
@@ -255,26 +267,27 @@ class Environment(
       .filterNone();
     this.updateCommands(context, builds)?;
     console = getConsole(context);
+    outputs = mutable Vector[];
     for (build in builds) {
       buildSources = this.sources.get(
         context,
-        BuildData(build.buildInfo, false),
+        BuildData(build.buildInfo, build.target.kind is Skargo.TestTarget _),
       );
       unit_name = `${package.name()} v${package.version()} [${
         build.target.name
       }] (${package.root()})`;
       console.status("Compiling", unit_name);
-      output = build.buildInfo.targetDir();
-      Result::guard(() -> {
+      outputDir = build.buildInfo.targetDir();
+      output = Result::guard(() -> {
         skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
-        _ = skc(
+        skc(
           skc_.process(),
           console,
           build.target,
           package,
           buildSources,
           Options{
-            output,
+            output => outputDir,
             profile => build.buildInfo.profile,
             arch => build.buildInfo.arch match {
             | Skargo.TargetArchHost() -> build.buildInfo.host
@@ -285,9 +298,10 @@ class Environment(
           },
           `build_${build.target.name}`,
         )
-      })?
+      })?;
+      output.each(outputs.push)
     };
-    Success(void)
+    Success(outputs.toArray())
   }
 
   private fun checkProject(
@@ -1048,7 +1062,11 @@ fun skc(
     )
   };
   sources.env_.each(env -> skc.env(env.i0, env.i1));
-
+  output.each(o ->
+    if (FileSystem.exists(o)) {
+      _ = system(`rm ${o}`)
+    }
+  );
   _ = run_cmd(skc, console);
   output
 }
