@@ -12,7 +12,10 @@ fun main(): void {
     build,
   ];
   Skargo.perform("skmake", suppliers, cmd ~>
-    cmd.arg(Cli.Arg::string("data")).arg(Cli.Arg::string("init"))
+    cmd
+      .arg(Cli.Arg::string("data"))
+      .arg(Cli.Arg::string("init"))
+      .arg(Cli.Arg::bool("stateless"))
   );
 }
 
@@ -31,15 +34,43 @@ fun checkAndRunContext<T>(
   }
 }
 
-fun withTimer<T>(
+fun withStateAndTimer<T>(
   f: () -> Result<T, .Exception>,
+  c: Cli.ParseResults,
   g: (Float, Bool) -> void,
 ): Result<T, .Exception> {
-  t0 = Time.time_ms();
-  res = f();
-  t1 = Time.time_ms();
-  g((t1 - t0).toFloat() / 1000.0, res.isFailure());
-  res
+  init = c.maybeGetString("init");
+  data = c.maybeGetString("data");
+  run = if (init.isNone() && data.isNone()) {
+    c.getBool("stateless", Some(false))
+  } else {
+    true
+  };
+  if (run) {
+    t0 = Time.time_ms();
+    res = f();
+    t1 = Time.time_ms();
+    g((t1 - t0).toFloat() / 1000.0, res.isFailure());
+    res
+  } else {
+    cmd_args = Environ.args().collect(Array);
+    cmd = cmd_args[0];
+    args = cmd_args.drop(1);
+    state_db_path = Path.join("target", `skmake_state.db`);
+    exist = FileSystem.exists(state_db_path);
+    pre_args = Array[
+      cmd,
+      if (exist) {
+        "--data"
+      } else {
+        create_dir("target");
+        "--init"
+      },
+      state_db_path,
+    ];
+    cmdWithState = pre_args.concat(args);
+    Posix.execvp(cmdWithState)
+  }
 }
 
 module end;
