@@ -461,15 +461,6 @@ fun buildBuildInfoCollector(
 
 fun init(context: mutable SK.Context, dirName: SK.DirName): void {
   skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
-  loadPackage = SKStore.LHandle::create(
-    SK.SID::keyType,
-    Package::type,
-    context,
-    dirName.sub("loader"),
-    (_, _self, key) ~> {
-      Array[Package(Skargo.Package::read(key.value))]
-    },
-  );
   tomlHdl = context.mkdir(
     SKStore.UnitID::keyType,
     TimedFile::type,
@@ -485,9 +476,9 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
     TimedPackage::type,
     context,
     dirName.sub("package"),
-    (ctx, writer, key, it) ~> {
+    (_, writer, key, it) ~> {
       tfile = it.first;
-      package = loadPackage.get(ctx, SK.SID(Path.join(tfile.filename)));
+      package = Package(Skargo.Package::read(Path.join(tfile.filename)));
       writer.set(key, TimedPackage(package.package, tfile.modified))
     },
   );
@@ -510,11 +501,11 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
         ctx,
         it.first.package,
         SortedMap<PackageId, PackageData>[],
-        (context, source) ~> {
+        (_, source) ~> {
           path = source.kind match {
           | Skargo.PathSource() -> Path.join(source.url, Skargo.kManifestFile)
           };
-          loadPackage.get(context, SK.SID(path)).package
+          Skargo.Package::read(path)
         },
       );
       data.items().each(item -> writer.set(item.i0, item.i1))
