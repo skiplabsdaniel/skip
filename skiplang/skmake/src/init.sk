@@ -100,6 +100,29 @@ class BuildSources{
     BuildSources{sources_, env_, preambles_, link_args_, libraries_}
   }
 
+  fun getLastModificationTime(): Int {
+    mtime = this.sources_.reduce(
+      (acc, s) -> {
+        time = FileSystem.getLastModificationTime(s);
+        if (time > acc) time else acc
+      },
+      0,
+    );
+    this.libraries_.reduce(
+      (acc1, a) -> {
+        time1 = a.reduce(
+          (acc2, l) -> {
+            time2 = FileSystem.getLastModificationTime(l);
+            if (time2 > acc2) time2 else acc2
+          },
+          0,
+        );
+        if (time1 > acc1) time1 else acc1
+      },
+      mtime,
+    );
+  }
+
   fun union(other: BuildSources): BuildSources {
     BuildSources{
       sources_ => this.sources_.union(other.sources_),
@@ -217,13 +240,12 @@ class Environment(
     console = getConsole(context);
     package = this.pckHdl.get(context, SKStore.UnitID::singleton).package;
     buildSources = this.sources.get(context, BuildData(check.buildInfo, true));
-    unit_name = `${package.name()} v${package.version()} (${package.root()})`;
-    console.status("Check", unit_name);
     output = check.buildInfo.targetDir();
     Result::guard(() -> {
       skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
       _ = skc(
         skc_.process(),
+        "check",
         console,
         Skargo.Target(Skargo.CustomBuildTarget(), "check", Array[]),
         package,
@@ -273,15 +295,12 @@ class Environment(
         context,
         BuildData(build.buildInfo, build.target.kind is Skargo.TestTarget _),
       );
-      unit_name = `${package.name()} v${package.version()} [${
-        build.target.name
-      }] (${package.root()})`;
-      console.status("Compiling", unit_name);
       outputDir = build.buildInfo.targetDir();
       output = Result::guard(() -> {
         skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
         skc(
           skc_.process(),
+          build.target.name,
           console,
           build.target,
           package,
@@ -666,12 +685,9 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
       // Create a dpendency on file changes
       sources.sources_.each(f -> _ = allFiles.maybeGet(ctx, SK.SID(f)));
       path = rootPathHdl.get(ctx, SKStore.UnitID::singleton).value;
-      unit_name = `${package.name()} v${package.version()} [${
-        key.name
-      }] (${package.root()})`;
-      console.status("Compiling", unit_name);
       outfile = skc(
         skc_.process(),
+        key.name,
         console,
         Skargo.Target(Skargo.BinTarget("main"), key.name, Array[]),
         package,
@@ -729,12 +745,14 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
         key.script.name
       }] (${package.root()})`;
       console.status("Running", unit_name);
-      output = Path.join(key.buildInfo.targetDir(), key.script.name);
+      targetDir = key.buildInfo.targetDir();
+      output = Path.join(targetDir, key.script.name);
       bso = run_build_script(
         binaryPath,
         package,
         // todo good dir
         output,
+        targetDir,
         key.buildInfo,
         console,
       );
@@ -909,6 +927,7 @@ fun run_build_script(
   binary: String,
   package: Skargo.Package,
   outdir: String,
+  targetdir: String,
   buildInfo: BuildInfo,
   console: Skargo.Console,
   relocation_model: String = "static",
@@ -925,6 +944,7 @@ fun run_build_script(
 
   cmd.env("SKARGO_MANIFEST_DIR", package.root());
   cmd.env("OUT_DIR", FileSystem.realpath(outdir));
+  cmd.env("TARGET_DIR", FileSystem.realpath(targetdir));
   cmd.env("NAME", package.name());
   cmd.env("PROFILE", profile);
   cmd.env(
@@ -981,6 +1001,7 @@ fun run_cmd(
 
 fun skc(
   skc: mutable Skargo.ProcessBuilder,
+  name: String,
   console: Skargo.Console,
   target: Skargo.Target,
   package: Skargo.Package,
@@ -988,6 +1009,30 @@ fun skc(
   options: Options,
   state: String,
 ): ?String {
+  output = if (options.check) {
+    skc.arg("--check");
+    None()
+  } else {
+    outputs = outputs(options.output, package, target, options.arch);
+    assert(outputs.size() == 1);
+    skc.args(Array["-o", outputs[0].path]);
+    Some(outputs[0].path)
+  };
+  bsmtime = sources.getLastModificationTime();
+  unit_name = `${package.name()} v${package.version()} [${name}] (${package.root()})`;
+  output match {
+  | Some(
+    o,
+  ) if (
+    FileSystem.exists(o) &&
+    FileSystem.getLastModificationTime(o) >= bsmtime
+  ) ->
+    console.status("Fresh", unit_name);
+    return output
+  | _ -> void
+  };
+  console.status(if (name == "check") "Check" else "Compiling", unit_name);
+
   create_dir(options.output);
 
   skc.cwd(package.root());
@@ -1038,16 +1083,6 @@ fun skc(
   | "release" -> skc.arg("-O2")
   | "debug" | "dev" -> skc.arg("-O0")
   | _ -> invariant_violation("unreachable")
-  };
-
-  output = if (options.check) {
-    skc.arg("--check");
-    None()
-  } else {
-    outputs = outputs(options.output, package, target, options.arch);
-    assert(outputs.size() == 1);
-    skc.args(Array["-o", outputs[0].path]);
-    Some(outputs[0].path)
   };
 
   // Enviroment
