@@ -5,7 +5,7 @@ fun check(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
 }
 
 fun execCheck(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
-  withTimer(
+  withStateAndTimer(
     () -> {
       checkAndRunContext(context ~> {
         context.setGlobal("Skargo.Console", ConsoleFile(gctx.console));
@@ -22,6 +22,7 @@ fun execCheck(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
         };
       });
     },
+    args,
     (t, failure) -> {
       if (!failure) {
         gctx.console.status("Finished", `Check target in ${t}s`)

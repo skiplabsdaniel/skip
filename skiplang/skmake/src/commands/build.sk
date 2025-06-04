@@ -5,7 +5,7 @@ fun build(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
 }
 
 fun execBuild(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
-  withTimer(
+  withStateAndTimer(
     () -> {
       checkAndRunContext(context ~> {
         context.setGlobal("Skargo.Console", ConsoleFile(gctx.console));
@@ -27,6 +27,7 @@ fun execBuild(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
         };
       });
     },
+    args,
     (t, failure) -> {
       if (!failure) {
         gctx.console.status("Finished", `Build target in ${t}s`)
