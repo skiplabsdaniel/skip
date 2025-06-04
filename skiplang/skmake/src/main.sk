@@ -9,6 +9,7 @@ fun main(): void {
     Skargo.init,
     Skargo.help,
     check,
+    build,
   ];
   Skargo.perform("skmake", suppliers, cmd ~>
     cmd.arg(Cli.Arg::string("data")).arg(Cli.Arg::string("init"))
