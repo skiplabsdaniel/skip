@@ -1,7 +1,15 @@
 module Skmake;
 
 fun test(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
-  (Skargo.kTestCommand, execTest)
+  (
+    Skargo.kTestCommand.arg(
+      Cli.Arg::bool("state")
+        .negatable()
+        .default(true)
+        .about("Build keeping the state (without --no-state)"),
+    ),
+    execTest,
+  )
 }
 
 fun execTest(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
@@ -19,7 +27,13 @@ fun execTest(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
         filter = BuildFilter(false, false, SortedSet[], true, false);
         (context.getPersistent(kEnvProperty).map(Environment::type) match {
         | Some(env) ->
-          env.build(context, manifest_path, config, filter) match {
+          env.build(
+            context,
+            manifest_path,
+            config,
+            filter,
+            args.getBool("state"),
+          ) match {
           | Success(outputs) -> Success((config.requested_arch, outputs))
           | Failure(e) -> Failure(e)
           }
