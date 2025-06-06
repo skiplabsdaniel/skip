@@ -257,7 +257,7 @@ class Environment(
           check => true,
           noStd => true,
         },
-        Some("check"),
+        Some("with_tests"),
       )
     });
   }
@@ -267,7 +267,7 @@ class Environment(
     filename: String,
     config: Skargo.BuildConfig,
     filter: BuildFilter,
-    noState: Bool,
+    withState: Bool,
   ): Result<Array<String>, .Exception> {
     this.checkProject(context, filename)?;
     profile = config.requested_profile;
@@ -296,6 +296,9 @@ class Environment(
         context,
         BuildData(build.buildInfo, build.target.kind is Skargo.TestTarget _),
       );
+      state = if (build.target.kind is Skargo.TestTarget _) "with_tests" else {
+        "without_tests"
+      };
       outputDir = build.buildInfo.targetDir();
       output = Result::guard(() -> {
         skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
@@ -316,7 +319,7 @@ class Environment(
             check => false,
             noStd => true,
           },
-          if (noState) None() else Some(`build_${build.target.name}`),
+          if (withState) Some(state) else None(),
         )
       })?;
       output.each(outputs.push)
