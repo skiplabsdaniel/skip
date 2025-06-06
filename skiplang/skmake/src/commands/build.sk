@@ -1,7 +1,15 @@
 module Skmake;
 
 fun build(): (Cli.Command, (Skargo.GlobalContext, Cli.ParseResults) ~> void) {
-  (Skargo.kBuildCommand, execBuild)
+  (
+    Skargo.kBuildCommand.arg(
+      Cli.Arg::bool("state")
+        .negatable()
+        .default(true)
+        .about("Build keeping the state (without --no-state)"),
+    ),
+    execBuild,
+  )
 }
 
 fun execBuild(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
@@ -24,7 +32,14 @@ fun execBuild(gctx: Skargo.GlobalContext, args: Cli.ParseResults): void {
           args.getBool("all-targets", Some(false)),
         );
         (context.getPersistent(kEnvProperty).map(Environment::type) match {
-        | Some(env) -> env.build(context, manifest_path, config, filter)
+        | Some(env) ->
+          env.build(
+            context,
+            manifest_path,
+            config,
+            filter,
+            args.getBool("state"),
+          )
         | _ -> throw CommandError("Execution environment not found")
         }) match {
         | Success _ -> Success(void)

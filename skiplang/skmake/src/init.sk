@@ -257,7 +257,7 @@ class Environment(
           check => true,
           noStd => true,
         },
-        "check",
+        Some("check"),
       )
     });
   }
@@ -267,6 +267,7 @@ class Environment(
     filename: String,
     config: Skargo.BuildConfig,
     filter: BuildFilter,
+    noState: Bool,
   ): Result<Array<String>, .Exception> {
     this.checkProject(context, filename)?;
     profile = config.requested_profile;
@@ -315,7 +316,7 @@ class Environment(
             check => false,
             noStd => true,
           },
-          `build_${build.target.name}`,
+          if (noState) None() else Some(`build_${build.target.name}`),
         )
       })?;
       output.each(outputs.push)
@@ -678,7 +679,7 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
           profile => "dev",
           arch => Skargo.TargetArchHost(),
         },
-        key.name,
+        Some(key.name),
       );
       content = mutable Vector[];
       file = IO.File::open(outfile.fromSome(), IO.OpenOptions{read => true});
@@ -988,7 +989,7 @@ fun skc(
   package: Skargo.Package,
   sources: BuildSources,
   options: Options,
-  state: String,
+  optState: ?String,
 ): ?String {
   output = if (options.check) {
     skc.arg("--check");
@@ -1037,18 +1038,21 @@ fun skc(
 
   skc.args(libraries);
   skc.args(sources.sources_.toArray());
-
-  state_db_path = Path.join(options.output, `${state}_state.db`);
-  skc.args(
-    Array[
-      if (FileSystem.exists(state_db_path)) {
-        "--data"
-      } else {
-        "--init"
-      },
-      state_db_path,
-    ],
-  );
+  optState match {
+  | Some(state) ->
+    state_db_path = Path.join(options.output, `${state}_state.db`);
+    skc.args(
+      Array[
+        if (FileSystem.exists(state_db_path)) {
+          "--data"
+        } else {
+          "--init"
+        },
+        state_db_path,
+      ],
+    )
+  | _ -> void
+  };
   target.kind match {
   | Skargo.LibTarget(Skargo.LibraryTypeSklib()) ->
     skc.arg(`--sklib-name=${package.name()}`)
