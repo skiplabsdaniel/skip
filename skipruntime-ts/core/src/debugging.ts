@@ -5,7 +5,7 @@ import type {
   Pointer,
 } from "../skiplang-json/index.js";
 import type { Handle } from "./binding.js";
-import type { Refs } from "./index.js";
+import type { Entry, Refs } from "./index.js";
 import type * as Internal from "./internal.js";
 
 export interface FromBinding {
@@ -21,6 +21,8 @@ export interface FromBinding {
   SkipRuntime_Debugger__resourceInstances(
     resource: string,
   ): Pointer<Internal.CJSON>;
+
+  SkipRuntime_Debugger__values(dirname: string): Pointer<Internal.CJSON>;
 }
 
 export type ServiceInfo = {
@@ -130,5 +132,17 @@ export class DebugInstance {
     if (typeof result == "number")
       throw this.refs.handles.deleteHandle(result as Handle<Error>);
     return result as Instance[];
+  }
+
+  values(resource: string): Entry<Json, Json>[] {
+    const result = this.refs.runWithGC(() => {
+      return this.refs.skjson.importJSON(
+        this.binding.SkipRuntime_Debugger__values(resource),
+        true,
+      );
+    });
+    if (typeof result == "number")
+      throw this.refs.handles.deleteHandle(result as Handle<Error>);
+    return result as Entry<Json, Json>[];
   }
 }

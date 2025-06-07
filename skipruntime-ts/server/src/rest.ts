@@ -246,5 +246,15 @@ export function debugService(
     }
   });
 
+  app.get("/v1/values", (req, res) => {
+    try {
+      const entries = service.values(req.body as string);
+      res.status(200).json(entries);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
   return app;
 }

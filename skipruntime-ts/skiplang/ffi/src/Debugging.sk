@@ -80,6 +80,35 @@ fun debuggerResourceInstances(resource: String): SKJSON.CJSON {
   };
 }
 
+@export("SkipRuntime_Debugger__values")
+fun debuggerValues(dirname: String): SKJSON.CJSON {
+  SKStore.runWithResult(context ~> {
+    dirName = SKStore.DirName::create(dirname);
+    context.maybeGetEagerDir(dirName) match {
+    | Some(dir) ->
+      keys = SortedSet<SKStore.Key>[];
+      dir.unsafeIterKeys((key) -> !keys = keys.set(key));
+      result = mutable Vector[];
+      for (key in keys) {
+        values = dir.getArrayRaw(key);
+        result.push(
+          SKJSON.CJArray(
+            Array[
+              JSONID::keyType(key).json,
+              SKJSON.CJArray(values.map(f ~> JSONFile::type(f).json)),
+            ],
+          ),
+        )
+      };
+      SKJSON.CJArray(result.toArray())
+    | _ -> SKJSON.CJArray(Array[])
+    };
+  }) match {
+  | Success(json) -> json
+  | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
+  };
+}
+
 @cpp_extern("SkipRuntime_Debugging_getInfo")
 @debug
 native fun getDebuggingInfo(reducer: UInt32): SKJSON.CJObject;

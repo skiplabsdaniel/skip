@@ -277,6 +277,10 @@ export interface FromWasm {
   SkipRuntime_Debugger__resourceInstances(
     resource: ptr<Internal.String>,
   ): ptr<Internal.CJSON>;
+
+  SkipRuntime_Debugger__values(
+    dirname: ptr<Internal.String>,
+  ): ptr<Internal.CJSON>;
 }
 
 interface ToWasm {
@@ -834,6 +838,12 @@ export class WasmFromBinding implements FromBinding {
   ): ptr<Internal.CJSON> {
     return this.fromWasm.SkipRuntime_Debugger__resourceInstances(
       this.utils.exportString(resource),
+    );
+  }
+
+  SkipRuntime_Debugger__values(dirname: string): ptr<Internal.CJSON> {
+    return this.fromWasm.SkipRuntime_Debugger__values(
+      this.utils.exportString(dirname),
     );
   }
 }
