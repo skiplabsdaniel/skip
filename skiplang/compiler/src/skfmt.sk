@@ -82,7 +82,9 @@ untracked fun main(): void {
       skipExit(1)
     | Success(formattedContents) ->
       if (inplace) {
-        FileSystem.writeTextFile(file, formattedContents)
+        if (formattedContents != contents || !FileSystem.exists(file)) {
+          FileSystem.writeTextFile(file, formattedContents)
+        }
       } else {
         print_raw(formattedContents)
       }
