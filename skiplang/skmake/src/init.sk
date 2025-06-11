@@ -48,7 +48,7 @@ class Options{
   isLib: Bool = false,
 }
 
-class BuildScriptError(error: String) extends .Exception {
+class RunError(error: String) extends .Exception {
   fun getMessage(): String {
     this.error
   }
@@ -143,6 +143,8 @@ class BuildSources{
   }
 }
 
+class SkcExtraOptions(options: Array<String>) extends SK.File
+
 class BuildData(buildInfo: BuildInfo, withTests: Bool) extends SK.Key
 
 base class Command(buildInfo: BuildInfo) extends SK.Key {
@@ -215,6 +217,7 @@ class BuildFilter(
 
 class Environment(
   toml: SK.EHandle<SKStore.UnitID, TimedFile>,
+  built: SK.EHandle<Build, SkcExtraOptions>,
   pckHdl: SK.EHandle<SKStore.UnitID, TimedPackage>,
   commands: SK.EHandle<Command, SK.IntFile>,
   sources: SK.EHandle<BuildData, BuildSources>,
@@ -296,14 +299,20 @@ class Environment(
         context,
         BuildData(build.buildInfo, build.target.kind is Skargo.TestTarget _),
       );
+      optCurrent = this.built.maybeGet(context, build);
       state = if (build.target.kind is Skargo.TestTarget _) "with_tests" else {
         "without_tests"
       };
       outputDir = build.buildInfo.targetDir();
       output = Result::guard(() -> {
         skc_ = Skargo.Skc(Environ.varOpt("SKC").default("skc"), Array[]);
+        process = skc_.process();
+        process.args(config.skc_extra_options);
+        force = optCurrent
+          .map(c -> c.options == config.skc_extra_options)
+          .default(false);
         skc(
-          skc_.process(),
+          process,
           build.target.name,
           console,
           build.target,
@@ -320,9 +329,15 @@ class Environment(
             noStd => true,
           },
           if (withState) Some(state) else None(),
+          force,
         )
       })?;
-      output.each(outputs.push)
+      output.each(outputs.push);
+      this.built.writeArray(
+        context,
+        build,
+        Array[SkcExtraOptions(config.skc_extra_options)],
+      )
     };
     Success(outputs.toArray())
   }
@@ -469,6 +484,11 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
     SKStore.UnitID::keyType,
     TimedFile::type,
     dirName.sub("toml"),
+  );
+  builtHdl = context.mkdir(
+    Build::keyType,
+    SkcExtraOptions::type,
+    dirName.sub("built"),
   );
   commandsHdl = context.mkdir(
     Command::bKeyType,
@@ -904,7 +924,7 @@ fun init(context: mutable SK.Context, dirName: SK.DirName): void {
     );
   context.setPersistent(
     kEnvProperty,
-    Environment(tomlHdl, pckHdl, commandsHdl, sources),
+    Environment(tomlHdl, builtHdl, pckHdl, commandsHdl, sources),
   )
 }
 
@@ -979,7 +999,7 @@ fun run_cmd(
   };
 
   if (!p.success()) {
-    throw BuildScriptError(Skargo.subprocess_error_message(p));
+    throw RunError(Skargo.subprocess_error_message(p));
   };
   p
 }
@@ -993,6 +1013,7 @@ fun skc(
   sources: BuildSources,
   options: Options,
   optState: ?String,
+  force: Bool = false,
 ): ?String {
   output = if (options.check) {
     skc.arg("--check");
@@ -1003,18 +1024,20 @@ fun skc(
     skc.args(Array["-o", outputs[0].path]);
     Some(outputs[0].path)
   };
-  bsmtime = sources.getLastModificationTime();
   unit_name = `${package.name()} v${package.version()} [${name}] (${package.root()})`;
-  output match {
-  | Some(
-    o,
-  ) if (
-    FileSystem.exists(o) &&
-    FileSystem.getLastModificationTime(o) >= bsmtime
-  ) ->
-    console.status("Fresh", unit_name);
-    return output
-  | _ -> void
+  if (!force) {
+    bsmtime = sources.getLastModificationTime();
+    output match {
+    | Some(
+      o,
+    ) if (
+      FileSystem.exists(o) &&
+      FileSystem.getLastModificationTime(o) >= bsmtime
+    ) ->
+      console.status("Fresh", unit_name);
+      return output
+    | _ -> void
+    }
   };
   console.status(if (name == "check") "Check" else "Compiling", unit_name);
 
