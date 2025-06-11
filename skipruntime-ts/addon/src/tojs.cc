@@ -77,7 +77,7 @@ CJSON SkipRuntime_Debugger__service();
 CJSON SkipRuntime_Debugger__sharedGraph();
 CJSON SkipRuntime_Debugger__resourceGraph(char* resource, CJObject jsonParams);
 CJSON SkipRuntime_Debugger__resourceInstances(char* resource);
-CJSON SkipRuntime_Debugger__values(char* dirname);
+CJSON SkipRuntime_Debugger__values(CJSON definition);
 }
 
 using skbinding::AddFunction;
@@ -1141,15 +1141,15 @@ void GetDebuggerResourceInstances(const FunctionCallbackInfo<Value>& args) {
 
 void GetDebuggerValues(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
-  if (!args[0]->IsString()) {
+  if (!args[0]->IsExternal()) {
     // Throw an Error that is passed back to JavaScript
     isolate->ThrowException(Exception::TypeError(
-        FromUtf8(isolate, "The first parameter must be a string.")));
+        FromUtf8(isolate, "The first parameter must be a pointer.")));
     return;
   }
   NatTryCatch(isolate, [&args](Isolate* isolate) {
-    char* skdirname = ToSKString(isolate, args[0].As<String>());
-    CJSON skresult = SkipRuntime_Debugger__values(skdirname);
+    CJSON skdefinition = args[0].As<External>()->Value();
+    CJSON skresult = SkipRuntime_Debugger__values(skdefinition);
     args.GetReturnValue().Set(External::New(isolate, skresult));
   });
 }

@@ -22,7 +22,9 @@ export interface FromBinding {
     resource: string,
   ): Pointer<Internal.CJSON>;
 
-  SkipRuntime_Debugger__values(dirname: string): Pointer<Internal.CJSON>;
+  SkipRuntime_Debugger__values(
+    definition: Pointer<Internal.CJSON>,
+  ): Pointer<Internal.CJSON>;
 }
 
 export type ServiceInfo = {
@@ -134,10 +136,12 @@ export class DebugInstance {
     return result as Instance[];
   }
 
-  values(resource: string): Entry<Json, Json>[] {
+  values(definition: Json): Entry<Json, Json>[] {
     const result = this.refs.runWithGC(() => {
       return this.refs.skjson.importJSON(
-        this.binding.SkipRuntime_Debugger__values(resource),
+        this.binding.SkipRuntime_Debugger__values(
+          this.refs.skjson.exportJSON(definition),
+        ),
         true,
       );
     });

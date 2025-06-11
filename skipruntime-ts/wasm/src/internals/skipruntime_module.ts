@@ -279,7 +279,7 @@ export interface FromWasm {
   ): ptr<Internal.CJSON>;
 
   SkipRuntime_Debugger__values(
-    dirname: ptr<Internal.String>,
+    definition: ptr<Internal.CJSON>,
   ): ptr<Internal.CJSON>;
 }
 
@@ -841,10 +841,10 @@ export class WasmFromBinding implements FromBinding {
     );
   }
 
-  SkipRuntime_Debugger__values(dirname: string): ptr<Internal.CJSON> {
-    return this.fromWasm.SkipRuntime_Debugger__values(
-      this.utils.exportString(dirname),
-    );
+  SkipRuntime_Debugger__values(
+    definition: ptr<Internal.CJSON>,
+  ): ptr<Internal.CJSON> {
+    return this.fromWasm.SkipRuntime_Debugger__values(toPtr(definition));
   }
 }
 

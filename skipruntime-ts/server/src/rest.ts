@@ -232,7 +232,7 @@ export function debugService(
     }
   });
 
-  app.get("/v1/resource/:resource", (req, res) => {
+  app.post("/v1/resource/:resource", (req, res) => {
     try {
       const graph = service.resourceGraph(
         req.params.resource,
@@ -246,9 +246,10 @@ export function debugService(
     }
   });
 
-  app.get("/v1/values", (req, res) => {
+  app.post("/v1/values", (req, res) => {
     try {
-      const entries = service.values(req.body as string);
+      console.log(req.url, req.params, req.body);
+      const entries = service.values(req.body as Json);
       res.status(200).json(entries);
     } catch (e: unknown) {
       console.log(e);

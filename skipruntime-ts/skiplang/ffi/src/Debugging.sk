@@ -81,28 +81,13 @@ fun debuggerResourceInstances(resource: String): SKJSON.CJSON {
 }
 
 @export("SkipRuntime_Debugger__values")
-fun debuggerValues(dirname: String): SKJSON.CJSON {
+fun debuggerValues(definition: SKJSON.CJSON): SKJSON.CJSON {
   SKStore.runWithResult(context ~> {
-    dirName = SKStore.DirName::create(dirname);
-    context.maybeGetEagerDir(dirName) match {
-    | Some(dir) ->
-      keys = SortedSet<SKStore.Key>[];
-      dir.unsafeIterKeys((key) -> !keys = keys.set(key));
-      result = mutable Vector[];
-      for (key in keys) {
-        values = dir.getArrayRaw(key);
-        result.push(
-          SKJSON.CJArray(
-            Array[
-              JSONID::keyType(key).json,
-              SKJSON.CJArray(values.map(f ~> JSONFile::type(f).json)),
-            ],
-          ),
-        )
-      };
-      SKJSON.CJArray(result.toArray())
-    | _ -> SKJSON.CJArray(Array[])
-    };
+    SKJSON.CJArray(
+      getValues(context, definition).map(e ->
+        SKJSON.CJArray(Array[e.i0, SKJSON.CJArray(e.i1)])
+      ),
+    )
   }) match {
   | Success(json) -> json
   | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))

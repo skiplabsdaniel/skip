@@ -27,14 +27,14 @@ await service.update("input2", [["v2", [0]]]);
 await sleep(10);
 await service.update("input1", [["v1", [8]]]);
 await sleep(10);
-await service.update("input1", [
+/*await service.update("input1", [
   ["v1", []],
   ["v2", []],
 ]);
 await service.update("input2", [
   ["v1", []],
   ["v2", []],
-]);
+]);*/
 sum.close();
 
 const sub = await subscribe(service, "sub", streaming_port);
@@ -54,12 +54,12 @@ await service.update("input2", [["v2", [0]]]);
 await sleep(10);
 await service.update("input1", [["v1", [8]]]);
 await sleep(10);
-await service.update("input1", [
+/* await service.update("input1", [
   ["v1", []],
   ["v2", []],
 ]);
 await service.update("input2", [
   ["v1", []],
   ["v2", []],
-]);
+]);*/
 sub.close();

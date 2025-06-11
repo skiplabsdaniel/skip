@@ -10,7 +10,7 @@
   },
   "scripts": {
     "prebuild": "node ../../prebuild.mjs skipwasm-std skipwasm-json",
-    "build": "tsc && SKIP_PLATFORM=wasm GIT_COMMIT_INFO=$(git log -1 --format=\"%h %ad\" --date=format:\"(%Y %m)\") skargo build -r --target wasm32-unknown-unknown --lib --manifest-path=../skiplang/ffi/Skargo.toml --out-dir=./dist/src/",
+    "build": "tsc && skargo build -r --target wasm32-unknown-unknown --lib --manifest-path=../skiplang/ffi/Skargo.toml --out-dir=./dist/src/",
     "clean": "rm -rf dist skipwasm-std skipwasm-json && skargo clean --manifest-path=../skiplang/ffi/Skargo.toml",
     "lint": "eslint"
   },
