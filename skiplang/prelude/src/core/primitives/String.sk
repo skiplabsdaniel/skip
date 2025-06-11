@@ -216,15 +216,15 @@ native class .String uses Hashable, Show, Orderable, AsBytes {
     }
   }
 
-  fun trimLeft(): String {
-    this.search(ch ~> !isWhitespace(ch)) match {
+  fun trimLeft(predicate: Char ~> Bool = isWhitespace): String {
+    this.search(ch ~> !predicate(ch)) match {
     | Some(i) -> i.substring(this.getEndIter())
     | None() -> ""
     }
   }
 
-  fun trimRight(): String {
-    this.searchRight(ch ~> !isWhitespace(ch)) match {
+  fun trimRight(predicate: Char ~> Bool = isWhitespace): String {
+    this.searchRight(ch ~> !predicate(ch)) match {
     | Some(i) ->
       _ = i.next();
       this.getIter().substring(i)
@@ -232,8 +232,8 @@ native class .String uses Hashable, Show, Orderable, AsBytes {
     }
   }
 
-  fun trim(): String {
-    this.trimLeft().trimRight()
+  fun trim(predicate: Char ~> Bool = isWhitespace): String {
+    this.trimLeft(predicate).trimRight(predicate)
   }
 
   // Finds the given pattern in the string, starting from 'from'
