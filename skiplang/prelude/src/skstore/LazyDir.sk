@@ -246,11 +246,11 @@ class LazyDir protected {
     context.setDir(this with {data});
   }
 
-  fun unsafeGet(key: Key): LazyResult {
+  fun unsafeGet(key: Key): LazyResult<File> {
     this.data.get(key)
   }
 
-  fun unsafeMaybeGet(key: Key): ?LazyResult {
+  fun unsafeMaybeGet(key: Key): ?LazyResult<File> {
     this.data.maybeGet(key)
   }
 }
