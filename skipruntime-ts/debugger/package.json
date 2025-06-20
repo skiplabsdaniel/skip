@@ -6,9 +6,6 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf dist",
-    "lint": "eslint",
     "start": "npx -y http-server -p 3260"
   },
   "author": "SkipLabs",

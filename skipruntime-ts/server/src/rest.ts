@@ -248,7 +248,6 @@ export function debugService(
 
   app.post("/v1/values", (req, res) => {
     try {
-      console.log(req.url, req.params, req.body);
       const entries = service.values(req.body as Json);
       res.status(200).json(entries);
     } catch (e: unknown) {

@@ -1,15 +1,4 @@
-var __defProp = Object.defineProperty;
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, {
-      get: all[name],
-      enumerable: true,
-      configurable: true,
-      set: (newValue) => all[name] = () => newValue
-    });
-};
-
-// ../../../../../skip_for_ui/skiplang/prelude/ts/binding/src/index.ts
+// ../../../../skip/skiplang/prelude/ts/binding/src/index.ts
 var skpointer = Symbol.for("Skip.pointer");
 var sknative = Symbol.for("Skip.native_stub");
 var sk_isObjectProxy = Symbol();
@@ -20,7 +9,7 @@ function cloneIfProxy(v) {
   return v;
 }
 
-// ../../../../../skip_for_ui/skiplang/prelude/ts/wasm/src/sk_types.ts
+// ../../../../skip/skiplang/prelude/ts/wasm/src/sk_types.ts
 class State {
   exceptionId = 0;
   exceptions = new Map;
@@ -546,7 +535,7 @@ async function run(wasmUrl, modules, extensions, createEnvironment, main) {
   return await start(modules, buffer, env, main);
 }
 
-// ../../../../../skip_for_ui/skiplang/prelude/ts/wasm/src/sk_mem_utils.ts
+// ../../../../skip/skiplang/prelude/ts/wasm/src/sk_mem_utils.ts
 class File {
   contents;
   changes;
@@ -698,7 +687,7 @@ class MemSys {
     this.env.delete(name);
   }
 }
-// ../../../../../skip_for_ui/skiplang/prelude/ts/wasm/src/sk_runtime.ts
+// ../../../../skip/skiplang/prelude/ts/wasm/src/sk_runtime.ts
 class LinksImpl {
   env;
   lineBuffer;
@@ -914,7 +903,7 @@ function init(env) {
   return Promise.resolve(new Manager(env));
 }
 
-// ../../../../../skip_for_ui/skiplang/prelude/ts/wasm/src/sk_posix.ts
+// ../../../../skip/skiplang/prelude/ts/wasm/src/sk_posix.ts
 class LinksImpl2 {
   fs;
   SKIP_check_if_file_exists;
@@ -988,7 +977,7 @@ function init2(env) {
   return Promise.resolve(new Manager2(env));
 }
 
-// ../../../../base/ts/src/skui_base.ts
+// ../../../base/ts/src/skui_base.ts
 class LinksImpl3 {
   env;
   constructor(env) {
@@ -996,6 +985,9 @@ class LinksImpl3 {
   }
   SKIP_JS_timeStamp() {
     return this.env.timestamp();
+  }
+  SKIP_Math_atan2(y, x) {
+    return Math.atan2(y, x);
   }
   complete(_utils, _exports) {
     return;
@@ -1011,6 +1003,7 @@ class Manager3 {
     const toWasm = wasm;
     const links = new LinksImpl3(this.environment);
     toWasm.SKIP_JS_timeStamp = links.SKIP_JS_timeStamp.bind(links);
+    toWasm.SKIP_Math_atan2 = links.SKIP_Math_atan2.bind(links);
     return links;
   };
 }
@@ -1018,7 +1011,7 @@ function init3(env) {
   return Promise.resolve(new Manager3(env));
 }
 
-// ../../../../common/ts/wasm/src/skui_regexp.ts
+// ../../../common/ts/wasm/src/skui_regexp.ts
 class LinksImpl4 {
   utils;
   exported;
@@ -1127,7 +1120,7 @@ function init4(_env) {
   return Promise.resolve(new Manager4);
 }
 
-// ../../../../common/ts/wasm/src/skui_common.ts
+// ../../../common/ts/wasm/src/skui_common.ts
 class CommonShared {
   registerData;
   getName = () => "common";
@@ -1222,7 +1215,7 @@ function init5(env) {
   return Promise.resolve(new Manager5(env));
 }
 
-// ../../../../opengl/ts/wasm/src/skui_matrix.ts
+// ../../../opengl/ts/wasm/src/skui_matrix.ts
 class Matrix {
   data;
   constructor() {
@@ -1303,7 +1296,7 @@ class Matrix {
   };
 }
 
-// ../../../../opengl/ts/wasm/src/skui_glloading.ts
+// ../../../opengl/ts/wasm/src/skui_glloading.ts
 class Loading {
   win;
   program;
@@ -1472,7 +1465,7 @@ void main() {
   gl_FragColor.a = circle.x;
 }`;
 
-// ../../../../opengl/ts/wasm/src/skui_glcontext.ts
+// ../../../opengl/ts/wasm/src/skui_glcontext.ts
 var uniforms = [
   "u_box",
   "u_center",
@@ -2243,7 +2236,7 @@ class Context {
   }
 }
 
-// ../../../../opengl/ts/wasm/src/skui_webgl.ts
+// ../../../opengl/ts/wasm/src/skui_webgl.ts
 class LinksImpl6 {
   factory;
   env;
@@ -2526,7 +2519,7 @@ async function init6(env) {
   }
 }
 
-// ../../../../framework/ts/src/skui_framework.ts
+// ../../../framework/ts/src/skui_framework.ts
 class LinksImpl7 {
   env;
   constructor(env) {
@@ -2653,7 +2646,7 @@ function init7(env) {
   return Promise.resolve(new Manager7(env ? env : undefined));
 }
 
-// ../../../../framework_js/ts/src/index.ts
+// ../../../framework_js/ts/src/index.ts
 class LinksImpl8 {
   env;
   utils;
@@ -2902,670 +2895,69 @@ function init8(env) {
   return Promise.resolve(new Manager8(env ? env : undefined));
 }
 
-// ../../../ts/wasm/src/types.ts
-var Alignment;
-((Alignment2) => {
-  Alignment2[Alignment2["Start"] = 0] = "Start";
-  Alignment2[Alignment2["End"] = 1] = "End";
-  Alignment2[Alignment2["Center"] = 2] = "Center";
-  Alignment2[Alignment2["SpaceBetween"] = 3] = "SpaceBetween";
-  Alignment2[Alignment2["SpaceAround"] = 4] = "SpaceAround";
-  Alignment2[Alignment2["SpaceEvenly"] = 5] = "SpaceEvenly";
-})(Alignment ||= {});
-var FlCrossAlign;
-((FlCrossAlign2) => {
-  FlCrossAlign2[FlCrossAlign2["Start"] = 0] = "Start";
-  FlCrossAlign2[FlCrossAlign2["End"] = 1] = "End";
-  FlCrossAlign2[FlCrossAlign2["Center"] = 2] = "Center";
-  FlCrossAlign2[FlCrossAlign2["Stretch"] = 3] = "Stretch";
-})(FlCrossAlign ||= {});
-var WrCrossAlign;
-((WrCrossAlign2) => {
-  WrCrossAlign2[WrCrossAlign2["Start"] = 0] = "Start";
-  WrCrossAlign2[WrCrossAlign2["End"] = 1] = "End";
-  WrCrossAlign2[WrCrossAlign2["Center"] = 2] = "Center";
-})(WrCrossAlign ||= {});
-var Fit;
-((Fit2) => {
-  Fit2[Fit2["Loose"] = 0] = "Loose";
-  Fit2[Fit2["Expend"] = 1] = "Expend";
-  Fit2[Fit2["Passthrough"] = 2] = "Passthrough";
-})(Fit ||= {});
-var ButtonKind;
-((ButtonKind2) => {
-  ButtonKind2[ButtonKind2["Regular"] = 0] = "Regular";
-  ButtonKind2[ButtonKind2["Primary"] = 1] = "Primary";
-  ButtonKind2[ButtonKind2["Accent"] = 2] = "Accent";
-  ButtonKind2[ButtonKind2["Warm"] = 3] = "Warm";
-})(ButtonKind ||= {});
-var ButtonMode;
-((ButtonMode2) => {
-  ButtonMode2[ButtonMode2["Basic"] = 0] = "Basic";
-  ButtonMode2[ButtonMode2["Stroked"] = 1] = "Stroked";
-  ButtonMode2[ButtonMode2["Raised"] = 2] = "Raised";
-  ButtonMode2[ButtonMode2["Flat"] = 3] = "Flat";
-  ButtonMode2[ButtonMode2["Icon"] = 4] = "Icon";
-  ButtonMode2[ButtonMode2["MiniIcon"] = 5] = "MiniIcon";
-  ButtonMode2[ButtonMode2["Fab"] = 6] = "Fab";
-  ButtonMode2[ButtonMode2["MiniFab"] = 7] = "MiniFab";
-})(ButtonMode ||= {});
-var IconType;
-((IconType2) => {
-  IconType2[IconType2["Inner"] = 0] = "Inner";
-  IconType2[IconType2["Theme"] = 1] = "Theme";
-  IconType2[IconType2["Image"] = 2] = "Image";
-})(IconType ||= {});
-var InputType;
-((InputType2) => {
-  InputType2[InputType2["UiText"] = 0] = "UiText";
-  InputType2[InputType2["Password"] = 1] = "Password";
-  InputType2[InputType2["ASCII"] = 2] = "ASCII";
-  InputType2[InputType2["Integer"] = 3] = "Integer";
-  InputType2[InputType2["Real"] = 4] = "Real";
-  InputType2[InputType2["Hex"] = 5] = "Hex";
-  InputType2[InputType2["Binary"] = 6] = "Binary";
-  InputType2[InputType2["Octal"] = 7] = "Octal";
-  InputType2[InputType2["Pattern"] = 8] = "Pattern";
-})(InputType ||= {});
-var Level;
-((Level2) => {
-  Level2[Level2["Information"] = 0] = "Information";
-  Level2[Level2["Warning"] = 1] = "Warning";
-  Level2[Level2["Error"] = 2] = "Error";
-})(Level ||= {});
-var StatusType;
-((StatusType2) => {
-  StatusType2[StatusType2["OK"] = 0] = "OK";
-  StatusType2[StatusType2["VALID"] = 1] = "VALID";
-  StatusType2[StatusType2["RUNNING"] = 2] = "RUNNING";
-  StatusType2[StatusType2["KO"] = 3] = "KO";
-})(StatusType ||= {});
-var SepType;
-((SepType2) => {
-  SepType2[SepType2["FromStart"] = 0] = "FromStart";
-  SepType2[SepType2["FromEnd"] = 1] = "FromEnd";
-  SepType2[SepType2["Percent"] = 2] = "Percent";
-})(SepType ||= {});
-var ToggleKind;
-((ToggleKind2) => {
-  ToggleKind2[ToggleKind2["Toggle"] = 0] = "Toggle";
-  ToggleKind2[ToggleKind2["Checkbox"] = 1] = "Checkbox";
-  ToggleKind2[ToggleKind2["Radio"] = 2] = "Radio";
-})(ToggleKind ||= {});
-var Policy;
-((Policy2) => {
-  Policy2[Policy2["Always"] = 0] = "Always";
-  Policy2[Policy2["AsNeeded"] = 1] = "AsNeeded";
-  Policy2[Policy2["Never"] = 2] = "Never";
-  Policy2[Policy2["Hidden"] = 3] = "Hidden";
-})(Policy ||= {});
-var HAlignment;
-((HAlignment2) => {
-  HAlignment2[HAlignment2["Center"] = 0] = "Center";
-  HAlignment2[HAlignment2["Justify"] = 1] = "Justify";
-  HAlignment2[HAlignment2["Left"] = 2] = "Left";
-  HAlignment2[HAlignment2["Right"] = 3] = "Right";
-})(HAlignment ||= {});
-var VAlignment;
-((VAlignment2) => {
-  VAlignment2[VAlignment2["Top"] = 0] = "Top";
-  VAlignment2[VAlignment2["Middle"] = 1] = "Middle";
-  VAlignment2[VAlignment2["Bottom"] = 2] = "Bottom";
-})(VAlignment ||= {});
-var Wrapping;
-((Wrapping2) => {
-  Wrapping2[Wrapping2["No"] = 0] = "No";
-  Wrapping2[Wrapping2["Char"] = 1] = "Char";
-  Wrapping2[Wrapping2["Word"] = 2] = "Word";
-})(Wrapping ||= {});
-var Transform;
-((Transform2) => {
-  Transform2[Transform2["No"] = 0] = "No";
-  Transform2[Transform2["Uppercase"] = 1] = "Uppercase";
-  Transform2[Transform2["Lowercase"] = 2] = "Lowercase";
-  Transform2[Transform2["UppercaseFirst"] = 3] = "UppercaseFirst";
-  Transform2[Transform2["Capitalize"] = 4] = "Capitalize";
-})(Transform ||= {});
-var Overflow;
-((Overflow2) => {
-  Overflow2[Overflow2["LeadingChar"] = 0] = "LeadingChar";
-  Overflow2[Overflow2["CenterChar"] = 1] = "CenterChar";
-  Overflow2[Overflow2["EndingChar"] = 2] = "EndingChar";
-  Overflow2[Overflow2["LeadingWord"] = 3] = "LeadingWord";
-  Overflow2[Overflow2["CenterWord"] = 4] = "CenterWord";
-  Overflow2[Overflow2["EndingWord"] = 5] = "EndingWord";
-})(Overflow ||= {});
-var Slant;
-((Slant2) => {
-  Slant2[Slant2["Normal"] = 0] = "Normal";
-  Slant2[Slant2["Italic"] = 1] = "Italic";
-})(Slant ||= {});
-var Drop;
-((Drop2) => {
-  Drop2[Drop2["Before"] = 0] = "Before";
-  Drop2[Drop2["After"] = 1] = "After";
-  Drop2[Drop2["In"] = 2] = "In";
-})(Drop ||= {});
-var Weight;
-((Weight2) => {
-  Weight2[Weight2["Thin"] = 100] = "Thin";
-  Weight2[Weight2["ExtraLight"] = 200] = "ExtraLight";
-  Weight2[Weight2["Light"] = 300] = "Light";
-  Weight2[Weight2["Normal"] = 400] = "Normal";
-  Weight2[Weight2["Medium"] = 500] = "Medium";
-  Weight2[Weight2["SemiBold"] = 600] = "SemiBold";
-  Weight2[Weight2["Bold"] = 700] = "Bold";
-  Weight2[Weight2["ExtraBold"] = 800] = "ExtraBold";
-  Weight2[Weight2["Black"] = 900] = "Black";
-})(Weight ||= {});
-var TabsKind;
-((TabsKind2) => {
-  TabsKind2[TabsKind2["Fixed"] = 0] = "Fixed";
-  TabsKind2[TabsKind2["Scrollable"] = 1] = "Scrollable";
-})(TabsKind ||= {});
-var TabsMode;
-((TabsMode2) => {
-  TabsMode2[TabsMode2["Basic"] = 0] = "Basic";
-  TabsMode2[TabsMode2["Flat"] = 1] = "Flat";
-})(TabsMode ||= {});
-var Side;
-((Side2) => {
-  Side2[Side2["Left"] = 0] = "Left";
-  Side2[Side2["Top"] = 1] = "Top";
-  Side2[Side2["Right"] = 2] = "Right";
-  Side2[Side2["Bottom"] = 3] = "Bottom";
-})(Side ||= {});
-var Order;
-((Order2) => {
-  Order2[Order2["Asc"] = 0] = "Asc";
-  Order2[Order2["Desc"] = 1] = "Desc";
-  Order2[Order2["None"] = 2] = "None";
-})(Order ||= {});
-var Separator;
-((Separator2) => {
-  Separator2[Separator2["None"] = 0] = "None";
-  Separator2[Separator2["Before"] = 1] = "Before";
-  Separator2[Separator2["After"] = 2] = "After";
-  Separator2[Separator2["Both"] = 3] = "Both";
-})(Separator ||= {});
-
-class JSObject {
-  type;
-  fields;
-  constructor(type, fields) {
-    this.type = type;
-    this.fields = fields;
-  }
-  toJSON() {
-    return {
-      type: this.type,
-      fields: this.fields
-    };
+// src/module.ts
+class DShared {
+  run;
+  getName = () => "debugger";
+  constructor(run2) {
+    this.run = run2;
   }
 }
-
-class WidgetElement extends JSObject {
-}
-
-class IconElement extends JSObject {
-}
-
-class Configuration extends JSObject {
-}
-
-class Decoration extends JSObject {
-}
-
-class RangeElement extends JSObject {
-}
-
-class InputKindElement extends JSObject {
-}
-
-class SeparationElement extends JSObject {
-}
-
-class StatusElement extends JSObject {
-}
-
-class InsetsElement extends JSObject {
-}
-
-class ConstraintsElement extends JSObject {
-}
-
-class TextStyleElement extends JSObject {
-}
-
-class IconedActionElement extends JSObject {
-}
-
-class TabElement extends JSObject {
-}
-
-class TreeItemElement extends JSObject {
-}
-
-class DropdownElement extends JSObject {
-}
-
-class ShorcutElement extends JSObject {
-}
-
-class DialogElement extends JSObject {
-}
-
-class RenderableElement {
-  renderable;
-  constructor(renderable) {
-    this.renderable = renderable;
-  }
-}
-var flexConf = (conf) => new Configuration("flexConf", conf);
-var stackConf = (conf) => new Configuration("stackConf", conf);
-var icon = (setting) => new IconElement("icon", setting);
-var range = (start2, end) => new RangeElement("range", { start: start2, end });
-var inputKind = (setting) => new InputKindElement("inputKind", setting);
-var status = (setting) => new StatusElement("status", setting);
-var separation = (setting) => new SeparationElement("separation", setting);
-var insets = (setting) => new InsetsElement("insets", setting);
-var constraints = (setting) => new ConstraintsElement("constraints", setting);
-var textStyle = (setting) => new TextStyleElement("textStyle", setting);
-var shortcut = (setting) => new ShorcutElement("shortcut", setting);
-var background = (setting) => new Decoration("background", setting);
-var padding = (setting) => new Decoration("padding", setting);
-var borderLine = (setting) => new Decoration("borderLine", setting);
-var nested = (setting) => new Decoration("nested", setting);
-var iconedAction = (setting) => new IconedActionElement("iconedAction", setting);
-var tab = (setting) => new TabElement("tab", setting);
-var treeItem = (setting) => new TreeItemElement("treeItem", setting);
-var dropdownitem = (setting) => new DropdownElement("dropdownitem", setting);
-var dropdownmenu = (setting) => new DropdownElement("dropdownmenu", setting);
-var flex = (setting) => new WidgetElement("flex", setting);
-var wrap = (setting) => new WidgetElement("wrap", setting);
-var stack = (setting) => new WidgetElement("stack", setting);
-var button = (setting) => new WidgetElement("button", setting);
-var slider = (setting) => new WidgetElement("slider", setting);
-var input = (setting) => new WidgetElement("input", setting);
-var split = (setting) => new WidgetElement("split", setting);
-var toggle = (setting) => new WidgetElement("toggle", setting);
-var scroll = (setting) => new WidgetElement("scroll", setting);
-var label = (setting) => new WidgetElement("label", setting);
-var indicator = (setting) => new WidgetElement("indicator", setting);
-var decorated = (setting) => new WidgetElement("decorated", setting);
-var constrained = (setting) => new WidgetElement("constrained", setting);
-var textView = (setting) => new WidgetElement("textview", setting);
-var tabs = (setting) => new WidgetElement("tabs", setting);
-var tree = (setting) => new WidgetElement("tree", setting);
-var insetsAll = (thickness) => insets({
-  left: thickness,
-  top: thickness,
-  right: thickness,
-  bottom: thickness
-});
-var paddingAll = (thickness) => padding({ padding: insetsAll(thickness) });
-var renderable = (renderable2) => new RenderableElement(renderable2);
-
-class State4 {
-  nextID = 1;
-  objects = [];
-  freeIDs = [];
-  register(v) {
-    const freeID = this.freeIDs.pop();
-    const id = freeID ?? this.nextID++;
-    this.objects[id] = v;
-    return id;
-  }
-  get(id) {
-    return this.objects[id];
-  }
-  apply(id, parameters) {
-    const fn = this.get(id);
-    return fn.apply(null, parameters);
-  }
-  delete(id) {
-    const current = this.get(id);
-    this.objects[id] = null;
-    this.freeIDs.push(id);
-    return current;
-  }
-}
-
-class EngShared {
-  getName = () => "skuieng";
-  createScope;
-  constructor(createScope) {
-    this.createScope = createScope;
-  }
-}
-
-class SkuiEngUtils {
-  utils;
-  exports;
-  state;
-  createScope;
-  constructor(utils, exports, createScope, state) {
-    this.state = state ?? new State4;
-    this.utils = utils;
-    this.exports = exports;
-    this.createScope = createScope;
-  }
-  importValue(value) {
-    return this.state.delete(this.exports.SKIP_UiEngineJS_toJS(value));
-  }
-  register(skPath, value) {
-    const id = this.state.register(value);
-    this.exports.SKIP_UiEngineJS_register(id, skPath, this.utils.exportString(typeof value));
-    return id;
-  }
-  exportValue(path, skPath, value) {
-    const type = typeof value;
-    if (value == null) {
-      return this.exports.SKIP_JSON_createNull();
-    } else if (type == "number") {
-      return this.exports.SKIP_JSON_createFloatNumber(value);
-    } else if (type == "boolean") {
-      return this.exports.SKIP_JSON_createBool(value);
-    } else if (type == "string") {
-      return this.exports.SKIP_JSON_createString(this.utils.exportString(value));
-    } else if (Array.isArray(value)) {
-      const arr = this.exports.SKIP_JSON_startArray();
-      value.forEach((v) => this.exports.SKIP_JSON_addToArray(arr, this.exportValue(path, skPath, v)));
-      return this.exports.SKIP_JSON_endArray(arr);
-    } else if (value instanceof RenderableElement) {
-      const render = (strScope) => {
-        return value.renderable(this.createScope(strScope));
-      };
-      const id = this.register(skPath, render);
-      return this.exportValue(path, skPath, {
-        type: "renderable",
-        fields: {
-          id,
-          scope: path
-        }
-      });
-    } else if (type == "object") {
-      const jso = value instanceof JSObject ? value.toJSON() : value;
-      const obj = this.exports.SKIP_JSON_startObject();
-      for (const key of Object.keys(jso)) {
-        this.exports.SKIP_JSON_addToObject(obj, this.utils.exportString(key), this.exportValue(path, skPath, jso[key]));
-      }
-      return this.exports.SKIP_JSON_endObject(obj);
-    } else if (type == "function") {
-      const id = this.register(skPath, value);
-      return this.exportValue(path, skPath, {
-        type: "function",
-        fields: {
-          id,
-          scope: path
-        }
-      });
-    } else {
-      throw new Error("'" + type + "' cannot be exported to engine.");
-    }
-  }
-}
-
-// ../../../../base/ts/src/skui_types.ts
-class Raw {
-  text;
-  constructor(text, _category) {
-    this.text = text;
-  }
-  toJSON = () => {
-    return {
-      type: "text",
-      fields: {
-        type: 0 /* RAW */,
-        value: this.text
-      }
-    };
-  };
-}
-
-class Locale {
-  text;
-  category;
-  constructor(text, category) {
-    this.text = text;
-    this.category = category ?? null;
-  }
-  toJSON = () => {
-    return {
-      type: "text",
-      fields: {
-        type: 1 /* LOCALE */,
-        value: this.text,
-        category: this.category
-      }
-    };
-  };
-}
-var l = (text, category) => {
-  return new Locale(text, category);
-};
-var f = (format, parameters) => {
-  return new Format(format, parameters);
-};
-var check = (value) => {
-  if (typeof value == "string") {
-    return new Raw(value);
-  } else {
-    return value;
-  }
-};
-
-class Format {
-  format;
-  parameters;
-  constructor(format, parameters) {
-    this.format = format;
-    this.parameters = parameters;
-  }
-  toJSON = () => {
-    return {
-      type: "text",
-      fields: {
-        type: 2 /* FORMAT */,
-        pattern: check(this.format),
-        parameters: this.parameters.map(check)
-      }
-    };
-  };
-}
-
-class SkuiUtils {
-  utils;
-  exports;
-  constructor(utils, exports) {
-    this.utils = utils;
-    this.exports = exports;
-  }
-  text = (strTxt, strCat) => {
-    const skText = this.utils.exportString(strTxt);
-    const skCategory = strCat ? this.utils.exportString(strCat) : null;
-    return this.exports.SKIP_I18N_text(skText, skCategory);
-  };
-  raw = (strTxt) => {
-    const skText = this.utils.exportString(strTxt);
-    return this.exports.SKIP_I18N_raw(skText);
-  };
-  format = (format, params) => {
-    const vector = this.exports.SKIP_I18N_textVector();
-    params.forEach((ptr) => this.exports.SKIP_I18N_pushText(vector, ptr));
-    return this.exports.SKIP_I18N_format(format, vector);
-  };
-  exportLocale = (text) => {
-    const verified = check(text);
-    if (verified instanceof Raw) {
-      return this.raw(verified.text);
-    } else if (verified instanceof Locale) {
-      return this.text(verified.text, verified.category);
-    } else {
-      const f2 = verified;
-      return this.format(this.exportLocale(f2.format), f2.parameters.map(this.exportLocale));
-    }
-  };
-}
-
-// ../../../ts/wasm/src/engine.ts
-class JSONProperty {
-  path;
-  name;
-  combined;
-  getter;
-  setter;
-  constructor(path, name, combined, getter, setter) {
-    this.path = path;
-    this.name = name;
-    this.combined = combined;
-    this.getter = getter;
-    this.setter = setter;
-  }
-  set(value) {
-    this.setter(this.path, this.name, value);
-  }
-  get() {
-    return this.getter(this.path, this.name);
-  }
-  toJSON = () => {
-    return {
-      type: "prop",
-      fields: { name: this.name, path: this.path, combined: this.combined }
-    };
-  };
-}
-
-class ScopeImpl {
-  alert;
-  dialog;
-  create;
-  combine;
-  constructor(alert2, dialog, create, combine) {
-    this.create = create;
-    this.combine = combine;
-    this.alert = alert2;
-    this.dialog = dialog;
-  }
+function errorMessage(error) {
+  if (error instanceof Error)
+    return error.message;
+  if (typeof error == "string")
+    return error;
+  if (typeof error == "number")
+    return error.toString();
+  if (typeof error == "boolean")
+    return error.toString();
+  return JSON.stringify(error, Object.getOwnPropertyNames(error));
 }
 
 class LinksImpl9 {
-  state;
   env;
   utils;
-  skuiUtils;
-  exported;
-  skuiEngUtils;
+  exports;
   constructor(env) {
     this.env = env;
   }
-  complete(utils, exports) {
-    this.state = utils.getState("skuieng", () => new State4);
-    this.utils = utils;
-    this.skuiUtils = new SkuiUtils(utils, exports);
-    this.exported = exports;
-    const createScope = (strScope) => new ScopeImpl((text, title) => this.alert(text, title), (dialog) => this.dialog(strScope, dialog), (value) => this.create(strScope, value), (combine, combinables, write) => this.combine(strScope, combine, combinables, write));
-    this.skuiEngUtils = new SkuiEngUtils(utils, exports, createScope, this.state);
-    if (this.env) {
-      this.env.shared.set("skuieng", new EngShared(createScope));
-    }
-  }
-  getter(path, name) {
-    const skPath = path != null ? this.utils.exportString(path) : null;
-    const skName = this.utils.exportString(name);
-    const jsonPtr = this.exported.SKIP_UiEngineJS_getValue(skPath, skName);
-    if (jsonPtr) {
-      return this.skuiEngUtils.importValue(jsonPtr);
-    }
-    return null;
-  }
-  setter(path, name, value) {
-    const skPath = path != null ? this.utils.exportString(path) : null;
-    const skName = this.utils.exportString(name);
-    const skValue = path != null ? this.skuiEngUtils.exportValue(path, skPath, value) : null;
-    this.exported.SKIP_UiEngineJS_setValue(skPath, skName, skValue);
-  }
-  registerCombine(path, combine, write) {
-    return this.utils.runWithGc(() => {
-      const skPath = path != null ? this.utils.exportString(path) : null;
-      const combineFn = this.skuiEngUtils.exportValue(path, skPath, combine);
-      const writeFn = write ? this.skuiEngUtils.exportValue(path, skPath, write) : null;
-      const skName = this.exported.SKIP_UiEngineJS_combine(skPath, combineFn, writeFn);
-      return this.utils.importString(skName);
-    });
-  }
-  registerProperty(path, value) {
-    return this.utils.runWithGc(() => {
-      const skPath = path != null ? this.utils.exportString(path) : null;
-      const skValue = value != null ? this.skuiEngUtils.exportValue(path, skPath, value) : null;
-      const jsonPtr = this.exported.SKIP_UiEngineJS_create(skPath, skValue);
-      return this.utils.importString(jsonPtr);
-    });
-  }
-  combine(path, combine, combinables, write) {
-    const fn = () => {
-      const values = combinables.map((c) => c.get());
-      const result = combine(values);
-      const skPath = this.utils.exportString(path);
-      return this.skuiEngUtils.exportValue(path, skPath, result);
+  skui_fetch(_wId, url, method, headers, body, timeout_s, executor, time) {
+    const jsUrl = this.utils.importString(url);
+    const jsMethod = this.utils.importString(method);
+    const jsHeaders = this.utils.importString(headers);
+    const jsBody = body ? this.utils.importOptString(body) : null;
+    const jsExecutor = this.utils.importString(executor);
+    const exec = (status, headers2, payload, error) => {
+      this.utils.runWithGc(() => {
+        const sk_result = this.exports.sk_create_result(status, headers2 != null ? this.utils.exportString(headers2) : null, payload != null ? this.utils.exportString(payload) : null, error != null ? this.utils.exportString(error) : null);
+        this.exports.skui_fetch_result(this.utils.exportString(jsUrl), this.utils.exportString(jsMethod), this.utils.exportString(jsHeaders), jsBody ? this.utils.exportString(jsBody) : null, this.utils.exportString(jsExecutor), time, sk_result);
+      });
     };
-    const name = this.registerCombine(path, fn, write);
-    return new JSONProperty(path, name, true, this.getter.bind(this), (path2, name2, value) => this.setter(path2, name2, value));
+    fetch(jsUrl, {
+      method: jsMethod,
+      body: jsBody,
+      headers: JSON.parse(jsHeaders),
+      signal: AbortSignal.timeout(Number(timeout_s) * 1000)
+    }).then((response) => {
+      const res = response.ok ? response.text().then((txt) => [response, txt]) : Promise.resolve([response, null]);
+      return res;
+    }).then((res) => {
+      const [response, text] = res;
+      exec(BigInt(response.status), JSON.stringify(response.headers), text, text != null ? null : response.statusText);
+    }).catch((exc) => exec(BigInt(0), null, null, errorMessage(exc)));
   }
-  create(path, value) {
-    const name = this.registerProperty(path, value ?? null);
-    return new JSONProperty(path, name, false, (path2, name2) => this.getter(path2, name2), (path2, name2, value2) => this.setter(path2, name2, value2));
-  }
-  alert(text, title) {
+  run(host, port, securred) {
     this.utils.runWithGc(() => {
-      const skText = this.skuiUtils.exportLocale(text);
-      const skTitle = title ? this.skuiUtils.exportLocale(text) : null;
-      this.exported.SKIP_UiEngineJS_alert(skText, skTitle);
+      const scheme = securred ? "https" : "http";
+      const url = `${scheme}://${host}:${port}`;
+      this.exports.sk_debugger_launch(this.utils.exportString(url));
     });
   }
-  dialog(path, dialog) {
-    this.utils.runWithGc(() => {
-      const skPath = path != null ? this.utils.exportString(path) : null;
-      const skDialog = this.skuiEngUtils.exportValue(path, skPath, dialog);
-      this.exported.SKIP_UiEngineJS_dialog(skDialog);
-    });
-  }
-  SKIP_UiEngineJS_createObject() {
-    return this.state.register({});
-  }
-  SKIP_UiEngineJS_addToObject(obj, skName, value) {
-    const name = this.utils.importString(skName);
-    this.state.get(obj)[name] = this.state.delete(value);
-  }
-  SKIP_UiEngineJS_createArray() {
-    return this.state.register([]);
-  }
-  SKIP_UiEngineJS_addToArray(arr, value) {
-    this.state.get(arr).push(this.state.delete(value));
-  }
-  SKIP_UiEngineJS_createNull() {
-    return this.state.register(null);
-  }
-  SKIP_UiEngineJS_createNumber(value) {
-    return this.state.register(value);
-  }
-  SKIP_UiEngineJS_createString(value) {
-    return this.state.register(this.utils.importString(value));
-  }
-  SKIP_UiEngineJS_createBool(value) {
-    return this.state.register(value);
-  }
-  SKIP_UiEngineJS_apply(id, skType, skParemeters) {
-    const type = this.utils.importString(skType);
-    const parameters = this.skuiEngUtils.importValue(skParemeters);
-    if (type == "function" && Array.isArray(parameters)) {
-      const res = this.state.apply(id, parameters);
-      return this.skuiEngUtils.exportValue(null, null, res);
-    }
-    return null;
-  }
-  SKIP_UiEngineJS_delete(id) {
-    this.state.delete(id);
+  complete(utils, exports) {
+    this.utils = utils;
+    this.exports = exports;
+    this.env.shared.set("debugger", new DShared(this.run.bind(this)));
   }
 }
 
@@ -3577,148 +2969,18 @@ class Manager9 {
   prepare = (wasm) => {
     const toWasm = wasm;
     const links = new LinksImpl9(this.env);
-    toWasm.SKIP_UiEngineJS_createObject = links.SKIP_UiEngineJS_createObject.bind(links);
-    toWasm.SKIP_UiEngineJS_addToObject = links.SKIP_UiEngineJS_addToObject.bind(links);
-    toWasm.SKIP_UiEngineJS_createArray = links.SKIP_UiEngineJS_createArray.bind(links);
-    toWasm.SKIP_UiEngineJS_addToArray = links.SKIP_UiEngineJS_addToArray.bind(links);
-    toWasm.SKIP_UiEngineJS_createNull = links.SKIP_UiEngineJS_createNull.bind(links);
-    toWasm.SKIP_UiEngineJS_createNumber = links.SKIP_UiEngineJS_createNumber.bind(links);
-    toWasm.SKIP_UiEngineJS_createString = links.SKIP_UiEngineJS_createString.bind(links);
-    toWasm.SKIP_UiEngineJS_createBool = links.SKIP_UiEngineJS_createBool.bind(links);
-    toWasm.SKIP_UiEngineJS_delete = links.SKIP_UiEngineJS_delete.bind(links);
-    toWasm.SKIP_UiEngineJS_apply = links.SKIP_UiEngineJS_apply.bind(links);
+    toWasm.skui_fetch = links.skui_fetch.bind(links);
     return links;
   };
 }
 function init9(env) {
-  return Promise.resolve(new Manager9(env ? env : undefined));
+  return Promise.resolve(new Manager9(env));
+}
+function run2(env, entrypoint) {
+  env.shared.get("debugger").run(entrypoint.host, entrypoint.port, entrypoint.securred);
 }
 
-// ../../../ts/wasm/src/picture.ts
-function resize(document2, image, width, height, then, otherwise) {
-  const canvas = document2.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (ctx && image != null) {
-    ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, width, height);
-    const rImage = new Image;
-    rImage.onload = () => then(rImage);
-    rImage.onerror = () => otherwise(l("image load failed"));
-    rImage.src = canvas.toDataURL();
-  } else {
-    otherwise(l("2D context cannot be retrieved"));
-  }
-}
-
-class PictureShared {
-  getName = () => "picture";
-  register;
-  unregister;
-  constructor(register, unregister) {
-    this.register = register;
-    this.unregister = unregister;
-  }
-}
-
-class State5 {
-  imgId = 0;
-  images = new Map;
-  register(image) {
-    const id = ++this.imgId;
-    this.images.set(id, image);
-    return id;
-  }
-  delete(id) {
-    this.images.delete(id);
-  }
-  get(id) {
-    return this.images.get(id);
-  }
-}
-
-class LinksImpl10 {
-  state;
-  env;
-  skuiUtils;
-  exported;
-  constructor(env) {
-    this.state = new State5;
-    this.env = env;
-  }
-  complete(utils, exports) {
-    this.skuiUtils = new SkuiUtils(utils, exports);
-    this.exported = exports;
-    if (this.env) {
-      this.env.shared.set("picture", new PictureShared((img) => {
-        const imgId = this.state.register(img);
-        this.exported.SKIP_UiEnginePicture_register(imgId, img.width, img.height);
-        return imgId;
-      }, (id) => {
-        this.exported.SKIP_UiEnginePicture_unregister(id);
-      }));
-    }
-  }
-  asTexture(id, ctx) {
-    const image = this.env ? this.state.get(id) : null;
-    if (image) {
-      return this.env.imageAsTexture(ctx, image);
-    }
-    return 0;
-  }
-  delete(id) {
-    this.state.delete(id);
-  }
-  resize(id, width, height) {
-    const notify = (img, msg) => {
-      this.skuiUtils.utils.runWithGc(() => {
-        let skError = null;
-        if (msg) {
-          const format = l("Unable to resize image: {1}.");
-          const message = f(format, [msg]);
-          skError = this.skuiUtils.exportLocale(message);
-        }
-        this.exported.SKIP_UiEnginePicture_resized(id, width, height, img ?? 0, skError);
-      });
-    };
-    if (this.env) {
-      const image = this.state.get(id);
-      if (image) {
-        resize(this.env.window().document, image, width, height, (img) => {
-          const imgId = this.state.register(img);
-          this.exported.SKIP_UiEnginePicture_register(imgId, img.width, img.height);
-          notify(imgId, null);
-        }, (msg) => {
-          notify(null, check(msg));
-        });
-      } else {
-        notify(null, f(l("Image not found {1}"), [new Raw(id.toString())]));
-      }
-    } else {
-      notify(null, l("Environment not initialized"));
-    }
-  }
-}
-
-class Manager10 {
-  env;
-  constructor(env) {
-    this.env = env;
-  }
-  prepare = (wasm) => {
-    const toWasm = wasm;
-    const links = new LinksImpl10(this.env);
-    toWasm.SKIP_UiEnginePicture_delete = links.delete.bind(links);
-    toWasm.SKIP_UiEnginePicture_resize = links.resize.bind(links);
-    toWasm.SKIP_UiEnginePicture_asTexture = links.asTexture.bind(links);
-    return links;
-  };
-}
-function init10(env) {
-  return Promise.resolve(new Manager10(env ? env : undefined));
-}
-
-// ../../../../opengl/ts/wasm/src/skui_glenv.ts
+// ../../../opengl/ts/wasm/src/skui_glenv.ts
 function complete(env) {
   const glenv = env;
   const global = typeof window == "undefined" ? self : window;
@@ -3759,7 +3021,7 @@ function complete(env) {
   }
 }
 
-// ../../../../../skip_for_ui/skiplang/prelude/ts/wasm/src/sk_browser.ts
+// ../../../../skip/skiplang/prelude/ts/wasm/src/sk_browser.ts
 class Env {
   shared;
   disableWarnings = false;
@@ -3823,7 +3085,7 @@ function environment(environment2) {
   return new Env(environment2);
 }
 
-// ../../../ts/wasm/src/index.ts
+// src/index.ts
 var modules = [
   init,
   init2,
@@ -3832,420 +3094,29 @@ var modules = [
   init5,
   init6,
   init7,
-  init8,
-  init10,
-  init9
+  init9,
+  init8
 ];
+var wasmurl = new URL("./libdebugger_wasm.wasm", import.meta.url);
 var extensions = [complete];
-async function launch(name, wasmurl, additional) {
-  const data = await run(wasmurl, modules.concat(additional), extensions, environment, name);
+async function launch() {
+  const data = await run(wasmurl, modules, extensions, environment);
   const window2 = data.environment.window();
-  let args = [];
-  if ("skui_command" in window2) {
-    args = window2.skui_command;
-  } else {
-    const search = window2.location.search.trim().substring(1);
-    args = search.split("/").map((t) => decodeURIComponent(t));
+  const searchParams = new URLSearchParams(window2.location.search);
+  const host = searchParams.get("host");
+  const port = searchParams.get("port");
+  const securred = searchParams.get("s");
+  if (port == null)
+    throw new Error("Debug port must be specified");
+  if (!port.match(/^[0-9]+$/g)) {
+    throw new Error("Debug port must be an integer");
   }
-  data.main(args, "");
-}
-
-// src/launcher.ts
-class LinksImpl11 {
-  env;
-  title;
-  renderer;
-  utils;
-  exports;
-  constructor(env, title, renderer) {
-    this.env = env;
-    this.title = title;
-    this.renderer = renderer;
-  }
-  complete(utils, exports) {
-    this.utils = utils;
-    this.exports = exports;
-  }
-  SKUI_UiEngineJS_getRenderer() {
-    const shared = this.env.shared.get("skuieng");
-    if (shared) {
-      const state = this.utils.getState("skuieng", () => new State4);
-      const engUtils = new SkuiEngUtils(this.utils, this.exports, shared.createScope, state);
-      return engUtils.exportValue(null, null, new RenderableElement(this.renderer));
-    }
-    return null;
-  }
-  SKUI_UiEngineJS_getTitle() {
-    return this.utils.exportString(this.title);
-  }
-}
-
-class Manager11 {
-  env;
-  title;
-  renderer;
-  constructor(env, title, renderer) {
-    this.env = env;
-    this.title = title;
-    this.renderer = renderer;
-  }
-  prepare = (wasm) => {
-    const toWasm = wasm;
-    const links = new LinksImpl11(this.env, this.title, this.renderer);
-    toWasm.SKUI_UiEngineJS_getRenderer = links.SKUI_UiEngineJS_getRenderer.bind(links);
-    toWasm.SKUI_UiEngineJS_getTitle = links.SKUI_UiEngineJS_getTitle.bind(links);
-    return links;
-  };
-}
-function init11(env) {
-  return Promise.resolve((title, renderer) => new Manager11(env, title, renderer));
-}
-
-// ../../../ts/wasm/src/icons.ts
-var exports_icons = {};
-__export(exports_icons, {
-  themify: () => themify,
-  ZoomOut: () => ZoomOut,
-  ZoomIn: () => ZoomIn,
-  Zip: () => Zip,
-  World: () => World,
-  Volume: () => Volume,
-  User: () => User,
-  Unlock: () => Unlock,
-  Unlink: () => Unlink,
-  Trash: () => Trash,
-  Timer: () => Timer,
-  Time: () => Time,
-  ThumbUp: () => ThumbUp,
-  ThumbDown: () => ThumbDown,
-  Target: () => Target,
-  Tag: () => Tag,
-  Tablet: () => Tablet,
-  Star: () => Star,
-  Signal: () => Signal,
-  ShoppingCart: () => ShoppingCart,
-  Share: () => Share,
-  Settings: () => Settings,
-  Search: () => Search,
-  Save: () => Save,
-  Reload: () => Reload,
-  Redo: () => Redo,
-  PowerOff: () => PowerOff,
-  Plus: () => Plus,
-  Pin: () => Pin,
-  Pencil: () => Pencil,
-  Paste: () => Paste,
-  Occulted: () => Occulted,
-  MultipleDirection: () => MultipleDirection,
-  Move: () => Move,
-  More: () => More,
-  Mobile: () => Mobile,
-  Minus: () => Minus,
-  Menu: () => Menu,
-  Map: () => Map2,
-  Lock: () => Lock,
-  LocationArrow: () => LocationArrow,
-  Link: () => Link,
-  Layout: () => Layout,
-  Layers: () => Layers,
-  Key: () => Key,
-  Info: () => Info,
-  Import: () => Import,
-  Image: () => Image2,
-  Home: () => Home,
-  Help: () => Help,
-  HeartBroken: () => HeartBroken,
-  Heart: () => Heart,
-  HandStop: () => HandStop,
-  HandOpen: () => HandOpen,
-  HandDrag: () => HandDrag,
-  Fullscreen: () => Fullscreen,
-  Forbiden: () => Forbiden,
-  Folder: () => Folder,
-  Flag: () => Flag,
-  Filter: () => Filter,
-  Files: () => Files,
-  File: () => File2,
-  Eye: () => Eye,
-  Export: () => Export,
-  ExchangeVertical: () => ExchangeVertical,
-  Email: () => Email,
-  DoubleAngleUp: () => DoubleAngleUp,
-  DoubleAngleRight: () => DoubleAngleRight,
-  DoubleAngleLeft: () => DoubleAngleLeft,
-  DoubleAngleDown: () => DoubleAngleDown,
-  Direction: () => Direction,
-  Desktop: () => Desktop,
-  Dashboard: () => Dashboard,
-  Cut: () => Cut,
-  Copy: () => Copy,
-  Comment: () => Comment,
-  CloudUp: () => CloudUp,
-  CloudDown: () => CloudDown,
-  Cloud: () => Cloud,
-  Close: () => Close,
-  Clipboard: () => Clipboard,
-  Clip: () => Clip,
-  CheckBox: () => CheckBox,
-  Check: () => Check,
-  Calendar: () => Calendar,
-  Briefcase: () => Briefcase,
-  Bookmarked: () => Bookmarked,
-  Bookmark: () => Bookmark,
-  Bolt: () => Bolt,
-  ArrowsVertical: () => ArrowsVertical,
-  ArrowsHorizontal: () => ArrowsHorizontal,
-  ArrowsCorner: () => ArrowsCorner,
-  ArrowUp: () => ArrowUp,
-  ArrowTopRight: () => ArrowTopRight,
-  ArrowTopLeft: () => ArrowTopLeft,
-  ArrowRight: () => ArrowRight,
-  ArrowLeft: () => ArrowLeft,
-  ArrowDown: () => ArrowDown,
-  ArrowCircleUp: () => ArrowCircleUp,
-  ArrowCircleRight: () => ArrowCircleRight,
-  ArrowCircleLeft: () => ArrowCircleLeft,
-  ArrowCircleDown: () => ArrowCircleDown,
-  Archive: () => Archive,
-  AngleUp: () => AngleUp,
-  AngleRight: () => AngleRight,
-  AngleLeft: () => AngleLeft,
-  AngleDown: () => AngleDown,
-  Anchor: () => Anchor,
-  Alert: () => Alert
-});
-var themify = "themify";
-var ArrowLeft = icon({ kind: themify, name: "arrow-left" });
-var ArrowUp = icon({ kind: themify, name: "arrow-up" });
-var ArrowRight = icon({ kind: themify, name: "arrow-right" });
-var ArrowDown = icon({ kind: themify, name: "arrow-down" });
-var ArrowTopLeft = icon({ kind: themify, name: "arrow-top-left" });
-var ArrowTopRight = icon({ kind: themify, name: "arrow-top-right" });
-var ArrowCircleLeft = icon({
-  kind: themify,
-  name: "arrow-circle-left"
-});
-var ArrowCircleUp = icon({ kind: themify, name: "arrow-circle-up" });
-var ArrowCircleRight = icon({
-  kind: themify,
-  name: "arrow-circle-right"
-});
-var ArrowCircleDown = icon({
-  kind: themify,
-  name: "arrow-circle-down"
-});
-var ArrowsHorizontal = icon({
-  kind: themify,
-  name: "arrows-horizontal"
-});
-var ArrowsVertical = icon({ kind: themify, name: "arrows-vertical" });
-var ArrowsCorner = icon({ kind: themify, name: "arrows-corner" });
-var AngleLeft = icon({ kind: themify, name: "angle-left" });
-var AngleUp = icon({ kind: themify, name: "angle-up" });
-var AngleRight = icon({ kind: themify, name: "angle-right" });
-var AngleDown = icon({ kind: themify, name: "angle-down" });
-var DoubleAngleLeft = icon({
-  kind: themify,
-  name: "double-angle-left"
-});
-var DoubleAngleUp = icon({ kind: themify, name: "double-angle-up" });
-var DoubleAngleRight = icon({
-  kind: themify,
-  name: "double-angle-right"
-});
-var DoubleAngleDown = icon({
-  kind: themify,
-  name: "double-angle-down"
-});
-var Move = icon({ kind: themify, name: "move" });
-var Fullscreen = icon({ kind: themify, name: "fullscreen" });
-var Redo = icon({ kind: themify, name: "redo" });
-var ExchangeVertical = icon({
-  kind: themify,
-  name: "exchange-vertical"
-});
-var Save = icon({ kind: themify, name: "save" });
-var Direction = icon({ kind: themify, name: "direction" });
-var MultipleDirection = icon({
-  kind: themify,
-  name: "multiple-direction"
-});
-var User = icon({ kind: themify, name: "user" });
-var Link = icon({ kind: themify, name: "link" });
-var Unlink = icon({ kind: themify, name: "unlink" });
-var Trash = icon({ kind: themify, name: "trash" });
-var Target = icon({ kind: themify, name: "target" });
-var Tag = icon({ kind: themify, name: "tag" });
-var Desktop = icon({ kind: themify, name: "desktop" });
-var Tablet = icon({ kind: themify, name: "tablet" });
-var Mobile = icon({ kind: themify, name: "mobile" });
-var Email = icon({ kind: themify, name: "email" });
-var Star = icon({ kind: themify, name: "star" });
-var Signal = icon({ kind: themify, name: "signal" });
-var ShoppingCart = icon({ kind: themify, name: "shopping-cart" });
-var Settings = icon({ kind: themify, name: "settings" });
-var Search = icon({ kind: themify, name: "search" });
-var ZoomIn = icon({ kind: themify, name: "zoom-in" });
-var ZoomOut = icon({ kind: themify, name: "zoom-out" });
-var Cut = icon({ kind: themify, name: "cut" });
-var Bookmark = icon({ kind: themify, name: "bookmark" });
-var Bookmarked = icon({ kind: themify, name: "bookmarked" });
-var Reload = icon({ kind: themify, name: "reload" });
-var Plus = icon({ kind: themify, name: "plus" });
-var Minus = icon({ kind: themify, name: "minus" });
-var Close = icon({ kind: themify, name: "close" });
-var Pin = icon({ kind: themify, name: "pin" });
-var Pencil = icon({ kind: themify, name: "pencil" });
-var Forbiden = icon({ kind: themify, name: "forbiden" });
-var Lock = icon({ kind: themify, name: "lock" });
-var Unlock = icon({ kind: themify, name: "unlock" });
-var LocationArrow = icon({ kind: themify, name: "location-arrow" });
-var Layout = icon({ kind: themify, name: "layout" });
-var Layers = icon({ kind: themify, name: "layers" });
-var Key = icon({ kind: themify, name: "key" });
-var Image2 = icon({ kind: themify, name: "image" });
-var Heart = icon({ kind: themify, name: "heart" });
-var HeartBroken = icon({ kind: themify, name: "heart-broken" });
-var HandStop = icon({ kind: themify, name: "hand-stop" });
-var HandOpen = icon({ kind: themify, name: "hand-open" });
-var HandDrag = icon({ kind: themify, name: "hand-drag" });
-var Flag = icon({ kind: themify, name: "flag" });
-var Eye = icon({ kind: themify, name: "eye" });
-var Import = icon({ kind: themify, name: "import" });
-var Export = icon({ kind: themify, name: "export" });
-var Comment = icon({ kind: themify, name: "comment" });
-var Clip = icon({ kind: themify, name: "clip" });
-var Check = icon({ kind: themify, name: "check" });
-var CheckBox = icon({ kind: themify, name: "checkbox" });
-var Briefcase = icon({ kind: themify, name: "briefcase" });
-var Bolt = icon({ kind: themify, name: "bolt" });
-var Dashboard = icon({ kind: themify, name: "dashboard" });
-var World = icon({ kind: themify, name: "world" });
-var Timer = icon({ kind: themify, name: "timer" });
-var Time = icon({ kind: themify, name: "time" });
-var ThumbUp = icon({ kind: themify, name: "thumb-up" });
-var ThumbDown = icon({ kind: themify, name: "thumb-down" });
-var PowerOff = icon({ kind: themify, name: "power-off" });
-var Map2 = icon({ kind: themify, name: "map" });
-var Menu = icon({ kind: themify, name: "menu" });
-var Filter = icon({ kind: themify, name: "filter" });
-var Clipboard = icon({ kind: themify, name: "clipboard" });
-var Copy = icon({ kind: themify, name: "copy" });
-var Info = icon({ kind: themify, name: "info" });
-var Home = icon({ kind: themify, name: "home" });
-var Help = icon({ kind: themify, name: "help" });
-var Alert = icon({ kind: themify, name: "alert" });
-var Anchor = icon({ kind: themify, name: "anchor" });
-var Archive = icon({ kind: themify, name: "archive" });
-var Cloud = icon({ kind: themify, name: "cloud" });
-var CloudUp = icon({ kind: themify, name: "cloud-up" });
-var CloudDown = icon({ kind: themify, name: "cloud-down" });
-var File2 = icon({ kind: themify, name: "file" });
-var Files = icon({ kind: themify, name: "files" });
-var Folder = icon({ kind: themify, name: "folder" });
-var Zip = icon({ kind: themify, name: "zip" });
-var More = icon({ kind: themify, name: "more" });
-var Occulted = icon({ kind: themify, name: "more-alt" });
-var Share = icon({ kind: themify, name: "share" });
-var Calendar = icon({ kind: themify, name: "calendar" });
-var Paste = icon({ kind: themify, name: "paste" });
-var Volume = icon({ kind: themify, name: "volume" });
-// src/index.ts
-var wasmurl = new URL("./libskuieng_launcher.wasm", import.meta.url);
-async function launch2(title, renderer) {
-  const init12 = (env) => {
-    return init11(env).then((res) => res(title, renderer));
-  };
-  await launch("skuieng_launch", wasmurl, [init12]);
+  run2(data.environment, {
+    host: host ?? "localhost",
+    port: parseInt(port),
+    securred: securred == "true"
+  });
 }
 export {
-  wrap,
-  treeItem,
-  tree,
-  toggle,
-  textView,
-  textStyle,
-  tabs,
-  tab,
-  status,
-  stackConf,
-  stack,
-  split,
-  slider,
-  shortcut,
-  separation,
-  scroll,
-  renderable,
-  range,
-  paddingAll,
-  padding,
-  nested,
-  launch2 as launch,
-  label,
-  insetsAll,
-  insets,
-  inputKind,
-  input,
-  indicator,
-  exports_icons as icons,
-  iconedAction,
-  icon,
-  flexConf,
-  flex,
-  dropdownmenu,
-  dropdownitem,
-  decorated,
-  constraints,
-  constrained,
-  button,
-  borderLine,
-  background,
-  Wrapping,
-  WrCrossAlign,
-  WidgetElement,
-  Weight,
-  VAlignment,
-  TreeItemElement,
-  Transform,
-  ToggleKind,
-  TextStyleElement,
-  TabsMode,
-  TabsKind,
-  TabElement,
-  StatusType,
-  StatusElement,
-  State4 as State,
-  Slant,
-  SkuiEngUtils,
-  Side,
-  ShorcutElement,
-  Separator,
-  SeparationElement,
-  SepType,
-  RenderableElement,
-  RangeElement,
-  Policy,
-  Overflow,
-  Order,
-  Level,
-  JSObject,
-  InsetsElement,
-  InputType,
-  InputKindElement,
-  IconedActionElement,
-  IconType,
-  IconElement,
-  HAlignment,
-  FlCrossAlign,
-  Fit,
-  EngShared,
-  DropdownElement,
-  Drop,
-  DialogElement,
-  Decoration,
-  ConstraintsElement,
-  Configuration,
-  ButtonMode,
-  ButtonKind,
-  Alignment
+  launch
 };

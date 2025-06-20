@@ -184,7 +184,7 @@ export async function runService(
 
 function no_cors(req: Request, res: Response, next: NextFunction) {
   res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.header("Access-Control-Allow-Origin", "*");
   if (req.method.toUpperCase() == "OPTIONS") {
     res.statusCode = 204;
