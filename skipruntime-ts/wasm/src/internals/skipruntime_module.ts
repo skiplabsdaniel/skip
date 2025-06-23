@@ -262,6 +262,25 @@ export interface FromWasm {
   // Executor
 
   SkipRuntime_createExecutor(ref: Handle<Executor>): ptr<Internal.Executor>;
+
+  // Debugging
+
+  SkipRuntime_Debugger__service(): ptr<Internal.CJSON>;
+
+  SkipRuntime_Debugger__sharedGraph(): ptr<Internal.CJSON>;
+
+  SkipRuntime_Debugger__resourceGraph(
+    resource: ptr<Internal.String>,
+    jsonParams: ptr<Internal.CJObject>,
+  ): ptr<Internal.CJSON>;
+
+  SkipRuntime_Debugger__resourceInstances(
+    resource: ptr<Internal.String>,
+  ): ptr<Internal.CJSON>;
+
+  SkipRuntime_Debugger__values(
+    definition: ptr<Internal.CJSON>,
+  ): ptr<Internal.CJSON>;
 }
 
 interface ToWasm {
@@ -399,6 +418,12 @@ interface ToWasm {
   ): void;
 
   SkipRuntime_deleteExecutor(executor: Handle<Executor>): void;
+
+  // Debugging
+
+  SkipRuntime_Debugging_getInfo<P>(
+    skobject: Handle<HandlerInfo<P>>,
+  ): Pointer<Internal.CJObject>;
 }
 
 export class WasmFromBinding implements FromBinding {
@@ -787,6 +812,40 @@ export class WasmFromBinding implements FromBinding {
   ): Pointer<Internal.Executor> {
     return this.fromWasm.SkipRuntime_createExecutor(ref);
   }
+
+  // Debugging
+
+  SkipRuntime_Debugger__service(): Pointer<Internal.CJSON> {
+    return this.fromWasm.SkipRuntime_Debugger__service();
+  }
+
+  SkipRuntime_Debugger__sharedGraph(): ptr<Internal.CJSON> {
+    return this.fromWasm.SkipRuntime_Debugger__sharedGraph();
+  }
+
+  SkipRuntime_Debugger__resourceGraph(
+    resource: string,
+    jsonParams: ptr<Internal.CJObject>,
+  ): ptr<Internal.CJSON> {
+    return this.fromWasm.SkipRuntime_Debugger__resourceGraph(
+      this.utils.exportString(resource),
+      toPtr(jsonParams),
+    );
+  }
+
+  SkipRuntime_Debugger__resourceInstances(
+    resource: string,
+  ): ptr<Internal.CJSON> {
+    return this.fromWasm.SkipRuntime_Debugger__resourceInstances(
+      this.utils.exportString(resource),
+    );
+  }
+
+  SkipRuntime_Debugger__values(
+    definition: ptr<Internal.CJSON>,
+  ): ptr<Internal.CJSON> {
+    return this.fromWasm.SkipRuntime_Debugger__values(toPtr(definition));
+  }
 }
 
 class LinksImpl implements Links {
@@ -1022,6 +1081,10 @@ class LinksImpl implements Links {
   deleteExecutor(skexecutor: Handle<Executor>) {
     this.tobinding.SkipRuntime_deleteExecutor(skexecutor);
   }
+
+  getDebuggingInfo<P>(skobject: Handle<HandlerInfo<P>>) {
+    return toPtr(this.tobinding.SkipRuntime_Debugging_getInfo(skobject));
+  }
 }
 
 export class ServiceInstanceFactory implements Shared {
@@ -1113,6 +1176,10 @@ class Manager implements ToWasmManager {
     toWasm.SkipRuntime_Executor__resolve = links.resolveOfExecutor.bind(links);
     toWasm.SkipRuntime_Executor__reject = links.rejectOfExecutor.bind(links);
     toWasm.SkipRuntime_deleteExecutor = links.deleteExecutor.bind(links);
+
+    // Debugging
+
+    toWasm.SkipRuntime_Debugging_getInfo = links.getDebuggingInfo.bind(links);
 
     return links;
   }

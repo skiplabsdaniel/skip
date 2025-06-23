@@ -1,0 +1,11 @@
+fun main(): void {
+  git_info = System.subprocess(
+    Array["git", "log", "-1", "--format=%h %ad", "--date=format:(%Y %m)"],
+  ) match {
+  | Success(p) -> p.stdout
+  | Failure(err) ->
+    print_string(`Error getting git commit hash: ${err}`);
+    skipExit(1)
+  };
+  print_string(`skargo:skc-env=GIT_COMMIT_INFO=${git_info}`);
+}

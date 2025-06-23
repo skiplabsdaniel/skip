@@ -72,6 +72,12 @@ CJSON SkipRuntime_Runtime__getForKey(char* resource, CJObject jsonParams,
                                      CJSON key);
 double SkipRuntime_Runtime__update(char* input, CJSON values,
                                    SKExecutor executor);
+// Debugging
+CJSON SkipRuntime_Debugger__service();
+CJSON SkipRuntime_Debugger__sharedGraph();
+CJSON SkipRuntime_Debugger__resourceGraph(char* resource, CJObject jsonParams);
+CJSON SkipRuntime_Debugger__resourceInstances(char* resource);
+CJSON SkipRuntime_Debugger__values(CJSON definition);
 }
 
 using skbinding::AddFunction;
@@ -1078,6 +1084,76 @@ void UpdateOfRuntime(const FunctionCallbackInfo<Value>& args) {
   });
 }
 
+// Debugging
+
+void GetDebuggerService(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    CJSON skresult = SkipRuntime_Debugger__service();
+    args.GetReturnValue().Set(External::New(isolate, skresult));
+  });
+}
+
+void GetDebuggerSharedGraph(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    CJSON skresult = SkipRuntime_Debugger__sharedGraph();
+    args.GetReturnValue().Set(External::New(isolate, skresult));
+  });
+}
+
+void GetDebuggerResourceGraph(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  if (!args[0]->IsString()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The first parameter must be a string.")));
+    return;
+  }
+  if (!args[1]->IsExternal()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The second parameter must be a pointer.")));
+    return;
+  }
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    char* skresource = ToSKString(isolate, args[0].As<String>());
+    CJObject skparams = args[1].As<External>()->Value();
+    CJSON skresult = SkipRuntime_Debugger__resourceGraph(skresource, skparams);
+    args.GetReturnValue().Set(External::New(isolate, skresult));
+  });
+}
+
+void GetDebuggerResourceInstances(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  if (!args[0]->IsString()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The first parameter must be a string.")));
+    return;
+  }
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    char* skresource = ToSKString(isolate, args[0].As<String>());
+    CJSON skresult = SkipRuntime_Debugger__resourceInstances(skresource);
+    args.GetReturnValue().Set(External::New(isolate, skresult));
+  });
+}
+
+void GetDebuggerValues(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  if (!args[0]->IsExternal()) {
+    // Throw an Error that is passed back to JavaScript
+    isolate->ThrowException(Exception::TypeError(
+        FromUtf8(isolate, "The first parameter must be a pointer.")));
+    return;
+  }
+  NatTryCatch(isolate, [&args](Isolate* isolate) {
+    CJSON skdefinition = args[0].As<External>()->Value();
+    CJSON skresult = SkipRuntime_Debugger__values(skdefinition);
+    args.GetReturnValue().Set(External::New(isolate, skresult));
+  });
+}
+
 void GetToJSBinding(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   Local<Object> binding = Object::New(isolate);
@@ -1160,6 +1236,15 @@ void GetToJSBinding(const FunctionCallbackInfo<Value>& args) {
   AddFunction(isolate, binding, "SkipRuntime_Runtime__getForKey",
               GetForKeyOfRuntime);
   AddFunction(isolate, binding, "SkipRuntime_Runtime__update", UpdateOfRuntime);
+  //
+  AddFunction(isolate, binding, "SkipRuntime_Debugger__service",
+              GetDebuggerService);
+  AddFunction(isolate, binding, "SkipRuntime_Debugger__sharedGraph",
+              GetDebuggerSharedGraph);
+  AddFunction(isolate, binding, "SkipRuntime_Debugger__resourceGraph",
+              GetDebuggerResourceGraph);
+  AddFunction(isolate, binding, "SkipRuntime_Debugger__resourceInstances",
+              GetDebuggerResourceInstances);
 
   args.GetReturnValue().Set(binding);
 }

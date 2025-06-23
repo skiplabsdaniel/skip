@@ -1,0 +1,300 @@
+module SkipRuntime;
+
+@export("SkipRuntime_Debugger__service")
+fun debuggerService(): SKJSON.CJSON {
+  version = #env ("GIT_COMMIT_INFO");
+  SKStore.runWithResult(context ~> {
+    service = getService(context);
+    SKJSON.CJObject(
+      SKJSON.CJFields::create(
+        Array<(String, SKJSON.CJSON)>[
+          ("version", SKJSON.CJString(version)),
+          (
+            "inputs",
+            SKJSON.CJArray(
+              service.initialData.map(input -> SKJSON.CJString(input.name)),
+            ),
+          ),
+          (
+            "resources",
+            SKJSON.CJArray(
+              service.resources
+                .keys()
+                .map(k -> SKJSON.CJString(k))
+                .collect(Array),
+            ),
+          ),
+          (
+            "remotesResources",
+            SKJSON.CJArray(
+              service.remoteCollections
+                .keys()
+                .map(k -> SKJSON.CJString(k))
+                .collect(Array),
+            ),
+          ),
+        ],
+        x -> x,
+      ),
+    )
+  }) match {
+  | Success(json) -> json
+  | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
+  };
+}
+
+@export("SkipRuntime_Debugger__sharedGraph")
+fun debuggerSharedGraph(): SKJSON.CJSON {
+  SKStore.runWithResult(context ~> {
+    graphToJson(getSharedGraph(context))
+  }) match {
+  | Success(json) -> json
+  | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
+  };
+}
+
+@export("SkipRuntime_Debugger__resourceGraph")
+fun debuggerResourceGraph(
+  resource: String,
+  params: SKJSON.CJSON,
+): SKJSON.CJSON {
+  SKStore.runWithResult(context ~> {
+    getResourceGraph(context, resource, params)
+      .map(graphToJson)
+      .default(SKJSON.CJNull())
+  }) match {
+  | Success(json) -> json
+  | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
+  };
+}
+
+@export("SkipRuntime_Debugger__resourceInstances")
+fun debuggerResourceInstances(resource: String): SKJSON.CJSON {
+  SKStore.runWithResult(context ~> {
+    SKJSON.CJArray(getResourceInstances(context, resource).map(instanceToJson))
+  }) match {
+  | Success(json) -> json
+  | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
+  };
+}
+
+@export("SkipRuntime_Debugger__values")
+fun debuggerValues(definition: SKJSON.CJSON): SKJSON.CJSON {
+  SKStore.runWithResult(context ~> {
+    SKJSON.CJArray(
+      getValues(context, definition).map(e ->
+        SKJSON.CJArray(Array[e.i0, SKJSON.CJArray(e.i1)])
+      ),
+    )
+  }) match {
+  | Success(json) -> json
+  | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
+  };
+}
+
+@cpp_extern("SkipRuntime_Debugging_getInfo")
+@debug
+native fun getDebuggingInfo(reducer: UInt32): SKJSON.CJObject;
+
+private fun graphToJson(graph: Graph): SKJSON.CJObject {
+  SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("inputs", SKJSON.CJArray(graph.inputs.map(nameToJson))),
+        ("outputs", SKJSON.CJArray(graph.outputs.map(nameToJson))),
+        ("entities", SKJSON.CJArray(graph.entities.map(entityToJson))),
+        ("reads", SKJSON.CJArray(graph.reads.map(readToJson))),
+      ],
+    ),
+  )
+}
+
+private fun instanceToJson(instance: Instance): SKJSON.CJObject {
+  SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("params", instance.params),
+        (
+          "clients",
+          SKJSON.CJArray(instance.clients.map(c -> SKJSON.CJString(c))),
+        ),
+      ],
+    ),
+  )
+}
+
+private fun entityToJson(entity: Entity): SKJSON.CJObject {
+  toJSONString = v -> SKJSON.CJString(v);
+  vector = mutable Vector<(String, SKJSON.CJSON)>[
+    ("name", SKJSON.CJString(entity.name)),
+    ("inputs", SKJSON.CJArray(entity.inputs.sorted().map(toJSONString))),
+    ("reads", SKJSON.CJArray(entity.reads.sorted().map(toJSONString))),
+  ];
+  type(entity.name).each(m -> vector.push(("type", m)));
+  SKJSON.CJObject(SKJSON.CJFields::create(vector.toArray(), x -> x))
+}
+
+private fun readToJson(read: Read): SKJSON.CJObject {
+  (rewind, json) = read.key match {
+  | JSONID(json) -> (0, json)
+  | SKStore.DirTag() -> (4, SKJSON.CJString("#tag"))
+  | SKStore.SizeTag() -> (5, SKJSON.CJString("#size"))
+  | SKStore.FilesTag() -> (6, SKJSON.CJString("#entries"))
+  | SKStore.IsEmptyTag() -> (5, SKJSON.CJString("#size"))
+  | _ ->
+    invariant_violation(`Must be a JSONID got ${read.key} ${read.collection}`)
+  };
+  collection = if (rewind == 0) {
+    read.collection
+  } else {
+    v = read.collection;
+    v.getIter().substring(v.getEndIter().rewind(rewind))
+  };
+  SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("collection", SKJSON.CJString(collection)),
+        ("key", json),
+      ],
+      x -> x,
+    ),
+  )
+}
+
+private fun nameToJson(name: Name): SKJSON.CJObject {
+  fields = mutable Vector<(String, SKJSON.CJSON)>[
+    ("name", SKJSON.CJString(name.name)),
+  ];
+  name.alias.each(alias -> fields.push(("alias", SKJSON.CJString(alias))));
+  SKJSON.CJObject(SKJSON.CJFields::create(fields.toArray()))
+}
+
+base class MDId {
+  children =
+  | ExtId(Int)
+  | Internal(String)
+
+  fun toDebuggingInfo(): SKJSON.CJObject
+  | ExtId(id) -> getDebuggingInfo(UInt32::truncate(id))
+  | Internal(name) ->
+    SKJSON.CJObject(
+      SKJSON.CJFields::create(
+        Array<(String, SKJSON.CJSON)>[("name", SKJSON.CJString(name))],
+      ),
+    )
+}
+
+private fun type(name: String): ?SKJSON.CJObject {
+  collectInfo = (path, expected) -> {
+    elements = path.split("/");
+    size = elements.size();
+    if (size == expected + 2 || size == expected + 3) {
+      if (!elements[expected].startsWith("ext_")) {
+        v = elements[expected - 1];
+        (op, infos) = if (v.startsWith("take_")) {
+          ("take", Array[takeInfo(v.substring(v.getIter().forward(5)).toInt())])
+        } else {
+          (v, Array[])
+        };
+        Some((op, Array[], infos))
+      } else if (size == expected + 2) {
+        strid = elements[expected];
+        ids = strid.split(".").map(v ->
+          if (v.startsWith("ext_")) {
+            ExtId(v.substring(v.getIter().forward(4)).toInt())
+          } else {
+            Internal(v)
+          }
+        );
+        Some((elements[expected - 1], ids.toArray(), Array[]))
+      } else {
+        invariant_violation(`type[1]: Unknown name ${name}`)
+      }
+    } else if (size == expected + 5 || size == expected + 4) {
+      invariant(
+        elements[expected - 1] == "remote",
+        `type[2]: Unknown name ${name}`,
+      );
+      supplier = elements[expected];
+      resource = elements[expected + 1];
+      params = unbase64(elements[expected + 2], SKJSON.decode);
+      Some(("remote", Array[], Array[externalInfo(supplier, resource, params)]))
+    } else {
+      invariant_violation(`type[3]: Unknown name ${name}`)
+    }
+  };
+  (op, ids, infos) = if (name.startsWith("/sk/mappers/")) {
+    collectInfo(name, 4)?
+  } else if (name.startsWith("/sk/resource_mappers/")) {
+    collectInfo(name, 6)?
+  } else {
+    elements = name.split("/");
+    if (elements.size() == 3) {
+      // Input
+      return None()
+    };
+    invariant_violation(`TODO:[type] ${name}`);
+  };
+  type = mutable Vector<(String, SKJSON.CJSON)>[
+    ("operator", SKJSON.CJString(op)),
+  ];
+  if (!ids.isEmpty() || !infos.isEmpty()) {
+    type.push(
+      (
+        "constructors",
+        SKJSON.CJArray(ids.map(i -> i.toDebuggingInfo()).concat(infos)),
+      ),
+    )
+  };
+
+  Some(SKJSON.CJObject(SKJSON.CJFields::create(type.toArray())))
+}
+
+private fun takeInfo(limit: Int): SKJSON.CJObject {
+  p = SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("type", SKJSON.CJString("data")),
+        ("value", SKJSON.CJInt(limit)),
+      ],
+    ),
+  );
+  SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[("parameters", SKJSON.CJArray(Array[p]))],
+    ),
+  )
+}
+
+private fun externalInfo(
+  supplier: String,
+  resource: String,
+  params: SKJSON.CJSON,
+): SKJSON.CJObject {
+  p1 = SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("type", SKJSON.CJString("data")),
+        ("value", SKJSON.CJString(resource)),
+      ],
+    ),
+  );
+  p2 = SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("type", SKJSON.CJString("data")),
+        ("value", params),
+      ],
+    ),
+  );
+  SKJSON.CJObject(
+    SKJSON.CJFields::create(
+      Array<(String, SKJSON.CJSON)>[
+        ("name", SKJSON.CJString(supplier)),
+        ("parameters", SKJSON.CJArray(Array[p1, p2])),
+      ],
+    ),
+  )
+}
+
+module end;

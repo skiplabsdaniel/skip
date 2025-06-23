@@ -319,6 +319,15 @@ void SkipRuntime_deleteReducer(uint32_t reducerId) {
   CallJSVoidFunction(isolate, externFunctions, "SkipRuntime_deleteReducer", 1,
                      argv);
 }
+
+CJObject SkipRuntime_Debugging_getInfo(uint32_t objectId) {
+  Isolate* isolate = Isolate::GetCurrent();
+  Local<Object> externFunctions = kExternFunctions.Get(isolate);
+  Local<Value> argv[1] = {Number::New(isolate, objectId)};
+  return CallJSFunction(isolate, externFunctions,
+                        "SkipRuntime_Debugging_getInfo", 1, argv);
+}
+
 }  // extern "C"
 
 }  // namespace skipruntime

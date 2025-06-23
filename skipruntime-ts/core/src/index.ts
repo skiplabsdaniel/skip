@@ -53,9 +53,11 @@ import {
   type Handle,
   type FromBinding,
 } from "./binding.js";
+import { DebugInstance } from "./debugging.js";
 
 export * from "./api.js";
 export * from "./errors.js";
+export * from "./debugging.js";
 
 export type JSONMapper = Mapper<Json, Json, Json, Json>;
 export type JSONLazyCompute = LazyCompute<Json, Json>;
@@ -147,7 +149,7 @@ class LazyCollectionImpl<K extends Json, V extends Json>
   implements LazyCollection<K, V>
 {
   constructor(
-    private readonly lazyCollection: string,
+    public readonly lazyCollection: string,
     private readonly refs: Refs,
   ) {
     super();
@@ -695,6 +697,10 @@ export class ServiceInstance {
       return Promise.reject(this.refs.handles.deleteHandle(errorHdl));
     }
   }
+
+  debug(): DebugInstance {
+    return new DebugInstance(this.refs);
+  }
 }
 
 class ValuesImpl<T> implements Values<T> {
@@ -1121,6 +1127,32 @@ export class ToBinding {
       });
       if (errorHdl) reject(refs.handles.deleteHandle(errorHdl));
     });
+  }
+
+  // Debugging
+
+  SkipRuntime_Debugging_getInfo<P>(
+    skobject: Handle<HandlerInfo<P>>,
+  ): Pointer<Internal.CJObject> {
+    const skjson = this.getJsonConverter();
+    const object = this.handles.get(skobject);
+    const name = object.name;
+    const parameters = object.params.map((v) => {
+      if (v instanceof EagerCollectionImpl) {
+        return {
+          type: "collection",
+          value: v.collection,
+        };
+      }
+      if (v instanceof LazyCollectionImpl) {
+        return {
+          type: "collection",
+          value: v.lazyCollection,
+        };
+      }
+      return { type: "data", value: v as Json };
+    });
+    return skjson.exportJSON({ name, parameters });
   }
 
   //
