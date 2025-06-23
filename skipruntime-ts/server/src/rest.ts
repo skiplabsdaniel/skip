@@ -5,7 +5,12 @@ import {
   SkipResourceInstanceInUseError,
   SkipRESTError,
 } from "@skipruntime/core";
-import type { CollectionUpdate, Entry, Json } from "@skipruntime/core";
+import type {
+  CollectionUpdate,
+  DebugInstance,
+  Entry,
+  Json,
+} from "@skipruntime/core";
 
 export function controlService(service: ServiceInstance): express.Express {
   const app = express();
@@ -101,6 +106,41 @@ export function controlService(service: ServiceInstance): express.Express {
     res.sendStatus(200);
   });
 
+  // DEBUGGING
+
+  app.delete("/v1/debug/service", (req, res) => {
+    try {
+      const info = service.debug().service(req.headers.host ?? `anonymous`);
+      res.status(200).json(info);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.delete("/v1/debug/shared", (_req, res) => {
+    try {
+      const graph = service.debug().sharedGraph();
+      res.status(200).json(graph);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.delete("/v1/debug/resource/:resource", (req, res) => {
+    try {
+      const graph = service
+        .debug()
+        .resourceGraph(req.params.resource, req.body as Json);
+      if (!graph) res.sendStatus(404);
+      else res.status(200).json(graph);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
   return app;
 }
 
@@ -147,6 +187,74 @@ export function streamingService(service: ServiceInstance): express.Express {
       } else {
         res.sendStatus(500);
       }
+    }
+  });
+
+  return app;
+}
+
+export function debugService(
+  platform: string,
+  service: DebugInstance,
+  config: (app: express.Express) => void,
+): express.Express {
+  const app = express();
+  config(app);
+  app.use(express.json({ strict: false }));
+  // Streaming control API.
+
+  app.get("/v1/service", (req, res) => {
+    try {
+      const info = service.service(req.headers.host ?? `anonymous`);
+      info.platform = platform;
+      res.status(200).json(info);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.get("/v1/shared", (_req, res) => {
+    try {
+      const graph = service.sharedGraph();
+      res.status(200).json(graph);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.get("/v1/instances/:resource", (req, res) => {
+    try {
+      const instances = service.resourceInstances(req.params.resource);
+      res.status(200).json(instances);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.post("/v1/resource/:resource", (req, res) => {
+    try {
+      const graph = service.resourceGraph(
+        req.params.resource,
+        req.body as Json,
+      );
+      if (!graph) res.sendStatus(404);
+      else res.status(200).json(graph);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
+    }
+  });
+
+  app.post("/v1/values", (req, res) => {
+    try {
+      const entries = service.values(req.body as Json);
+      res.status(200).json(entries);
+    } catch (e: unknown) {
+      console.log(e);
+      res.status(500).json(e instanceof Error ? e.message : e);
     }
   });
 

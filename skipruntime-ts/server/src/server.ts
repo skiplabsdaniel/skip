@@ -5,9 +5,10 @@
  */
 
 import type { SkipService } from "@skipruntime/core";
-import { controlService, streamingService } from "./rest.js";
+import { controlService, debugService, streamingService } from "./rest.js";
 import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
+import type { Server } from "http";
 
 /**
  * A running Skip server.
@@ -93,6 +94,10 @@ export type SkipServer = {
  * @param options.streaming_port - Port on which streaming service will listen.
  * @param options.platform - Skip runtime platform to be used to run the service: either `wasm` (the default) or `native`.
  * @param options.no_cors - Disable CORS for the streaming endpoint.
+ * @param options.debug - Service debug configuration options.
+ * @param options.debug.port - Port on which debug service will listen.
+ * @param options.debug.no_cors - Disable CORS for the debug endpoint.
+ * @param options.debug.log - Enable server logging.
  * @returns Object to manage the running server.
  */
 export async function runService(
@@ -102,6 +107,7 @@ export async function runService(
     control_port: number;
     platform?: "wasm" | "native";
     no_cors?: boolean;
+    debug?: { port: number; no_cors?: boolean; log?: boolean };
   } = {
     streaming_port: 8080,
     control_port: 8081,
@@ -109,8 +115,9 @@ export async function runService(
     no_cors: false,
   },
 ): Promise<SkipServer> {
+  const platform = options.platform ?? "wasm";
   let runtime;
-  if (options.platform == "native") {
+  if (platform == "native") {
     try {
       runtime = await import("@skipruntime/native");
     } catch (e) {
@@ -152,9 +159,27 @@ export async function runService(
       );
     },
   );
+  let debugHttpServer: Server | undefined;
+  if (options.debug) {
+    const debug = options.debug;
+    const app = debugService(
+      platform,
+      instance.debug(),
+      (app: express.Express) => {
+        if (debug.no_cors ?? false) app.use(debug_no_cors);
+        if (debug.log ?? false) app.use(logger);
+      },
+    );
+    debugHttpServer = app.listen(debug.port, () => {
+      console.log(
+        `Skip debug service listening on port ${debug.port.toString()}`,
+      );
+    });
+  }
 
   return {
     close: async () => {
+      if (debugHttpServer) debugHttpServer.close();
       controlHttpServer.close();
       await instance.close();
       streamingHttpServer.close();
@@ -164,7 +189,7 @@ export async function runService(
 
 function no_cors(req: Request, res: Response, next: NextFunction) {
   res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.header("Access-Control-Allow-Origin", "*");
   if (req.method.toUpperCase() == "OPTIONS") {
     res.statusCode = 204;
@@ -173,4 +198,21 @@ function no_cors(req: Request, res: Response, next: NextFunction) {
   } else {
     next();
   }
+}
+
+function debug_no_cors(req: Request, res: Response, next: NextFunction) {
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  no_cors(req, res, next);
+}
+
+function logger(req: Request, res: Response, next: NextFunction) {
+  const start = Date.now();
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    const log = `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`;
+    console.log(log);
+  });
+
+  next();
 }
