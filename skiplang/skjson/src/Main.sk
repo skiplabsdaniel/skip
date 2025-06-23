@@ -103,7 +103,7 @@ fun execInfer(args: Cli.ParseResults): void {
       } else {
         (false, str)
       };
-      ty = decode(str, x -> x).toType();
+      ty = decode(str).toType();
       if (toRemove) !schema = schema.remove(ty) else !schema = schema.union(ty);
       context.setGlobal(schemaGlobalName, SchemaFile(schema));
       SKStore.CContinue(None())
@@ -153,7 +153,7 @@ fun execCheck(args: Cli.ParseResults): void {
     | None() -> break void
     | Some(str) ->
       saved = SKStore.newObstack();
-      checkJSON(schema, decode(str, x -> x)) match {
+      checkJSON(schema, decode(str)) match {
       | CROk() -> void
       | CRError(msg) -> print_error(msg)
       };

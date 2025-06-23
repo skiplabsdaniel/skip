@@ -582,7 +582,7 @@ fun testPatterns(): void {
     T.expectEq(
       SKJSON.PatternParser::mcreate(patternMatch.i0.i0)
         .toplevelPattern()
-        .pmatch(SKJSON.decode(patternMatch.i0.i1, x -> x))
+        .pmatch(SKJSON.decode(patternMatch.i0.i1))
         .collect(Array),
       patternMatch.i1,
     )
