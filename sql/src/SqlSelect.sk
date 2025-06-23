@@ -1346,7 +1346,7 @@ fun updateState(
         | Some(CType(ty)) -> ty
         | _ -> invariant_violation("Unexpected schema type")
         };
-        ty = SKJSON.decode(s, x -> x).toType();
+        ty = SKJSON.decode(s).toType();
         if (adding) !ty = schema.union(ty) else !ty = schema.remove(ty);
         state![i] = Some(CType::create(ty))
       | (InferSchema(), _, Some(CType(ty))) ->
