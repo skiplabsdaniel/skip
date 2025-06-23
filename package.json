@@ -23,7 +23,8 @@
     "examples/cache_invalidation/edge_service",
     "examples/hackernews/reactive_service",
     "examples/chatroom/reactive_service",
-    "examples/blogger/reactive_service"
+    "examples/blogger/reactive_service",
+    "skipruntime-ts/debugger"
   ],
   "devDependencies": {
     "@types/node": "^22.10.0",
