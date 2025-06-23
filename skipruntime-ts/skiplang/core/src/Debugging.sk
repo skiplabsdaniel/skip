@@ -255,4 +255,93 @@ fun getResourceGraph(
   }
 }
 
+fun getResourceInstances(
+  context: readonly SKStore.Context,
+  resource: String,
+): Array<Instance> {
+  resourceHdl = SKStore.EHandle(
+    SKStore.SID::keyType,
+    ResourceDef::type,
+    kResourceSessionDir,
+  );
+  clients = mutable Vector[];
+  paramsArray = resourceHdl
+    .unsafeItems(context)
+    .map(kv -> {
+      kv.i1.collect(Array).maybeGet(0).flatMap(def ->
+        if (def.name == resource) {
+          clients.push(kv.i0.value);
+          Some(def.params)
+        } else {
+          None()
+        }
+      )
+    })
+    .collect(Array)
+    .filterNone();
+  paramsArray.map(pa -> Instance(pa, clients.toArray()))
+}
+
+fun getService(context: readonly SKStore.Context): Service {
+  kSessionHdl.unsafeGet(context, SKStore.UnitID::singleton).service
+}
+
+class UnknownCollectionException(kind: String, name: String) extends Exception {
+  fun getMessage(): String {
+    `Unknown ${this.kind} collection '${this.name}'.`
+  }
+}
+
+fun getValues(
+  context: mutable SKStore.Context,
+  definition: SKJSON.CJSON,
+): Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)> {
+  name = definition match {
+  | SKJSON.CJString(name) -> name
+  | o @ SKJSON.CJObject _ ->
+    SKJSON.getValue(o, "kind") match {
+    | Some(
+      SKJSON.CJString(kind),
+    ) if (kind == "input" || kind == "collection") ->
+      SKJSON.getValue(o, "name") match {
+      | Some(SKJSON.CJString(iName)) ->
+        runId = SKStore.SID(
+          kSessionHdl.unsafeGet(context, SKStore.UnitID::singleton).runId,
+        );
+        collections = kGraphHdl.unsafeGet(context, runId);
+        (if (kind == "input") collections.inputs.maybeGet(iName) else {
+          collections.value.maybeGet(iName)
+        }) match {
+        | Some(c) -> c.getId()
+        | _ -> throw UnknownCollectionException(kind, iName)
+        }
+      | _ -> invariant_violation("The name must be specified.")
+      }
+    | Some(SKJSON.CJString(kind)) if (kind == "resource-input") ->
+      invariant_violation("TODO")
+    | Some(SKJSON.CJString(kind)) if (kind == "resource") ->
+      invariant_violation("TODO")
+    | _ -> invariant_violation(`Unknown definition kind ${o.prettyPrint()}.`)
+    }
+  | _ -> invariant_violation(`Unknown definition ${definition.prettyPrint()}.`)
+  };
+  dirName = SKStore.DirName::create(name);
+  context.maybeGetDir(dirName) match {
+  | Some(dir) ->
+    tdir = dir.typed();
+    keys = tdir.keys();
+    result = mutable Vector[];
+    for (key in keys) {
+      values = tdir.getArrayRaw(key);
+      result.push(
+        (JSONID::keyType(key).json, values.map(f ~> JSONFile::type(f).json)),
+      )
+    };
+    result.toArray()
+  | _ ->
+    debug(`Not found ${dirName}`);
+    Array[]
+  };
+}
+
 module end;
