@@ -1,29 +1,27 @@
 module SkipRuntime;
 
-const kSessionDir: SKStore.DirName = SKStore.DirName::create(
-  "/sk_prv/sessions/",
-);
-const kTokenDir: SKStore.DirName = SKStore.DirName::create("/sk_prv/tokens/");
-const kGraphDir: SKStore.DirName = SKStore.DirName::create("/sk_prv/graph/");
-const kResourceSessionDir: SKStore.DirName = SKStore.DirName::create(
+const kSessionDir: SKStore.DirName = SKStore.DirName::make("/sk_prv/sessions/");
+const kTokenDir: SKStore.DirName = SKStore.DirName::make("/sk_prv/tokens/");
+const kGraphDir: SKStore.DirName = SKStore.DirName::make("/sk_prv/graph/");
+const kResourceSessionDir: SKStore.DirName = SKStore.DirName::make(
   "/sk_prv/resources/sessions/",
 );
-const kResourceAvailablesDir: SKStore.DirName = kResourceSessionDir.sub(
+const kResourceAvailablesDir: SKStore.DirName = kResourceSessionDir.build(
   "availables",
 );
-const kResourceStatusDir: SKStore.DirName = kResourceSessionDir.sub("status");
+const kResourceStatusDir: SKStore.DirName = kResourceSessionDir.build("status");
 
-const kResourceGraphDir: SKStore.DirName = SKStore.DirName::create(
+const kResourceGraphDir: SKStore.DirName = SKStore.DirName::make(
   "/sk_prv/resources/graph/",
 );
-const kResourceCollectionsDir: SKStore.DirName = SKStore.DirName::create(
+const kResourceCollectionsDir: SKStore.DirName = SKStore.DirName::make(
   "/sk_prv/resources/collections/",
 );
-const kResourceGarbageDir: SKStore.DirName = SKStore.DirName::create(
+const kResourceGarbageDir: SKStore.DirName = SKStore.DirName::make(
   "/sk_prv/resources/garbage/",
 );
 
-const kResourceInstance2SubIdDir: SKStore.DirName = SKStore.DirName::create(
+const kResourceInstance2SubIdDir: SKStore.DirName = SKStore.DirName::make(
   "/sk_prv/resources/instance2subid/",
 );
 
@@ -43,7 +41,7 @@ const kGraphHdl: SKStore.EHandle<SKStore.SID, ServiceFile> = SKStore.EHandle(
 );
 
 fun resourceArrow(def: ResourceDef): SKStore.ArrowKey {
-  SKStore.ArrowKey{
+  SKStore.ArrowKey::create{
     parentName => kResourceStatusDir,
     childName => kResourceCollectionsDir,
     key => def,
@@ -51,8 +49,8 @@ fun resourceArrow(def: ResourceDef): SKStore.ArrowKey {
 }
 
 fun serviceArrow(runId: SKStore.SID): SKStore.ArrowKey {
-  SKStore.ArrowKey{
-    parentName => kSessionDir.sub("inputs"),
+  SKStore.ArrowKey::create{
+    parentName => kSessionDir.build("inputs"),
     childName => kGraphDir,
     key => runId,
   }
@@ -133,39 +131,48 @@ fun toMapperName(
       name,
       params,
     ) if (arrow.childName == kResourceCollectionsDir) ->
-      SKStore.DirName::create(
+      SKStore.DirName::make(
         `/sk/resource_mappers/${name}/${base64(params.prettyPrint())}/${kind}/`,
       )
     | SKStore.SID _ if (arrow.childName == kGraphDir) ->
-      SKStore.DirName::create(`/sk/mappers/${kind}/`)
+      SKStore.DirName::make(`/sk/mappers/${kind}/`)
     | _ ->
       b64 = base64(arrow.getKeyString());
       arrow.parentName.sub(`mappers/${b64}/${kind}/`)
     }
   | _ -> invariant_violation("Must be called into mapper")
   };
-  if (!id.isEmpty()) path.sub(id) else path
+  if (!id.isEmpty()) path.build(id) else path
 }
 
 fun base64<T: Show>(toEncode: T): String {
-  encoded = `b64_${Base64.encodeString(toEncode.toString(), true)}`;
-  encoded.searchRight(ch ~> ch != '=') match {
-  | Some(i) ->
-    _ = i.next();
-    encoded.getIter().substring(i)
-  | None() -> encoded
-  }
+  b64 = Base64.encodeString(toEncode.toString(), true);
+  encoded = `b64_${b64}`;
+  encoded.replace("=", ".")
 }
-fun toResourceId(resource: String, params: SKJSON.CJSON): String {
-  `${resource}_${base64(params.prettyPrint())}`
+
+fun unbase64<T>(toDecode: String, conv: String ~> T): T {
+  invariant(toDecode.startsWith("b64_"));
+  encoded = toDecode.substring(toDecode.getIter().forward(4)).replace(".", "=");
+  decoded = Base64.decodeString(encoded);
+  conv(decoded)
+}
+
+fun toResourceId(
+  resource: String,
+  params: SKJSON.CJSON,
+  sep: String = "_",
+): String {
+  `${resource}${sep}${base64(params.prettyPrint())}`
 }
 
 fun toSuppliedResourceId(
   supplier: String,
   resource: String,
   params: SKJSON.CJSON,
+  sep: String = "_",
 ): String {
-  `${supplier}_${toResourceId(resource, params)}`;
+  `${supplier}${sep}${toResourceId(resource, params, sep)}`;
 }
 
 fun collectionForName(name: String): Collection {
@@ -180,6 +187,30 @@ fun collectionsByName(collections: Map<String, Collection>): SKJSON.CJObject {
   fields = mutable Vector[];
   collections.each((k, c) -> fields.push((k, SKJSON.CJString(c.getId()))));
   SKJSON.CJObject(SKJSON.CJFields::create(fields.toArray(), x -> x));
+}
+
+module end;
+
+module SKStore;
+
+// Case sensitive utils for DirName
+
+extension class DirName {
+  static fun make(dirName: String): DirName {
+    static::validateDirName(dirName);
+    static::create_no_validate(dirName)
+  }
+
+  fun build(str: String, prv: Bool = false): this {
+    validator = mutable SKStoreImpl.NameValidator(str, str.chars(), 0);
+    validator.mustBeKey();
+    name = if (prv && !this.dirName.startsWith("/sk_prv/")) {
+      `/sk_prv${this.dirName}${str}/`
+    } else {
+      `${this.dirName}${str}/`
+    };
+    static::create_no_validate(name)
+  }
 }
 
 module end;

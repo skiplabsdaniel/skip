@@ -165,7 +165,7 @@ fun updateOfCollectionWriter(
   isInit: Int32,
   executor: Executor,
 ): Float {
-  writer = CollectionWriter(SKStore.DirName::create(collection));
+  writer = CollectionWriter(SKStore.DirName::make(collection));
   writer.update(
     values match {
     | SKJSON.CJArray(vs) ->
@@ -187,7 +187,7 @@ fun initializedOfCollectionWriter(
   collection: String,
   error: SKJSON.CJSON,
 ): Float {
-  writer = CollectionWriter(SKStore.DirName::create(collection));
+  writer = CollectionWriter(SKStore.DirName::make(collection));
   writer.initialized(error) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
@@ -196,7 +196,7 @@ fun initializedOfCollectionWriter(
 
 @export("SkipRuntime_CollectionWriter__error")
 fun errorOfCollectionWriter(collection: String, error: SKJSON.CJSON): Float {
-  writer = CollectionWriter(SKStore.DirName::create(collection));
+  writer = CollectionWriter(SKStore.DirName::make(collection));
   writer.error(error) match {
   | Success _ -> 0.0
   | Failure(err) -> getErrorHdl(err)
