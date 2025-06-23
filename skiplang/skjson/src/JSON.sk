@@ -101,7 +101,7 @@ value class CJFields private (
   }
   static fun create(
     fields: Array<(String, CJSON)>,
-    internFieldNames: Array<String> -> Array<String>,
+    internFieldNames: Array<String> -> Array<String> = a ~> a,
   ): this {
     !fields = fields.sortedBy(x ~> x.i0);
     for (i => elt in fields) {
@@ -191,11 +191,15 @@ mutable class CJSONBuilder{
   }
 }
 
-fun decode(
+fun decodeWithNames(
   str: String,
   internFieldNames: Array<String> -> Array<String>,
 ): CJSON {
   JSON.genericDecode(str, mutable CJSONBuilder{internFieldNames})
+}
+
+fun decode(str: String): CJSON {
+  decodeWithNames(str, a ~> a)
 }
 
 module end;

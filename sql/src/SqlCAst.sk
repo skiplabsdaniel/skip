@@ -148,7 +148,7 @@ fun internFieldNames(
 
 fun decodeJSON(context: mutable SKStore.Context, str: String): SKJSON.CJSON {
   initInternFieldNames(context);
-  SKJSON.decode(str, x -> internFieldNames(context, x))
+  SKJSON.decodeWithNames(str, x -> internFieldNames(context, x))
 }
 
 /*****************************************************************************/
