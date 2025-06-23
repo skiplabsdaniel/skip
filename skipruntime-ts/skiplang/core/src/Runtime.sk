@@ -185,7 +185,7 @@ class ResourceInfo(
     SKStore.EHandle(
       SKStore.IID::keyType,
       RequestStatuses::type,
-      this.statusRef.sub("all"),
+      this.statusRef.build("all"),
     ).maybeGet(context, SKStore.IID(0)) match {
     | Some(statuses) -> statuses.getResult(values)
     | _ -> GetResult(values, Array[])
@@ -220,7 +220,7 @@ fun buildResourcesGraph(
     ResourceDef::keyType,
     SKStore.StringFile::type,
     context,
-    dirname.sub("idbyresource"),
+    dirname.build("idbyresource"),
     (_c, writer, key, it) ~> {
       writer.set(it.first, SKStore.StringFile(key.value));
     },
@@ -243,13 +243,13 @@ fun buildResourcesGraph(
     kResourceStatusDir,
     (context, writer, key, _it) ~> {
       resourceId = toResourceId(key.name, key.params);
-      statusRef = dirname.sub(resourceId);
+      statusRef = dirname.build(resourceId);
       // Status graph
       sStatusHdl = context
         .mkdir(
           SKStore.DirName::keyType,
           StatusFile::type,
-          statusRef.sub("status"),
+          statusRef.build("status"),
           Array[],
           true,
         )
@@ -257,7 +257,7 @@ fun buildResourcesGraph(
           SKStore.UnitID::keyType,
           ResourceStatus::type,
           context,
-          statusRef.sub("statuses"),
+          statusRef.build("statuses"),
           (_ctx, writer, key, it) ~> {
             writer.set(
               SKStore.UnitID::singleton,
@@ -269,7 +269,7 @@ fun buildResourcesGraph(
         SKStore.UnitID::keyType,
         RequestStatuses::type,
         context,
-        statusRef.sub("all"),
+        statusRef.build("all"),
         (ctx, writer, key, it) ~> {
           statuses = statusHdl.getArray(ctx, key).concat(it.toArray());
           requestStatuses = RequestStatuses(statuses);
@@ -286,7 +286,7 @@ fun buildResourcesGraph(
     kResourceCollectionsDir,
     (context, writer, key, it) ~> {
       resourceId = toResourceId(key.name, key.params);
-      statusRef = SKStore.DirName::create(it.first.value);
+      statusRef = SKStore.DirName::make(it.first.value);
       (runId, resources) = definitionHdl.maybeGet(
         context,
         SKStore.UnitID::singleton,
@@ -337,12 +337,12 @@ fun initService(
           SKStore.SID::keyType,
           ServiceInputs::type,
           context,
-          kSessionDir.sub("inputs"),
+          kSessionDir.build("inputs"),
           (ctx, writer, _key, it) ~> {
             serviceDef = it.first;
             mInputs = mutable Map<String, Collection>[];
             serviceDef.service.initialData.each(input -> {
-              iDirName = SKStore.DirName::create(`/${input.name}/`);
+              iDirName = SKStore.DirName::make(`/${input.name}/`);
               iHdl = ctx.mkdirMulti(
                 JSONID::keyType,
                 JSONFile::type,
@@ -387,13 +387,13 @@ fun initService(
       statusDefHdl = context.mkdir(
         SKStore.DirName::keyType,
         StatusFile::type,
-        kSessionDir.sub("status"),
+        kSessionDir.build("status"),
       );
       statusHdl = statusDefHdl.map(
         SKStore.UnitID::keyType,
         ResourceStatus::type,
         context,
-        kSessionDir.sub("statuses"),
+        kSessionDir.build("statuses"),
         (_ctx, writer, key, it) ~> {
           writer.set(
             SKStore.UnitID::singleton,
@@ -408,7 +408,7 @@ fun initService(
       statusHdl = SKStore.EHandle(
         SKStore.DirName::keyType,
         StatusFile::type,
-        kSessionDir.sub("status"),
+        kSessionDir.build("status"),
       );
       toclean = mutable Vector[];
       statusHdl.items(context).each(kf -> {
@@ -489,8 +489,8 @@ class CloseExternalService(
     context.maybeGetEagerDir(this.dirName) match {
     | Some(dir) ->
       dirname = sessionId(context, dir) match {
-      | Some(sId) -> kResourceSessionDir.sub(sId).sub("status")
-      | _ -> kSessionDir.sub("status")
+      | Some(sId) -> kResourceSessionDir.build(sId).build("status")
+      | _ -> kSessionDir.build("status")
       };
       shdl = SKStore.EHandle(
         SKStore.DirName::keyType,
@@ -577,10 +577,10 @@ fun useExternalCollection(
       SKStore.UnitID::singleton,
     ).service.remoteCollections;
     externalSupplier = remoteCollections.get(supplier);
-    collectionId = toSuppliedResourceId(supplier, resource, params);
-    dirName = toMapperName(context, "external", collectionId);
-    paramsDir = dirName.sub("params");
-    dataDir = dirName.sub("data");
+    collectionName = toSuppliedResourceId(supplier, resource, params, "/");
+    dirName = toMapperName(context, "remote", collectionName);
+    paramsDir = dirName.build("params", true);
+    dataDir = dirName.build("data", true);
     hdl = context.mkdir(
       SKStore.UnitID::keyType,
       Params::type,
@@ -591,9 +591,9 @@ fun useExternalCollection(
       SKStore.UnitID::keyType,
       Handle::type,
       context,
-      dirName,
+      dataDir,
       (context, writer, key, it) ~> {
-        storeDir = dirName.sub("store");
+        storeDir = dirName.build("store", true);
         (optOnCreate, onDelete) = getCloseExternalService(
           context,
           storeDir,
@@ -637,7 +637,7 @@ fun useExternalCollection(
         JSONID::keyType,
         JSONFile::type,
         context,
-        dataDir,
+        dirName,
         (context, writer, key, _it) ~> {
           remote = collectionHdl.get(context, key).value;
           remote.items(context).each(kv -> {
@@ -656,7 +656,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
     hdl = SKStore.EHandle<JSONID, JSONFile>(
       JSONID::keyType,
       JSONFile::type,
-      SKStore.DirName::create(name),
+      SKStore.DirName::make(name),
     );
     Collection(hdl)
   }
@@ -736,7 +736,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
           toMapperName(
             context,
             "map_reduce",
-            `${mapper.getId()}/${reducer.getId()}`,
+            `${mapper.getId()}.${reducer.getId()}`,
           ),
         )
       };
@@ -791,13 +791,13 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
     | Some(context) ->
       dirname = mapperOpt match {
       | None() -> toMapperName(context, "reduce", name)
-      | Some(m) -> toMapperName(context, "map_reduce", `${m.getId()}/${name}`)
+      | Some(m) -> toMapperName(context, "map_reduce", `${m.getId()}.${name}`)
       };
       hdl = this.hdl.mapReduce(
         JSONID::keyType,
         eltType,
         context,
-        dirname,
+        dirname.build("compute"),
         mapper,
         reducer,
       );
@@ -806,7 +806,7 @@ class Collection(hdl: SKStore.EHandle<JSONID, JSONFile>) {
           JSONID::keyType,
           JSONFile::type,
           context,
-          dirname.sub("extract"),
+          dirname,
           (_ctx, writer, key, values) ~> {
             writer.setArray(
               key,
@@ -1012,7 +1012,7 @@ class LazyCollection(private hdl: SKStore.LHandle<JSONID, JSONFile>) {
     hdl = SKStore.LHandle(
       JSONID::keyType,
       JSONFile::type,
-      SKStore.DirName::create(name),
+      SKStore.DirName::make(name),
     );
     LazyCollection(hdl)
   }
@@ -1110,8 +1110,8 @@ class CollectionWriter(dirName: SKStore.DirName) {
     context.maybeGetEagerDir(this.dirName) match {
     | Some(dir) ->
       dirname = sessionId(context, dir) match {
-      | Some(sId) -> kResourceSessionDir.sub(sId).sub("status")
-      | _ -> kSessionDir.sub("status")
+      | Some(sId) -> kResourceSessionDir.build(sId).build("status")
+      | _ -> kSessionDir.build("status")
       };
       shdl = SKStore.EHandle(
         SKStore.DirName::keyType,
@@ -1133,9 +1133,9 @@ class CollectionWriter(dirName: SKStore.DirName) {
       dirname = optResource match {
       | Some(def) ->
         kResourceSessionDir
-          .sub(toResourceId(def.name, def.params))
-          .sub("status")
-      | _ -> kSessionDir.sub("status")
+          .build(toResourceId(def.name, def.params))
+          .build("status")
+      | _ -> kSessionDir.build("status")
       };
       shdl = SKStore.EHandle(
         SKStore.DirName::keyType,
@@ -1362,7 +1362,7 @@ fun put(
   chdl = SKStore.EHandle(
     JSONID::keyType,
     JSONFile::type,
-    SKStore.DirName::create(`/${collection}/`),
+    SKStore.DirName::make(`/${collection}/`),
   );
   chdl.writeArray(context, JSONID(key), value.map(v -> JSONFile(v)));
   updateContext(context);
@@ -1414,7 +1414,7 @@ fun update(
   writeInCollection(
     context,
     context,
-    SKStore.DirName::create(`/${collection}/`),
+    SKStore.DirName::make(`/${collection}/`),
     values,
     executor,
   )
@@ -1428,7 +1428,7 @@ fun delete(
   chdl = SKStore.EHandle(
     JSONID::keyType,
     JSONFile::type,
-    SKStore.DirName::create(`/${collection}/`),
+    SKStore.DirName::make(`/${collection}/`),
   );
   chdl.writeArray(context, JSONID(key), Array[]);
   updateContext(context);
