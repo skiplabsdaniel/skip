@@ -82,4 +82,70 @@ fun testLazy(): void {
   )
 }
 
+@test
+fun testLazyAsyncUpdate(): void {
+  context = SKStore.run(context ~> {
+    input = context.mkdir(
+      SKStore.IID::keyType,
+      SKStore.IntFile::type,
+      SKStore.DirName::create("/input/"),
+      Array[(SKStore.IID(0), SKStore.IntFile(23))],
+    );
+    lazy = SKStore.LHandle::create(
+      SKStore.IID::keyType,
+      SKStore.IntFile::type,
+      context,
+      SKStore.DirName::create("/lazy/"),
+      (_, _self, _) ~> {
+        Array[SKStore.IntFile(10)]
+      },
+    );
+    _ = input.map(
+      SKStore.IID::keyType,
+      SKStore.IntFile::type,
+      context,
+      SKStore.DirName::create("/eager/"),
+      (context, writer, key, it) ~> {
+        writer.set(
+          key,
+          SKStore.IntFile(it.first.value + lazy.get(context, key).value),
+        );
+      },
+    )
+  });
+
+  input = SKStore.DirName::create("/input/");
+  lazy = SKStore.DirName::create("/lazy/");
+  output = SKStore.DirName::create("/eager/");
+
+  _ = context.updateWithStatus();
+
+  T.expectEq(
+    Array[33],
+    getData(context, output, SKStore.IID(0)).map(toInt),
+    "Lazy basic",
+  );
+
+  write(context, input, SKStore.IID(0), Array[SKStore.IntFile(22)]);
+  _ = context.updateWithStatus();
+
+  T.expectEq(
+    Array[32],
+    getData(context, output, SKStore.IID(0)).map(toInt),
+    "Lazy after update",
+  );
+
+  context
+    .unsafeGetLazyDir(lazy)
+    .writeArray(context, SKStore.IID(0), Array[SKStore.IntFile(20)]);
+
+  _ = context.updateWithStatus();
+
+  T.expectEq(
+    Array[42],
+    getData(context, output, SKStore.IID(0)).map(toInt),
+    "Lazy after lazy async update",
+  );
+}
+
 module end;

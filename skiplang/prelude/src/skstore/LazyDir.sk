@@ -230,6 +230,27 @@ class LazyDir protected {
   fun getIter(context: mutable Context, key: Key): mutable Iterator<File> {
     this.getArray(context, key).iterator()
   }
+
+  fun writeArray(
+    context: mutable Context,
+    key: Key,
+    values: Array<File>,
+    reads: Array<Path> = Array[],
+  ): void {
+    data = this.data;
+    !data[key] = LDefined(values, reads);
+    path = Path::create(this.dirName, key);
+    context.updateDirtyReaders(path);
+    context.setDir(this with {data});
+  }
+
+  fun unsafeGet(key: Key): LazyResult<File> {
+    this.data.get(key)
+  }
+
+  fun unsafeMaybeGet(key: Key): ?LazyResult<File> {
+    this.data.maybeGet(key)
+  }
 }
 
 module end;
