@@ -376,7 +376,7 @@ mutable class NameValidator(
 
   static fun validChar(c: Char): Bool {
     c match {
-    | '_' | '-' -> true
+    | '_' | '-' | '.' -> true
     | _ -> false
     }
   }
