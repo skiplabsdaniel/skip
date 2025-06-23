@@ -57,8 +57,8 @@ private fun isInitialized(
   context.unsafeMaybeGetEagerDir(dirName) match {
   | Some(dir) ->
     dirname = sessionId(context, dir) match {
-    | Some(sId) -> kResourceSessionDir.sub(sId).sub("status")
-    | _ -> kSessionDir.sub("status")
+    | Some(sId) -> kResourceSessionDir.build(sId).build("status")
+    | _ -> kSessionDir.build("status")
     };
     shdl = SKStore.EHandle(SKStore.DirName::keyType, StatusFile::type, dirname);
     shdl.unsafeGet(context, dirName).status.initialiazed.isSome()
@@ -80,8 +80,8 @@ private fun initStatus(
   context.unsafeMaybeGetEagerDir(dirName) match {
   | Some(dir) ->
     dirname = sessionId(context, dir) match {
-    | Some(sId) -> kResourceSessionDir.sub(sId).sub("status")
-    | _ -> kSessionDir.sub("status")
+    | Some(sId) -> kResourceSessionDir.build(sId).build("status")
+    | _ -> kSessionDir.build("status")
     };
     shdl = SKStore.EHandle(SKStore.DirName::keyType, StatusFile::type, dirname);
     shdl.unsafeGet(context, dirName).status.initialiazed
@@ -144,8 +144,8 @@ base class Transaction(
     context.unsafeMaybeGetEagerDir(dirName) match {
     | Some(dir) ->
       statusDirName = sessionId(context, dir) match {
-      | Some(sId) -> kResourceSessionDir.sub(sId).sub("status")
-      | _ -> kSessionDir.sub("status")
+      | Some(sId) -> kResourceSessionDir.build(sId).build("status")
+      | _ -> kSessionDir.build("status")
       };
       dirHdl = SKStore.EHandle(JSONID::keyType, JSONFile::type, dirName);
       shdl = SKStore.EHandle(
