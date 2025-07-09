@@ -132,8 +132,10 @@ class TArrowKey<K: Orderable & Show>{key: K} extends ArrowKey {
     | EQ() -> void
     | neq -> return neq
     };
-    tOther = Unsafe.cast(other, static);
-    this.key.compare(tOther.key)
+    Unsafe.maybeCast(other, static) match {
+    | Some(tOther) -> this.key.compare(tOther.key)
+    | _ -> this.getKeyString().compare(other.getKeyString())
+    }
   }
 }
 
