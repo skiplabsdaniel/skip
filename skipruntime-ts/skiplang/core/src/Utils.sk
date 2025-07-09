@@ -41,7 +41,7 @@ const kGraphHdl: SKStore.EHandle<SKStore.SID, ServiceFile> = SKStore.EHandle(
 );
 
 fun resourceArrow(def: ResourceDef): SKStore.ArrowKey {
-  SKStore.ArrowKey::create{
+  SKStore.TArrowKey::create{
     parentName => kResourceStatusDir,
     childName => kResourceCollectionsDir,
     key => def,
@@ -49,7 +49,7 @@ fun resourceArrow(def: ResourceDef): SKStore.ArrowKey {
 }
 
 fun serviceArrow(runId: SKStore.SID): SKStore.ArrowKey {
-  SKStore.ArrowKey::create{
+  SKStore.TArrowKey::create{
     parentName => kSessionDir.build("inputs"),
     childName => kGraphDir,
     key => runId,
@@ -126,7 +126,8 @@ fun toMapperName(
 ): SKStore.DirName {
   path = context.currentArrow() match {
   | Some(arrow) ->
-    arrow.key match {
+    tArrow = SKStore.castKeyArrow<SKStore.Key>(arrow);
+    tArrow.key match {
     | ResourceDef(
       name,
       params,
@@ -138,7 +139,7 @@ fun toMapperName(
       SKStore.DirName::make(`/sk/mappers/${kind}/`)
     | _ ->
       b64 = base64(arrow.getKeyString());
-      arrow.parentName.sub(`mappers/${b64}/${kind}/`)
+      arrow.parentName.build(`mappers/${b64}/${kind}`)
     }
   | _ -> invariant_violation("Must be called into mapper")
   };
@@ -210,6 +211,33 @@ extension class DirName {
       `${this.dirName}${str}/`
     };
     static::create_no_validate(name)
+  }
+}
+
+module end;
+
+module SKStore;
+
+fun instanceOfResourceDefKA<K: Orderable & Show>(arrow: ArrowKey): Bool {
+  Unsafe.instanceOf(arrow, TArrowKey<SkipRuntime.ResourceDef>)
+}
+
+fun instanceOfKeyArrow<K: Orderable & Show>(arrow: ArrowKey): Bool {
+  Unsafe.instanceOf(arrow, TArrowKey<K>)
+}
+
+fun castKeyArrow<K: Orderable & Show>(arrow: ArrowKey): TArrowKey<K> {
+  Unsafe.cast(arrow, TArrowKey<K>)
+}
+
+extension class EHandle {
+  fun unsafeItems(
+    context: readonly Context,
+  ): mutable Iterator<(K, mutable Iterator<V>)> {
+    dir = context.unsafeGetEagerDir(this.dirName);
+    dir.unsafeGetFileIter().map(kv ->
+      (this.keyType(kv.i0), kv.i1.map(this.type))
+    )
   }
 }
 
