@@ -220,9 +220,7 @@ private fun type(name: String): ?SKJSON.CJObject {
       );
       supplier = elements[expected];
       resource = elements[expected + 1];
-      params = unbase64(elements[expected + 2], str ~>
-        SKJSON.decode(str, f ~> f)
-      );
+      params = unbase64(elements[expected + 2], str ~> SKJSON.decode(str));
       Some(("remote", Array[], Array[externalInfo(supplier, resource, params)]))
     } else {
       invariant_violation(`type[3]: Unknown name ${name}`)
