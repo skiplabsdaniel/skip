@@ -1,11 +1,16 @@
 import express from "express";
 import {
-  ServiceInstance,
+  type ServiceInstance,
   SkipUnknownCollectionError,
   SkipResourceInstanceInUseError,
   SkipRESTError,
 } from "@skipruntime/core";
-import type { CollectionUpdate, Entry, Json } from "@skipruntime/core";
+import type {
+  CollectionUpdate,
+  Entry,
+  Json,
+  SubscriptionID,
+} from "@skipruntime/core";
 
 export function controlService(service: ServiceInstance): express.Express {
   const app = express();
@@ -112,9 +117,9 @@ export function streamingService(service: ServiceInstance): express.Express {
       res.sendStatus(406);
       return;
     }
-    try {
-      const uuid = req.params.uuid;
-      const subscriptionID = service.subscribe(uuid, {
+    const uuid = req.params.uuid;
+    service
+      .subscribe(uuid, {
         subscribed: () => {
           res.set("Content-Type", "text/event-stream");
           res.set("Connection", "keep-alive");
@@ -134,20 +139,22 @@ export function streamingService(service: ServiceInstance): express.Express {
         close: () => {
           res.end();
         },
+      })
+      .then((subscriptionID: SubscriptionID) =>
+        req.on("close", () => {
+          service.unsubscribe(subscriptionID);
+        }),
+      )
+      .catch((e: unknown) => {
+        console.log(e);
+        if (e instanceof SkipUnknownCollectionError) {
+          res.sendStatus(404);
+        } else if (e instanceof SkipResourceInstanceInUseError) {
+          res.sendStatus(409);
+        } else {
+          res.sendStatus(500);
+        }
       });
-      req.on("close", () => {
-        service.unsubscribe(subscriptionID);
-      });
-    } catch (e: unknown) {
-      console.log(e);
-      if (e instanceof SkipUnknownCollectionError) {
-        res.sendStatus(404);
-      } else if (e instanceof SkipResourceInstanceInUseError) {
-        res.sendStatus(409);
-      } else {
-        res.sendStatus(500);
-      }
-    }
   });
 
   return app;

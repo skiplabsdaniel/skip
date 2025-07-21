@@ -6,6 +6,7 @@ import type {
 } from "@skipruntime/core";
 
 import { runService } from "@skipruntime/server";
+import { fileURLToPath } from "url";
 
 const platform: "wasm" | "native" =
   process.env["SKIP_PLATFORM"] == "native" ? "native" : "wasm";
@@ -59,10 +60,11 @@ class Sub implements Resource<Collections> {
   }
 }
 
-const service = {
+export const service = {
   initialData: { input1: [], input2: [] },
   resources: { add: Add, sub: Sub },
   createGraph: (inputs: Collections) => inputs,
+  url: fileURLToPath(import.meta.url),
 };
 
 const server = await runService(service, {
