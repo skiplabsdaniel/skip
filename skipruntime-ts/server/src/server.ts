@@ -4,10 +4,18 @@
  * @packageDocumentation
  */
 
-import type { SkipService } from "@skipruntime/core";
+import {
+  type ServiceInstance,
+  type CollectionUpdate,
+  type Entry,
+  type Json,
+  type SkipService,
+  type SubscriptionID,
+} from "@skipruntime/core";
 import { controlService, streamingService } from "./rest.js";
 import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
+import { isMainThread, parentPort, Worker } from "worker_threads";
 
 /**
  * A running Skip server.
@@ -18,6 +26,22 @@ export type SkipServer = {
    */
   close: () => Promise<void>;
 };
+
+type Options = {
+  streaming_port: number;
+  control_port: number;
+  platform?: "wasm" | "native";
+  no_cors?: boolean;
+};
+
+function get<T>(
+  request: WorkerRequest | undefined,
+  param: string,
+  def?: T,
+): T | undefined {
+  if (request && param in request) return request[param] as T;
+  return def;
+}
 
 /**
  * Initialize and start a reactive Skip service.
@@ -97,18 +121,269 @@ export type SkipServer = {
  */
 export async function runService(
   service: SkipService,
-  options: {
-    streaming_port: number;
-    control_port: number;
-    platform?: "wasm" | "native";
-    no_cors?: boolean;
-  } = {
+  options: Options = {
     streaming_port: 8080,
     control_port: 8081,
     platform: "wasm",
     no_cors: false,
   },
+  url?: string,
 ): Promise<SkipServer> {
+  if (isMainThread) {
+    let instance: ServiceInstance;
+    if (url) {
+      instance = await initWorkerService(url);
+    } else {
+      instance = await initService(service, options);
+    }
+
+    const controlHttpServer = controlService(instance).listen(
+      options.control_port,
+      () => {
+        console.log(
+          `Skip control service listening on port ${options.control_port.toString()}`,
+        );
+      },
+    );
+    const wrapMiddleware = (app: Express) => {
+      if (options.no_cors) {
+        return express().use(no_cors).use(app);
+      }
+      return app;
+    };
+    const streamingHttpServer = wrapMiddleware(
+      streamingService(instance),
+    ).listen(options.streaming_port, () => {
+      console.log(
+        `Skip streaming service listening on port ${options.streaming_port.toString()}`,
+      );
+    });
+
+    return {
+      close: async () => {
+        controlHttpServer.close();
+        await instance.close();
+        streamingHttpServer.close();
+      },
+    };
+  } else {
+    try {
+      const instance = await initService(service, options);
+      parentPort?.postMessage("service-ready");
+      const messageHandler = (message: WorkerMessage) => {
+        const request = message.data as WorkerRequest;
+        const resourceInstanceId = get<string>(request, "resourceInstanceId");
+        switch (request.type) {
+          case "instantiate-resource":
+            instance
+              .instantiateResource(
+                request["identifier"] as string,
+                request["resource"] as string,
+                request["params"] as Json,
+              )
+              .then((_) => {
+                parentPort?.postMessage({
+                  id: message.id,
+                });
+              })
+              .catch((e: unknown) =>
+                parentPort?.postMessage({
+                  id: message.id,
+                  error: (e as Error).message,
+                }),
+              );
+            break;
+          case "get-all":
+            instance
+              .getAll(
+                request["resource"] as string,
+                get<Json>(request, "params", {}),
+              )
+              .then((data) => {
+                parentPort?.postMessage({
+                  id: message.id,
+                  data,
+                });
+              })
+              .catch((e: unknown) =>
+                parentPort?.postMessage({
+                  id: message.id,
+                  error: (e as Error).message,
+                }),
+              );
+            break;
+          case "get-array":
+            instance
+              .getArray(
+                request["resource"] as string,
+                request["key"] as Json,
+                get<Json>(request, "params", {}),
+              )
+              .then((data) => {
+                parentPort?.postMessage({
+                  id: message.id,
+                  data,
+                });
+              })
+              .catch((e: unknown) =>
+                parentPort?.postMessage({
+                  id: message.id,
+                  error: (e as Error).message,
+                }),
+              );
+            break;
+          case "close-resource-instance":
+            instance.closeResourceInstance(resourceInstanceId!);
+            break;
+          case "subscribe":
+            instance
+              .subscribe(
+                resourceInstanceId!,
+                {
+                  subscribed: () => {
+                    parentPort?.postMessage({
+                      data: {
+                        type: "notifier-subscribed",
+                        subscription: resourceInstanceId!,
+                      },
+                    });
+                  },
+                  notify: (update) => {
+                    parentPort?.postMessage({
+                      data: {
+                        type: "notifier-notify",
+                        subscription: resourceInstanceId!,
+                        update,
+                      },
+                    });
+                  },
+                  close: () => {
+                    parentPort?.postMessage({
+                      data: {
+                        type: "notifier-close",
+                        subscription: resourceInstanceId,
+                      },
+                    });
+                  },
+                },
+                get<string>(request, "watermark"),
+              )
+              .then((subscriptionID) => {
+                parentPort?.postMessage({
+                  id: message.id,
+                  data: subscriptionID,
+                });
+              })
+              .catch((e: unknown) =>
+                parentPort?.postMessage({
+                  id: message.id,
+                  error: (e as Error).message,
+                }),
+              );
+            break;
+          case "unsubscribe":
+            instance.unsubscribe(request["id"] as SubscriptionID);
+            break;
+          case "update":
+            instance
+              .update(
+                request["collection"] as string,
+                request["entries"] as Entry<Json, Json>[],
+              )
+              .then((_) => {
+                parentPort?.postMessage({
+                  id: message.id,
+                });
+              })
+              .catch((e: unknown) =>
+                parentPort?.postMessage({
+                  id: message.id,
+                  error: (e as Error).message,
+                }),
+              );
+            break;
+          case "close":
+            instance
+              .close()
+              .then((data) => {
+                parentPort?.postMessage({
+                  id: message.id,
+                  data,
+                });
+              })
+              .catch((e: unknown) =>
+                parentPort?.postMessage({
+                  id: message.id,
+                  error: (e as Error).message,
+                }),
+              );
+            break;
+        }
+      };
+      parentPort?.on("message", messageHandler);
+    } catch (e: unknown) {
+      parentPort?.postMessage((e as Error).message);
+    }
+    return {
+      close: () => {
+        return Promise.resolve();
+      },
+    };
+  }
+}
+
+async function initWorkerService(url: string): Promise<ServiceInstance> {
+  return new Promise<ServiceInstance>((resolve, reject) => {
+    const worker = new Worker(url);
+    const notifiers = new Map<string, Notifier<Json, Json>>();
+    const requests = new Map<string, Executor<unknown>>();
+    worker.on("message", (message: WorkerMessage | string) => {
+      if (typeof message == "string") {
+        if (message == "service-ready") {
+          resolve(new WorkerManager(worker, notifiers, requests));
+        } else {
+          reject(new Error(message));
+        }
+      } else {
+        if (message.id) {
+          const executor = requests.get(message.id)!;
+          if (message.error) {
+            executor.reject(new Error(message.error));
+          } else {
+            executor.resolve(message.data);
+          }
+        } else if (message.data?.subscription) {
+          const event = message.data as WorkerEvent;
+          const notifier = notifiers.get(event.subscription);
+          if (notifier) {
+            switch (event.type) {
+              case "notifier-subscribed":
+                notifier.subscribed();
+                break;
+              case "notifier-notify":
+                notifier.notify(event.update!);
+                break;
+              case "notifier-close":
+                notifier.close();
+                break;
+            }
+          }
+        }
+      }
+    });
+
+    worker.on("error", (error) => {
+      console.error("Worker error:", {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        type: typeof error,
+      });
+    });
+  });
+}
+
+async function initService(service: SkipService, options: Options) {
   let runtime;
   if (options.platform == "native") {
     try {
@@ -129,37 +404,7 @@ export async function runService(
       throw e;
     }
   }
-  const instance = await runtime.initService(service);
-  const controlHttpServer = controlService(instance).listen(
-    options.control_port,
-    () => {
-      console.log(
-        `Skip control service listening on port ${options.control_port.toString()}`,
-      );
-    },
-  );
-  const wrapMiddleware = (app: Express) => {
-    if (options.no_cors) {
-      return express().use(no_cors).use(app);
-    }
-    return app;
-  };
-  const streamingHttpServer = wrapMiddleware(streamingService(instance)).listen(
-    options.streaming_port,
-    () => {
-      console.log(
-        `Skip streaming service listening on port ${options.streaming_port.toString()}`,
-      );
-    },
-  );
-
-  return {
-    close: async () => {
-      controlHttpServer.close();
-      await instance.close();
-      streamingHttpServer.close();
-    },
-  };
+  return runtime.initService(service);
 }
 
 function no_cors(req: Request, res: Response, next: NextFunction) {
@@ -172,5 +417,166 @@ function no_cors(req: Request, res: Response, next: NextFunction) {
     res.end();
   } else {
     next();
+  }
+}
+
+type RequestType =
+  | "instantiate-resource"
+  | "get-all"
+  | "get-array"
+  | "close-resource-instance"
+  | "subscribe"
+  | "unsubscribe"
+  | "update"
+  | "close";
+
+type WorkerRequest = {
+  type: RequestType;
+  [key: string]: Json | SubscriptionID | undefined;
+};
+
+type WorkerEvent = {
+  type: "notifier-subscribed" | "notifier-notify" | "notifier-close";
+  subscription: string;
+  update?: CollectionUpdate<Json, Json>;
+};
+
+type Notifier<K extends Json, V extends Json> = {
+  subscribed: () => void;
+  notify: (update: CollectionUpdate<K, V>) => void;
+  close: () => void;
+};
+
+type WorkerMessage = {
+  id?: string;
+  data?: WorkerRequest | WorkerEvent;
+  error?: string;
+};
+
+type Executor<T> = {
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (error: Error) => void;
+};
+
+class WorkerManager implements ServiceInstance {
+  constructor(
+    private worker: Worker,
+    private notifiers: Map<string, Notifier<Json, Json>>,
+    private requests: Map<string, Executor<unknown>>,
+    private subscriptions: Map<SubscriptionID, string> = new Map(),
+  ) {}
+
+  instantiateResource(
+    identifier: string,
+    resource: string,
+    params: Json,
+  ): Promise<void> {
+    const request: WorkerRequest = {
+      type: "instantiate-resource",
+      identifier,
+      resource,
+      params,
+    };
+    return this.request(request);
+  }
+
+  getAll<K extends Json, V extends Json>(
+    resource: string,
+    params: Json = {},
+  ): Promise<Entry<K, V>[]> {
+    const request: WorkerRequest = {
+      type: "get-all",
+      resource,
+      params,
+    };
+    return this.request(request);
+  }
+
+  getArray<K extends Json, V extends Json>(
+    resource: string,
+    key: K,
+    params: Json = {},
+  ): Promise<V[]> {
+    const request: WorkerRequest = {
+      type: "get-array",
+      resource,
+      key,
+      params,
+    };
+    return this.request(request);
+  }
+
+  closeResourceInstance(resourceInstanceId: string): void {
+    const request: WorkerRequest = {
+      type: "close-resource-instance",
+      resourceInstanceId,
+    };
+    this.call(request);
+  }
+
+  async subscribe<K extends Json, V extends Json>(
+    resourceInstanceId: string,
+    notifier: Notifier<K, V>,
+    watermark?: string,
+  ): Promise<SubscriptionID> {
+    this.notifiers.set(resourceInstanceId, notifier as Notifier<Json, Json>);
+    const request: WorkerRequest = {
+      type: "subscribe",
+      resourceInstanceId,
+      watermark,
+    };
+    try {
+      const id = await this.request<SubscriptionID>(request);
+      this.subscriptions.set(id, resourceInstanceId);
+      return id;
+    } catch (e: unknown) {
+      this.notifiers.delete(resourceInstanceId);
+      throw e;
+    }
+  }
+
+  unsubscribe(id: SubscriptionID): void {
+    const request: WorkerRequest = {
+      type: "unsubscribe",
+      id,
+    };
+    this.call(request);
+    const subscription = this.subscriptions.get(id);
+    if (subscription) {
+      this.subscriptions.delete(id);
+      this.notifiers.delete(subscription);
+    }
+  }
+
+  update<K extends Json, V extends Json>(
+    collection: string,
+    entries: Entry<K, V>[],
+  ): Promise<void> {
+    const request: WorkerRequest = {
+      type: "update",
+      collection,
+      entries,
+    };
+    return this.request(request);
+  }
+
+  close(): Promise<unknown> {
+    const request: WorkerRequest = {
+      type: "close",
+    };
+    return this.request(request).then((_) => this.worker.terminate());
+  }
+
+  private request<T>(request: WorkerRequest): Promise<T> {
+    const requestId = Math.random().toString(36).substring(2);
+    return new Promise<T>((resolve, reject) => {
+      this.requests.set(requestId, { resolve, reject } as Executor<unknown>);
+      this.worker.postMessage({ id: requestId, data: request });
+    });
+  }
+
+  private call(request: WorkerRequest): void {
+    const requestId = Math.random().toString(36).substring(2);
+    this.worker.postMessage({ id: requestId, data: request });
   }
 }
