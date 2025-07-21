@@ -19,7 +19,7 @@ import type {
   Watermark,
 } from "@skipruntime/core";
 import {
-  ServiceInstance,
+  type ServiceInstance,
   ToBinding,
   type JSONLazyCompute,
   type JSONMapper,
