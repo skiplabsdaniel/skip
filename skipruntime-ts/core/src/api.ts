@@ -569,3 +569,96 @@ export interface SkipService<
    */
   createGraph(inputCollections: Inputs, context: Context): ResourceInputs;
 }
+
+export type SubscriptionID = Opaque<bigint, "subscription">;
+
+/**
+ * A `ServiceInstance` is a running instance of a `SkipService`, providing access to its resources
+ * and operations to manage subscriptions and the service itself.
+ */
+export interface ServiceInstance {
+  /**
+   * Instantiate a resource with some parameters and client session authentication token
+   * @param identifier - The resource instance identifier
+   * @param resource - A resource name, which must correspond to a key in this `SkipService`'s `resources` field
+   * @param params - Resource parameters, which will be passed to the resource constructor specified in this `SkipService`'s `resources` field
+   */
+  instantiateResource(
+    identifier: string,
+    resource: string,
+    params: Json,
+  ): Promise<void>;
+
+  /**
+   * Creates if not exists and get all current values of specified resource
+   * @param resource - the resource name corresponding to a key in remotes field of SkipService
+   * @param params - the parameters of the resource used to build the resource with the corresponding constructor specified in remotes field of SkipService
+   * @returns The current values of the corresponding resource with reactive response token to allow subscription
+   */
+  getAll<K extends Json, V extends Json>(
+    resource: string,
+    params?: Json,
+  ): Promise<Entry<K, V>[]>;
+
+  /**
+   * Get the current value of a key in the specified resource instance, creating it if it doesn't already exist
+   * @param resource - A resource name, which must correspond to a key in this `SkipService`'s `resources` field
+   * @param key - A key to look up in the resource instance
+   * @param params - Resource parameters, passed to the resource constructor specified in this `SkipService`'s `resources` field
+   * @returns The current value(s) for this key in the specified resource instance
+   */
+  getArray<K extends Json, V extends Json>(
+    resource: string,
+    key: K,
+    params?: Json,
+  ): Promise<V[]>;
+
+  /**
+   * Close the specified resource instance
+   * @param resourceInstanceId - The resource identifier
+   */
+  closeResourceInstance(resourceInstanceId: string): void;
+
+  /**
+   * Initiate reactive subscription on a resource instance
+   * @param resourceInstanceId - the resource instance identifier
+   * @param notifier - the object containing subscription callbacks
+   * @param notifier.subscribed - A callback to execute when subscription effectively done
+   * @param notifier.notify - A callback to execute on collection updates
+   * @param notifier.close - A callback to execute on resource close
+   * @param watermark - the watermark where to start the subscription
+   * @returns A subscription identifier
+   */
+  subscribe<K extends Json, V extends Json>(
+    resourceInstanceId: string,
+    notifier: {
+      subscribed: () => void;
+      notify: (update: CollectionUpdate<K, V>) => void;
+      close: () => void;
+    },
+    watermark?: string,
+  ): Promise<SubscriptionID>;
+
+  /**
+   * Terminate a client's subscription to a reactive resource instance
+   * @param id - The subscription identifier returned by a call to `subscribe`
+   */
+  unsubscribe(id: SubscriptionID): void;
+
+  /**
+   * Update an input collection
+   * @param collection - the name of the input collection to update
+   * @param entries - entries to update in the collection.
+   */
+  update<K extends Json, V extends Json>(
+    collection: string,
+    entries: Entry<K, V>[],
+  ): Promise<void>;
+
+  /**
+   * Close all resources and shut down the service.
+   * Any subsequent calls on the service will result in errors.
+   * @returns The promise of externals services shutdowns
+   */
+  close(): Promise<unknown>;
+}

@@ -37,6 +37,7 @@ import {
   type Resource,
   type SkipService,
   type Watermark,
+  type ServiceInstance,
 } from "./api.js";
 
 import {
@@ -455,7 +456,7 @@ export type SubscriptionID = Opaque<string, "subscription">;
  * A `ServiceInstance` is a running instance of a `SkipService`, providing access to its resources
  * and operations to manage subscriptions and the service itself.
  */
-export class ServiceInstance {
+export class ServiceInstanceImpl implements ServiceInstance {
   constructor(
     private readonly refs: ToBinding,
     readonly forkName: Nullable<string>,
@@ -583,7 +584,7 @@ export class ServiceInstance {
       close: () => void;
     },
     watermark?: string,
-  ): SubscriptionID {
+  ): Promise<SubscriptionID> {
     this.refs.setFork(this.forkName);
     const session = this.refs.runWithGC(() => {
       const sknotifier = this.refs.binding.SkipRuntime_createNotifier(
@@ -606,7 +607,7 @@ export class ServiceInstance {
     } else if (session < 0n) {
       throw this.refs.handles.deleteHandle(Number(-session) as Handle<Error>);
     }
-    return resourceInstanceId as SubscriptionID;
+    return Promise.resolve(resourceInstanceId as SubscriptionID);
   }
 
   /**
@@ -1110,7 +1111,7 @@ export class ToBinding {
       );
       return this.binding.SkipRuntime_initService(skservice);
     });
-    return new ServiceInstance(this, null);
+    return new ServiceInstanceImpl(this, null);
   }
 
   //

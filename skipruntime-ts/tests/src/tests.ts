@@ -61,7 +61,7 @@ async function withRetries(
 
 class Notifier {
   private updates: CollectionUpdate<Json, Json>[] = [];
-  private sid: SubscriptionID;
+  private sid?: SubscriptionID;
   private resolver: Nullable<() => void> = null;
 
   constructor(
@@ -69,15 +69,18 @@ class Notifier {
     instance: string,
     private log: boolean = false,
   ) {
-    this.sid = service.subscribe(instance, {
-      subscribed: () => {},
-      notify: (update) => {
-        if (this.log) console.log("NOTIFY", JSON.stringify(update));
-        this.updates.push(update);
-        if (this.resolver) this.resolver();
-      },
-      close: () => {},
-    });
+    service
+      .subscribe(instance, {
+        subscribed: () => {},
+        notify: (update) => {
+          if (this.log) console.log("NOTIFY", JSON.stringify(update));
+          this.updates.push(update);
+          if (this.resolver) this.resolver();
+        },
+        close: () => {},
+      })
+      .then((sid) => (this.sid = sid))
+      .catch(console.log.bind(console));
   }
 
   check(
@@ -155,7 +158,7 @@ class Notifier {
   }
 
   close() {
-    this.service.unsubscribe(this.sid);
+    if (this.sid) this.service.unsubscribe(this.sid);
   }
 }
 
@@ -1420,7 +1423,7 @@ export function initTests(
     const constantResourceId1 = "unsafe.identifier.1";
     await service.instantiateResource(constantResourceId1, resource, {});
     const updates: CollectionUpdate<Json, Json>[] = [];
-    const sid = service.subscribe(constantResourceId1, {
+    const sid = await service.subscribe(constantResourceId1, {
       subscribed: () => {},
       notify: (update) => {
         updates.push(update);
@@ -1495,7 +1498,7 @@ export function initTests(
     const constantResourceId = "unsafe.identifier";
     await service.instantiateResource(constantResourceId, resource, {});
     const updates: CollectionUpdate<Json, Json>[] = [];
-    const sid = service.subscribe(constantResourceId, {
+    const sid = await service.subscribe(constantResourceId, {
       subscribed: () => {},
       notify: (update) => {
         updates.push(update);
