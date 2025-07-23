@@ -241,6 +241,9 @@ export interface FromWasm {
 
   // closeClose
   SkipRuntime_closeService(): ptr<Internal.CJSON>;
+  SkipRuntime_invalidate(
+    collections: ptr<Internal.CJArray<Internal.CJSON>>,
+  ): Handle<Error>;
 
   // Context
 
@@ -752,6 +755,12 @@ export class WasmFromBinding implements FromBinding {
 
   SkipRuntime_closeService(): Pointer<Internal.CJSON> {
     return this.fromWasm.SkipRuntime_closeService();
+  }
+
+  SkipRuntime_invalidate(
+    collections: Pointer<Internal.CJArray<Internal.CJSON>>,
+  ): Handle<Error> {
+    return this.fromWasm.SkipRuntime_invalidate(toPtr(collections));
   }
 
   SkipRuntime_Context__createLazyCollection(

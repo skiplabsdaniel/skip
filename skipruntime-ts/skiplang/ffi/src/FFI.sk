@@ -732,6 +732,16 @@ fun closeSkipRuntimeService(): SKJSON.CJSON {
   };
 }
 
+/************ closeService ****************/
+
+@export("SkipRuntime_invalidate")
+fun invalidateSkipRuntime(collections: SKJSON.CJArray): Float {
+  invalidate(collections) match {
+  | Success(_) -> 0.0
+  | Failure(err) -> getErrorHdl(err)
+  }
+}
+
 class ExternalException(
   type: String,
   message: String,
