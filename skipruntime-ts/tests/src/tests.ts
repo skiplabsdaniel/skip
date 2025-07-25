@@ -1098,6 +1098,29 @@ const resourceRecomputeNotificationsService: SkipService<
   },
 };
 
+// testReloadMapper
+
+class ReloadMapper implements Mapper<number, number, number, number> {
+  mapEntry(key: number, values: Values<number>): Iterable<[number, number]> {
+    return Array([key, values.getUnique() + 1]);
+  }
+}
+
+class ReloadResource implements Resource<Input_NN> {
+  instantiate(collections: Input_NN): EagerCollection<number, number> {
+    return collections.input.map(ReloadMapper);
+  }
+}
+
+const reloadMapService: SkipService<Input_NN, Input_NN> = {
+  initialData: { input: [] },
+  resources: { "reload-map": ReloadResource },
+
+  createGraph(inputCollections: Input_NN) {
+    return inputCollections;
+  },
+};
+
 export function initTests(
   category: string,
   initService: (service: SkipService) => Promise<ServiceInstance>,
@@ -1863,5 +1886,15 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
     } finally {
       if (service) await service.close();
     }
+  });
+
+  it("testReloadMap", async () => {
+    const service = await initService(reloadMapService);
+    const resource = "reload-map";
+    await service.update("input", [[1, [10]]]);
+    expect(await service.getArray(resource, 1)).toEqual([11]);
+    const reload = await import("./for-reload.js");
+    service.reload([reload.ReloadMapper]);
+    expect(await service.getArray(resource, 1)).toEqual([12]);
   });
 }
