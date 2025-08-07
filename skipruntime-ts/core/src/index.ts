@@ -104,7 +104,10 @@ function instantiateUserObject<Params extends DepSafe[], Result extends object>(
 }
 
 export class ServiceDefinition {
-  constructor(private service: SkipService) {}
+  constructor(
+    public identifier: string,
+    private service: SkipService,
+  ) {}
 
   buildResource(name: string, parameters: Json): Resource {
     const builder = this.service.resources[name];
@@ -710,7 +713,10 @@ export type SubscriptionID = Opaque<bigint, "subscription">;
  * and operations to manage subscriptions and the service itself.
  */
 export class ServiceInstance {
-  constructor(private readonly refs: Refs) {}
+  constructor(
+    private readonly identifier: string,
+    private readonly refs: Refs,
+  ) {}
 
   /**
    * Instantiate a resource with some parameters and client session authentication token
@@ -730,6 +736,7 @@ export class ServiceInstance {
           reject: (ex: Error) => reject(ex),
         });
         return this.refs.binding.SkipRuntime_Runtime__createResource(
+          this.identifier,
           identifier,
           resource,
           this.refs.skjson.exportJSON(params),
@@ -756,6 +763,7 @@ export class ServiceInstance {
       const result = this.refs.runWithGC(() => {
         return this.refs.skjson.importJSON(
           this.refs.binding.SkipRuntime_Runtime__getAll(
+            this.identifier,
             resource,
             this.refs.skjson.exportJSON(params),
           ),
@@ -791,6 +799,7 @@ export class ServiceInstance {
       const result = this.refs.runWithGC(() => {
         return this.refs.skjson.importJSON(
           this.refs.binding.SkipRuntime_Runtime__getForKey(
+            this.identifier,
             resource,
             this.refs.skjson.exportJSON(params),
             this.refs.skjson.exportJSON(key),
@@ -894,6 +903,7 @@ export class ServiceInstance {
           reject: (ex: Error) => reject(ex),
         });
         return this.refs.binding.SkipRuntime_Runtime__update(
+          this.identifier,
           collection,
           this.refs.skjson.exportJSON(entries),
           this.refs.binding.SkipRuntime_createExecutor(exHdl),
@@ -910,7 +920,7 @@ export class ServiceInstance {
    */
   close(): Promise<unknown> {
     const result = this.refs.runWithGC(() => {
-      return this.refs.binding.SkipRuntime_closeService();
+      return this.refs.binding.SkipRuntime_closeService(this.identifier);
     });
     if (result >= 0) {
       return this.refs.handles.deleteHandle(result as Handle<Promise<unknown>>);
@@ -1483,20 +1493,22 @@ export class ToBinding {
   }
 
   initService(service: SkipService): Promise<ServiceInstance> {
+    const uuid = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const refs = this.refs();
       const errorHdl = refs.runWithGC(() => {
-        const definition = new ServiceDefinition(service);
+        const definition = new ServiceDefinition(uuid, service);
         const skservicehHdl = refs.handles.register(definition);
         const skservice = refs.binding.SkipRuntime_createService(skservicehHdl);
         const exHdl = refs.handles.register({
           resolve: () => {
             refs.handles.registerService(skservicehHdl);
-            resolve(new ServiceInstance(refs));
+            resolve(new ServiceInstance(uuid, refs));
           },
           reject: (ex: Error) => reject(ex),
         });
         return refs.binding.SkipRuntime_initService(
+          uuid,
           skservice,
           refs.binding.SkipRuntime_createExecutor(exHdl),
         );
