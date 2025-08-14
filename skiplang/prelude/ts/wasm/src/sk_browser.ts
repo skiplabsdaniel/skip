@@ -8,7 +8,7 @@ class Env implements Environment {
   fileSystem: MemFS;
   system: MemSys;
   timestamp: () => float;
-  decodeUTF8: (utf8: ArrayBuffer) => string;
+  decodeUTF8: (utf8: Uint8Array) => string;
   encodeUTF8: (str: string) => Uint8Array;
   storage: () => Storage;
   onException: () => void;
@@ -43,7 +43,9 @@ class Env implements Environment {
     } else {
       fUrl = new URL(url, import.meta.url);
     }
-    return fetch(fUrl).then((res) => res.arrayBuffer());
+    return fetch(fUrl)
+      .then((res) => res.arrayBuffer())
+      .then((ab) => new Uint8Array(ab));
   }
 
   constructor(environment?: string[]) {
@@ -54,7 +56,7 @@ class Env implements Environment {
     const global = typeof window == "undefined" ? self : window;
     this.timestamp = () => global.performance.now();
     const decoder = new TextDecoder("utf8");
-    this.decodeUTF8 = (utf8: ArrayBuffer) => decoder.decode(utf8);
+    this.decodeUTF8 = (utf8: Uint8Array) => decoder.decode(utf8);
     const encoder = new TextEncoder(); // always utf-8
     this.encodeUTF8 = (str: string) => encoder.encode(str);
     this.base64Decode = (base64: string) =>
