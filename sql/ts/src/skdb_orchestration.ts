@@ -1497,6 +1497,8 @@ class SKDBServer implements RemoteSKDB {
     msg: ProtoMsg | null,
     deliver: (msg: string) => void,
   ) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     const txtPayload = this.env.decodeUTF8(this.strictCastData(msg).payload);
     const rebootSignalled = txtPayload
       .split("\n")
@@ -1549,6 +1551,8 @@ class SKDBServer implements RemoteSKDB {
 
   private async makeStringRequest(request: ProtoCtrlMsg): Promise<string> {
     return this.makeRequest(request).then((result) =>
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
       this.env.decodeUTF8(this.strictCastData(result).payload),
     );
   }

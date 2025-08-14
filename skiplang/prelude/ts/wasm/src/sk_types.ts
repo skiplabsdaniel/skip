@@ -150,7 +150,7 @@ export interface Environment {
   disableWarnings: boolean;
   environment: string[];
   timestamp: () => float;
-  decodeUTF8: (utf8: ArrayBuffer) => string;
+  decodeUTF8: (utf8: Uint8Array) => string;
   encodeUTF8: (str: string) => Uint8Array;
   onException: () => void;
   base64Decode: (base64: string) => Uint8Array;
@@ -158,7 +158,7 @@ export interface Environment {
   fs: () => FileSystem;
   sys: () => System;
   crypto: () => Crypto;
-  fetch: (url: URL | string) => Promise<Uint8Array | ArrayBuffer>;
+  fetch: (url: URL | string) => Promise<Uint8Array>;
 }
 
 export interface Memory {
@@ -734,14 +734,16 @@ export function humanSize(bytes: int) {
 }
 
 export function loadWasm(
-  buffer: ArrayBuffer,
+  buffer: Uint8Array,
   managers: ToWasmManager[],
   environment: Environment,
   main?: string,
 ) {
   const wasm = {};
   const links = managers.map((manager) => manager.prepare(wasm));
-  return WebAssembly.instantiate(buffer, { env: wasm }).then((result) => {
+  return WebAssembly.instantiate(buffer.buffer as ArrayBuffer, {
+    env: wasm,
+  }).then((result) => {
     const instance = result.instance;
     const exports = instance.exports;
     const utils = new Utils(instance.exports, environment, main);
@@ -757,7 +759,7 @@ export function loadWasm(
 
 async function start(
   modules: ModuleInit[],
-  buffer: Uint8Array | ArrayBuffer,
+  buffer: Uint8Array,
   environment: Environment,
   main?: string,
 ) {
