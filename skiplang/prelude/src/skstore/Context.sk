@@ -456,6 +456,10 @@ mutable class Context private {
     this.!sessions = this.sessions.remove(sessionId)
   }
 
+  mutable fun filterSubscriptions(filter: (Int, Sub) ~> Bool): void {
+    this.!sessions = this.sessions.filter(filter)
+  }
+
   readonly fun clone(): this {
     unsafe_chill_trust_me(this.mclone())
   }
@@ -1072,6 +1076,10 @@ mutable class Context private {
     this.!globals = this.globals.remove(name);
   }
 
+  mutable fun filterGlobals(filter: (String, File) ~> Bool): void {
+    this.!globals = this.globals.filter(filter)
+  }
+
   readonly fun getGlobal(name: String): ?File {
     this.globals.maybeGet(name)
   }
@@ -1082,6 +1090,10 @@ mutable class Context private {
 
   mutable fun removePersistent(name: String): void {
     this.!persistents = this.persistents.remove(name);
+  }
+
+  mutable fun filterPersistents(filter: (String, File) ~> Bool): void {
+    this.!persistents = this.persistents.filter(filter)
   }
 
   readonly fun getPersistent(name: String): ?File {
@@ -1422,6 +1434,10 @@ native fun gUnsafeContextsGet(): Contexts;
 @debug
 @cpp_extern("SKIP_contexts_get_unsafe")
 native fun gContextsGetNoLock(): Contexts;
+
+@debug
+@cpp_extern("SKIP_contexts_replace_unsafe")
+native fun gContextsReplaceNoLock(Contexts, UInt32): void;
 
 class InvalidSync() extends Exception {
   fun toString(): String {
@@ -1973,6 +1989,249 @@ fun runWithResult<T, F>(
   | exn ->
     if (synchronizer.isNone()) gGlobalUnlock();
     Failure(exn)
+  }
+}
+
+/*****************************************************************************/
+/* Forks dedicated functions. */
+/*****************************************************************************/
+
+class ForkSettings(
+  subscriptionsFilter: (Int, Sub) ~> Bool = (_, _) ~> false,
+  persistentsFilter: (String, File) ~> Bool = (_, _) ~> false,
+  globalsFilter: (String, File) ~> Bool = (_, _) ~> false,
+  isSync: Bool = false,
+)
+
+fun forkNoGc(name: String, settings: ForkSettings = ForkSettings()): void {
+  gGlobalLock();
+  contexts = gContextsGetNoLock();
+  if (contexts.has(Some(name))) {
+    gUnsafeFree(contexts);
+    gGlobalUnlock();
+    invariant_violation(`Fork with name '${name}' already exists.`)
+  };
+  forked = contexts.main.mclone();
+  forked.filterSubscriptions(settings.subscriptionsFilter);
+  forked.filterPersistents(settings.persistentsFilter);
+  forked.filterGlobals(settings.globalsFilter);
+  new_contexts = contexts with {
+    forks => contexts.forks.set(
+      name,
+      Fork(forked.clone(), contexts.main.getTick()),
+    ),
+  };
+  gUnsafeFree(contexts);
+  sync = UInt32::truncate(if (settings.isSync) 1 else 0);
+  gContextsReplaceNoLock(new_contexts, sync);
+  gGlobalUnlock();
+}
+
+fun updateForkNoGc(name: String, isSync: Bool = false): void {
+  gGlobalLock();
+  contexts = gContextsGetNoLock();
+  if (!contexts.has(Some(name))) {
+    gUnsafeFree(contexts);
+    gGlobalUnlock();
+    invariant_violation(`Fork with name '${name}' doesn't exist.`)
+  };
+  fork = contexts.forks[name];
+  if (fork.tick == contexts.main.getTick()) {
+    return void
+  };
+  if (fork.context.identifier != contexts.main.identifier) {
+    gUnsafeFree(contexts);
+    gGlobalUnlock();
+    invariant_violation(
+      `Fork with name '${name}' origin is not the main context.`,
+    )
+  };
+  try {
+    forked = fork.context.mclone();
+    dirs = contexts.main.getDirsChangesAfter(fork.tick);
+    dirs.each(dirName -> {
+      contexts.main.unsafeMaybeGetEagerDir(dirName).each(dir ->
+        forked.unsafeMaybeGetEagerDir(dirName).each(fdir -> {
+          if (dir.input) {
+            if (!fdir.input) {
+              invariant_violation(
+                `Forked dir '${dirName}' must be un input dir.`,
+              )
+            };
+            (init, changedKeys) = if (dir.created >= fork.tick) {
+              (true, dir.keys())
+            } else {
+              dir.getChangesAfter(fork.tick);
+            };
+            if (init) {
+              keys = fdir.keys();
+              changedKeys.each(key -> {
+                fdir.writeArray(forked, key, dir.getArrayRaw(key));
+                !keys = keys.remove(key);
+              });
+              keys.each(key -> fdir.writeArray(forked, key, Array[]));
+            } else {
+              for (key in changedKeys) {
+                fdir.writeArray(forked, key, dir.getArrayRaw(key))
+              };
+            };
+          }
+        })
+      )
+    });
+    forked.update();
+    !contexts = gContextSyncNoLock(
+      fork.context.getTick(),
+      contexts,
+      forked.clone(),
+      None(),
+      UInt32::truncate(0),
+      None(),
+      Some(name),
+    );
+    new_contexts = contexts with {
+      forks => contexts.forks.set(
+        name,
+        Fork(forked.clone(), contexts.main.getTick()),
+      ),
+    };
+    gUnsafeFree(contexts);
+    sync = UInt32::truncate(if (isSync) 1 else 0);
+    gContextsReplaceNoLock(new_contexts, sync);
+    gGlobalUnlock();
+  } catch {
+  | ex ->
+    gUnsafeFree(contexts);
+    gGlobalUnlock();
+    throw ex
+  }
+}
+
+fun mergeForkNoGc(
+  name: String,
+  force: Bool = false,
+  isSync: Bool = false,
+): void {
+  gGlobalLock();
+  contexts = gContextsGetNoLock();
+  if (!contexts.has(Some(name))) {
+    gUnsafeFree(contexts);
+    gGlobalUnlock();
+    invariant_violation(`Fork with name '${name}' doesn't exist.`)
+  };
+  fork = contexts.forks[name];
+  if (!force && fork.context.identifier != contexts.main.identifier) {
+    gUnsafeFree(contexts);
+    gGlobalUnlock();
+    invariant_violation(
+      `Fork with name '${name}' origin is not the main context.`,
+    )
+  };
+  if (!force && fork.tick != contexts.main.getTick()) {
+    gUnsafeFree(contexts);
+    gGlobalUnlock();
+    invariant_violation(`The fork with name '${name}' is not up to date.`)
+  };
+  new_main = fork.context.mclone();
+  new_main.!identifier = Ksuid::create();
+  new_contexts = contexts with {
+    main => new_main.clone(),
+    forks => contexts.forks.remove(name),
+  };
+  gUnsafeFree(contexts);
+  sync = UInt32::truncate(if (isSync) 1 else 0);
+  gContextsReplaceNoLock(new_contexts, sync);
+  gGlobalUnlock();
+}
+
+fun removeForkNoGc(name: String, isSync: Bool = false): void {
+  gGlobalLock();
+  contexts = gContextsGetNoLock();
+  if (!contexts.has(Some(name))) {
+    gUnsafeFree(contexts);
+    gGlobalUnlock();
+    invariant_violation(`Fork with name '${name}' doesn't exist.`)
+  };
+  new_contexts = contexts with {forks => contexts.forks.remove(name)};
+  gUnsafeFree(contexts);
+  sync = UInt32::truncate(if (isSync) 1 else 0);
+  gContextsReplaceNoLock(new_contexts, sync);
+  gGlobalUnlock();
+}
+
+fun fork(name: String, settings: ForkSettings = ForkSettings()): void {
+  optSaved: ?Obstack = None();
+  try {
+    !optSaved = Some(newObstack());
+    saved = optSaved.fromSome();
+    forkNoGc(name, settings);
+    destroyObstack(saved)
+  } catch {
+  | exn ->
+    optSaved match {
+    | Some(saved) ->
+      cexn = destroyObstackWithValue(saved, exn);
+      replaceExn(cexn);
+      throw cexn
+    | None() -> throw exn
+    }
+  }
+}
+
+fun updateFork(name: String, isSync: Bool = false): void {
+  optSaved: ?Obstack = None();
+  try {
+    !optSaved = Some(newObstack());
+    saved = optSaved.fromSome();
+    updateForkNoGc(name, isSync);
+    destroyObstack(saved)
+  } catch {
+  | exn ->
+    optSaved match {
+    | Some(saved) ->
+      cexn = destroyObstackWithValue(saved, exn);
+      replaceExn(cexn);
+      throw cexn
+    | None() -> throw exn
+    }
+  }
+}
+
+fun mergeFork(name: String, isSync: Bool = false): void {
+  optSaved: ?Obstack = None();
+  try {
+    !optSaved = Some(newObstack());
+    saved = optSaved.fromSome();
+    mergeForkNoGc(name, isSync);
+    destroyObstack(saved)
+  } catch {
+  | exn ->
+    optSaved match {
+    | Some(saved) ->
+      cexn = destroyObstackWithValue(saved, exn);
+      replaceExn(cexn);
+      throw cexn
+    | None() -> throw exn
+    }
+  }
+}
+
+fun removeFork(name: String, isSync: Bool = false): void {
+  optSaved: ?Obstack = None();
+  try {
+    !optSaved = Some(newObstack());
+    saved = optSaved.fromSome();
+    removeForkNoGc(name, isSync);
+    destroyObstack(saved)
+  } catch {
+  | exn ->
+    optSaved match {
+    | Some(saved) ->
+      cexn = destroyObstackWithValue(saved, exn);
+      replaceExn(cexn);
+      throw cexn
+    | None() -> throw exn
+    }
   }
 }
 
