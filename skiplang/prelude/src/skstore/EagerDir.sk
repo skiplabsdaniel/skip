@@ -1203,7 +1203,7 @@ base class EagerDir protected {
 
   protected static fun isReusable(
     context: mutable Context,
-    child: EagerDir,
+    childName: DirName,
     parents: FixedSingle<
       DirName,
       Array<
@@ -1216,35 +1216,53 @@ base class EagerDir protected {
     >,
     reducerOpt: ?IReducer<File>,
   ): Bool {
-    context.canReuse match {
-    | CRAlways(except) ->
-      if (except.contains(child.dirName)) {
-        context.!canReuse = CRAlways(except.remove(child.dirName));
-        if (context.newDirs.contains(child.dirName)) {
-          context.!newDirs = context.newDirs.remove(child.dirName);
-          context.removeDir(child.dirName)
-        };
-        false
-      } else {
-        true
-      }
-    | CRNever() -> false
-    | CRIfMatch() ->
-      same =
-        (native_eq(parents, child.parents) == 0) &&
-        (native_eq(reducerOpt, child.reducer.map(r -> r.reducer)) == 0);
-      if (same && child.creator != context.currentArrow()) {
-        invariant_violation(
-          `Duplicate subdirectory: ${
-            child.dirName
+    (context.fromContext match {
+    | Some(from) -> from.unsafeMaybeGetEagerDir(childName)
+    | _ -> context.unsafeMaybeGetEagerDir(childName)
+    }) match {
+    | Some(child) ->
+      reusable = context.canReuse match {
+      | CRAlways(except) ->
+        if (except.contains(child.dirName)) {
+          context.!canReuse = CRAlways(except.remove(child.dirName));
+          if (context.newDirs.contains(child.dirName)) {
+            context.!newDirs = context.newDirs.remove(child.dirName);
+            context.removeDir(child.dirName)
+          };
+          false
+        } else {
+          true
+        }
+      | CRNever() -> false
+      | CRIfMatch() ->
+        same =
+          (native_eq(parents, child.parents) == 0) &&
+          (native_eq(reducerOpt, child.reducer.map(r -> r.reducer)) == 0);
+        parentItems = parents.items();
+        tick = context.getTick();
+        while (same) {
+          parentItems.next() match {
+          | Some((d, _)) ->
+            pDir = context.unsafeGetEagerDir(d);
+            !same = pDir.created < tick
+          | _ -> break void
           }
-           First created: ${inspect(
-            child.creator,
-          )}
-           Then: ${inspect(context.currentArrow())}`,
-        );
+        };
+        if (same && child.creator != context.currentArrow()) {
+          invariant_violation(
+            `Duplicate subdirectory: ${
+              child.dirName
+            }
+              First created: ${
+              child.creator
+            }
+              Then: ${context.currentArrow()}`,
+          );
+        };
+        same
       };
-      same
+      reusable
+    | None() -> false
     }
   }
 
@@ -1255,11 +1273,44 @@ base class EagerDir protected {
     if (context.debugMode) {
       print_string(`REUSING: ${childName}`);
     };
-    childDir = context.unsafeGetEagerDir(childName);
+    childDir = context.fromContext match {
+    | Some(from) -> static::importDir(context, from, childName)
+    | _ -> context.unsafeGetEagerDir(childName)
+    };
     time = context.timeStamp();
     !childDir = childDir with {timeStack => TimeStack::create(context, time)};
     context.setDir(childDir);
     context.!newDirs = context.newDirs.set(childName);
+  }
+
+  static fun importDir(
+    context: mutable Context,
+    from: Context,
+    childName: DirName,
+  ): Dir {
+    dir = from.unsafeGetEagerDir(childName);
+    context.setDir(dir);
+    // Import reads
+    dir.parents.items().each(kv ->
+      // TODO: Import Mapper from 'from' context env
+      from.maybeGetReads(kv.i0, childName).each((arrow, reads) ->
+        context.updateNewDeps(arrow, reads)
+      )
+    );
+    // Import sub dir (shared sub dir)
+    withShared = from.isWithSharedSubDirs(childName);
+    if (withShared) {
+      context.setWithSharedSubDirs(childName)
+    };
+    copyDir = v ->
+      v.getNewDirs().each(dirName ->
+        if (context.copyDir(from, dirName) && withShared) {
+          context.incrRefCount(dirName)
+        }
+      );
+    dir.old.each((_, v) -> copyDir(v));
+    dir.fixedOld.items().each(e -> copyDir(e.i1));
+    dir
   }
 
   static fun apply(
@@ -2168,13 +2219,9 @@ class TEagerDir extends EagerDir, TDir {
     reducerOpt: ?IReducer<File> = None(),
     unsafeSkipInit: Bool = false,
   ): void {
-    context.unsafeMaybeGetEagerDir(childName) match {
-    | Some(child) ->
-      if (static::isReusable(context, child, parents, reducerOpt)) {
-        static::reuseDir(context, childName);
-        return void
-      }
-    | None() -> void
+    if (EagerDir::isReusable(context, childName, parents, reducerOpt)) {
+      static::reuseDir(context, childName);
+      return void
     };
 
     if (context.newDirs.contains(childName)) {
