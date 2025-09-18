@@ -1265,11 +1265,44 @@ base class EagerDir protected {
     if (context.debugMode) {
       print_string(`REUSING: ${childName}`);
     };
-    childDir = context.unsafeGetEagerDir(childName);
+    childDir = context.fromContext match {
+    | Some(from) -> static::importDir(context, from, childName)
+    | _ -> context.unsafeGetEagerDir(childName)
+    };
     time = context.timeStamp();
     !childDir = childDir with {timeStack => TimeStack::create(context, time)};
     context.setDir(childDir);
     context.!newDirs = context.newDirs.set(childName);
+  }
+
+  static fun importDir(
+    context: mutable Context,
+    from: Context,
+    childName: DirName,
+  ): Dir {
+    dir = from.unsafeGetEagerDir(childName);
+    context.setDir(dir);
+    // Import reads
+    dir.parents.items().each(kv ->
+      // TODO: Import Mapper from 'from' context env
+      from.maybeGetReads(kv.i0, childName).each((arrow, reads) ->
+        context.updateNewDeps(arrow, reads)
+      )
+    );
+    // Import sub dir (shared sub dir)
+    withShared = from.isWithSharedSubDirs(childName);
+    if (withShared) {
+      context.setWithSharedSubDirs(childName)
+    };
+    copyDir = v ->
+      v.getNewDirs().each(dirName ->
+        if (context.copyDir(from, dirName) && withShared) {
+          context.incrRefCount(dirName)
+        }
+      );
+    dir.old.each((_, v) -> copyDir(v));
+    dir.fixedOld.items().each(e -> copyDir(e.i1));
+    dir
   }
 
   static fun apply(

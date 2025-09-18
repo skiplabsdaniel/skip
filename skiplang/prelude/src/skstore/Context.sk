@@ -110,7 +110,7 @@ value class Arrow(parentName: DirName, childName: DirName) uses Orderable
 base class ArrowKey protected {
   parentName: DirName,
   childName: DirName,
-} uses Orderable, Unsafe.Downcastable {
+} uses Orderable, Unsafe.Downcastable, Show {
   fun getKeyString(): String;
 }
 
@@ -134,6 +134,10 @@ class TArrowKey<K: Orderable & Show>{key: K} extends ArrowKey {
     };
     tOther = Unsafe.cast(other, static);
     this.key.compare(tOther.key)
+  }
+
+  fun toString(): String {
+    `${this.parentName}[${this.getKeyString()}] => ${this.childName}`
   }
 }
 
@@ -173,6 +177,26 @@ value class Deps private (
     !this.data[path] = set;
     !this = this.iset(arrowKey.childName, path);
     this
+  }
+
+  fun maybeGetReads(
+    parent: DirName,
+    child: DirName,
+  ): SortedMap<ArrowKey, SortedSet<Path>> {
+    reads = SortedMap<ArrowKey, SortedSet<Path>>[];
+    this.idata.maybeGet(child).each(paths ->
+      paths.each(path ->
+        this.data.get(path)
+          .filter(ak -> ak.parentName == parent && ak.childName == child)
+          .each(ak ->
+            reads.maybeGet(ak) match {
+            | Some(pSet) -> !reads = reads.set(ak, pSet.set(path))
+            | _ -> !reads = reads.set(ak, SortedSet[path])
+            }
+          )
+      )
+    );
+    reads
   }
 
   private fun iset(dirName: DirName, arrow: Path): this {
@@ -383,6 +407,7 @@ mutable class Context private {
   mutable purgeFrom: (readonly Context, Dir) ~> Tick = (ctx, _) ~>
     Tick(ctx.getTick().value - 1000),
   mutable sourceOverride: ?Path = None(),
+  mutable fromContext: ?Context = None(),
 } {
   static fun create{canReuse: CanReuse = CRIfMatch()}: this {
     static{canReuse}
@@ -394,6 +419,32 @@ mutable class Context private {
 
   fun withGlobals(globals: SortedMap<String, File>): this {
     this with {globals}
+  }
+
+  mutable fun copyDir(from: Context, dirName: DirName): Bool {
+    if (this.unsafeMaybeGetEagerDir(dirName).isSome()) {
+      throw DirAlreadyExists(dirName)
+    };
+    from.unsafeGetDir(dirName) match {
+    | DeletedDir _ -> false
+    | lazy @ LazyDir _ ->
+      this.setDir(lazy);
+      true
+    | eager @ EagerDir _ ->
+      if (eager.input) {
+        this.setDir(eager)
+      } else {
+        _ = EagerDir::importDir(this, from, dirName)
+      };
+      true
+    }
+  }
+
+  readonly fun maybeGetReads(
+    parent: DirName,
+    child: DirName,
+  ): SortedMap<ArrowKey, SortedSet<Path>> {
+    this.deps.maybeGetReads(parent, child)
   }
 
   readonly fun isWithSharedSubDirs(dirName: DirName): Bool {
@@ -456,8 +507,14 @@ mutable class Context private {
     this.!sessions = this.sessions.remove(sessionId)
   }
 
-  mutable fun filterSubscriptions(filter: (Int, Sub) ~> Bool): void {
-    this.!sessions = this.sessions.filter(filter)
+  mutable fun filterSubscriptions(
+    context: readonly Context,
+    filter: (Int, Sub, Tick) ~> ?Sub,
+  ): void {
+    tick = this.tick;
+    this.!sessions = context.sessions
+      .map((id, sub) -> filter(id, sub, tick))
+      .filterNone()
   }
 
   readonly fun clone(): this {
@@ -494,6 +551,7 @@ mutable class Context private {
       writeChecker => this.writeChecker.map(x -> x.mclone()),
       purgeFrom => this.purgeFrom,
       sourceOverride => this.sourceOverride,
+      fromContext => this.fromContext,
     }
   }
 
@@ -526,6 +584,7 @@ mutable class Context private {
     this.!writeChecker = ctx.writeChecker.map(x -> x.mclone());
     this.!purgeFrom = ctx.purgeFrom;
     this.!sourceOverride = ctx.sourceOverride;
+    this.!fromContext = ctx.fromContext;
   }
 
   readonly fun getReads(): SortedSet<Path> {
@@ -693,14 +752,15 @@ mutable class Context private {
     )
   }
 
-  mutable fun update(): void {
+  mutable fun update(from: ?Context = None()): void {
     withChanges = true;
     while (withChanges) {
-      !withChanges = this.updateWithStatus();
+      !withChanges = this.updateWithStatus(from);
+      !from = None();
     }
   }
 
-  mutable fun updateWithStatus(): Bool {
+  mutable fun updateWithStatus(from: ?Context = None()): Bool {
     invariant(
       this.currentArrow().isNone(),
       "updateWithStatus cannot be called during update.",
@@ -708,7 +768,12 @@ mutable class Context private {
     if (this.debugMode) {
       print_debug(`------------ UPDATE (TICK: ${this.tick}) ------------`);
     };
-
+    this.!fromContext = from;
+    from.each(ctx ->
+      if (ctx.tick > this.tick) {
+        this.!tick = ctx.tick
+      }
+    );
     this.updateLazyGets();
 
     loop {
@@ -720,6 +785,7 @@ mutable class Context private {
         withPre = this.updatePre();
         withChanges = withPostponables || withPre;
         this.!tick = this.tick.next();
+        this.!fromContext = None();
         break withChanges
       | Some((_time, Arrow(parentName, childName), toUpdate)) ->
         this.!toUpdate = toUpdate;
@@ -1076,8 +1142,11 @@ mutable class Context private {
     this.!globals = this.globals.remove(name);
   }
 
-  mutable fun filterGlobals(filter: (String, File) ~> Bool): void {
-    this.!globals = this.globals.filter(filter)
+  mutable fun filterGlobals(
+    context: readonly Context,
+    filter: (String, File) ~> ?File,
+  ): void {
+    this.!globals = context.globals.map(filter).filterNone()
   }
 
   readonly fun getGlobal(name: String): ?File {
@@ -1092,8 +1161,11 @@ mutable class Context private {
     this.!persistents = this.persistents.remove(name);
   }
 
-  mutable fun filterPersistents(filter: (String, File) ~> Bool): void {
-    this.!persistents = this.persistents.filter(filter)
+  mutable fun filterPersistents(
+    context: readonly Context,
+    filter: (String, File) ~> ?File,
+  ): void {
+    this.!persistents = context.persistents.map(filter).filterNone()
   }
 
   readonly fun getPersistent(name: String): ?File {
@@ -1664,6 +1736,7 @@ fun runWithGc(
   f: mutable Context ~> ContextOp,
   synchronizer: ?Synchronizer = None(),
   sync: Bool = false,
+  fork: ?String = None(),
 ): void {
   _ = runWithGcIntern(
     initCtx,
@@ -1674,6 +1747,7 @@ fun runWithGc(
     },
     synchronizer,
     sync,
+    fork,
   )
 }
 
@@ -1997,9 +2071,9 @@ fun runWithResult<T>(
 /*****************************************************************************/
 
 class ForkSettings(
-  subscriptionsFilter: (Int, Sub) ~> Bool = (_, _) ~> false,
-  persistentsFilter: (String, File) ~> Bool = (_, _) ~> false,
-  globalsFilter: (String, File) ~> Bool = (_, _) ~> false,
+  subscriptionsFilter: (Int, Sub, Tick) ~> ?Sub = (_, _, _) ~> None(),
+  persistentsFilter: (String, File) ~> ?File = (_, _) ~> None(),
+  globalsFilter: (String, File) ~> ?File = (_, _) ~> None(),
   isSync: Bool = false,
 )
 
@@ -2012,9 +2086,9 @@ fun forkNoGc(name: String, settings: ForkSettings = ForkSettings()): void {
     invariant_violation(`Fork with name '${name}' already exists.`)
   };
   forked = contexts.main.mclone();
-  forked.filterSubscriptions(settings.subscriptionsFilter);
-  forked.filterPersistents(settings.persistentsFilter);
-  forked.filterGlobals(settings.globalsFilter);
+  forked.filterSubscriptions(contexts.main, settings.subscriptionsFilter);
+  forked.filterPersistents(contexts.main, settings.persistentsFilter);
+  forked.filterGlobals(contexts.main, settings.globalsFilter);
   new_contexts = contexts with {
     forks => contexts.forks.set(
       name,
@@ -2051,35 +2125,30 @@ fun updateForkNoGc(name: String, isSync: Bool = false): void {
     dirs = contexts.main.getDirsChangesAfter(fork.tick);
     dirs.each(dirName -> {
       contexts.main.unsafeMaybeGetEagerDir(dirName).each(dir ->
-        forked.unsafeMaybeGetEagerDir(dirName).each(fdir -> {
-          if (dir.input) {
-            if (!fdir.input) {
+        if (dir.input && dir.creator.isNone()) {
+          forked.unsafeMaybeGetEagerDir(dirName) match {
+          | Some(fdir) ->
+            if (!fdir.input || dir.creator.isSome()) {
               invariant_violation(
-                `Forked dir '${dirName}' must be un input dir.`,
+                `Forked dir '${dirName}' must be a root input dir.`,
               )
             };
-            (init, changedKeys) = if (dir.created >= fork.tick) {
-              (true, dir.keys())
-            } else {
-              dir.getChangesAfter(fork.tick);
-            };
-            if (init) {
-              keys = fdir.keys();
-              changedKeys.each(key -> {
-                fdir.writeArray(forked, key, dir.getArrayRaw(key));
-                !keys = keys.remove(key);
-              });
-              keys.each(key -> fdir.writeArray(forked, key, Array[]));
-            } else {
-              for (key in changedKeys) {
-                fdir.writeArray(forked, key, dir.getArrayRaw(key))
-              };
-            };
+            changedKeys = dir.keys();
+            keys = fdir.keys();
+            changedKeys.each(key -> {
+              fdir.writeArray(forked, key, dir.getArrayRaw(key));
+              !keys = keys.remove(key);
+            });
+            keys.each(key -> fdir.writeArray(forked, key, Array[]))
+          | _ ->
+            invariant_violation(
+              `New root directory '${dirName}' cannot be managed in fork.`,
+            )
           }
-        })
+        }
       )
     });
-    forked.update();
+    forked.update(Some(contexts.main));
     !contexts = gContextSyncNoLock(
       fork.context.getTick(),
       contexts,
@@ -2109,8 +2178,8 @@ fun updateForkNoGc(name: String, isSync: Bool = false): void {
 
 fun mergeForkNoGc(
   name: String,
+  settings: ForkSettings,
   force: Bool = false,
-  isSync: Bool = false,
 ): void {
   gGlobalLock();
   contexts = gContextsGetNoLock();
@@ -2134,12 +2203,15 @@ fun mergeForkNoGc(
   };
   new_main = fork.context.mclone();
   new_main.!identifier = Ksuid::create();
+  new_main.filterSubscriptions(contexts.main, settings.subscriptionsFilter);
+  new_main.filterPersistents(contexts.main, settings.persistentsFilter);
+  new_main.filterGlobals(contexts.main, settings.globalsFilter);
   new_contexts = contexts with {
     main => new_main.clone(),
     forks => contexts.forks.remove(name),
   };
   gUnsafeFree(contexts);
-  sync = UInt32::truncate(if (isSync) 1 else 0);
+  sync = UInt32::truncate(if (settings.isSync) 1 else 0);
   gContextsReplaceNoLock(new_contexts, sync);
   gGlobalUnlock();
 }
@@ -2197,12 +2269,12 @@ fun updateFork(name: String, isSync: Bool = false): void {
   }
 }
 
-fun mergeFork(name: String, isSync: Bool = false): void {
+fun mergeFork(name: String, settings: ForkSettings, force: Bool = false): void {
   optSaved: ?Obstack = None();
   try {
     !optSaved = Some(newObstack());
     saved = optSaved.fromSome();
-    mergeForkNoGc(name, isSync);
+    mergeForkNoGc(name, settings, force);
     destroyObstack(saved)
   } catch {
   | exn ->
