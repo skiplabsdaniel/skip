@@ -1,0 +1,108 @@
+module alias T = SKTest;
+
+module SKStoreTest;
+
+@test
+fun testFork(): void {
+  pos = SKStore.newObstack();
+  inputsDirName = SKStore.DirName::create("/inputs/");
+  mappedDirName = SKStore.DirName::create("/mapped/");
+  groupedDirName = SKStore.DirName::create("/grouped/");
+  key = v ~> SKStore.IID(v);
+  val = v ~> SKStore.IntFile(v);
+
+  initCtx = SKStore.Context::create{};
+  synchronizer = Some(
+    SKStore.Synchronizer(SKStore.import, SKStore.export, _ ~> void),
+  );
+  SKStore.runWithGc(
+    initCtx,
+    context ~> {
+      inputs = context.mkdir(
+        SKStore.IID::keyType,
+        SKStore.IntFile::type,
+        inputsDirName,
+        Array[(key(0), val(0)), (key(1), val(1))],
+      );
+      mapped = inputs.map(
+        SKStore.IID::keyType,
+        SKStore.IntFile::type,
+        context,
+        mappedDirName,
+        (_context, writer, _, v) ~>
+          writer.set(key(0), SKStore.IntFile(v.first.value + 1))
+        ,
+      );
+      _ = mapped.map(
+        SKStore.IID::keyType,
+        SKStore.IntFile::type,
+        context,
+        groupedDirName,
+        (_context, writer, _key, values) ~> {
+          writer.set(key(0), values.first)
+        },
+      );
+      SKStore.CStop(None());
+    },
+    synchronizer,
+  );
+  inputs = SKStore.EHandle(
+    SKStore.IID::keyType,
+    SKStore.IntFile::type,
+    inputsDirName,
+  );
+  mapped = SKStore.EHandle(
+    SKStore.IID::keyType,
+    SKStore.IntFile::type,
+    mappedDirName,
+  );
+  grouped = SKStore.EHandle(
+    SKStore.IID::keyType,
+    SKStore.IntFile::type,
+    groupedDirName,
+  );
+  SKStore.fork("test");
+  SKStore.runWithGc(
+    initCtx,
+    context ~> {
+      inputs.writeArray(context, key(2), Array[val(2)]);
+      context.update();
+      SKStore.CStop(None());
+    },
+    synchronizer,
+  );
+  SKStore.runWithGc(
+    initCtx,
+    context ~> {
+      T.expectEq(mapped.maybeGet(context, key(2)), None(), "Test fork 0");
+      T.expectEq(
+        grouped.getArray(context, key(0)).map(f ~> f.value).sorted(),
+        Array[0, 1],
+        "Test fork 1",
+      );
+      SKStore.CStop(None());
+    },
+    synchronizer,
+    false,
+    Some("test"),
+  );
+  SKStore.updateFork("test");
+  SKStore.runWithGc(
+    initCtx,
+    context ~> {
+      T.expectEq(mapped.maybeGet(context, key(2)), Some(val(2)), "Test fork 3");
+      T.expectEq(
+        grouped.getArray(context, key(0)).map(f ~> f.value).sorted(),
+        Array[0, 1, 2],
+        "Test fork 4",
+      );
+      SKStore.CStop(None());
+    },
+    synchronizer,
+    false,
+    Some("test"),
+  );
+  SKStore.destroyObstack(pos);
+}
+
+module end;
