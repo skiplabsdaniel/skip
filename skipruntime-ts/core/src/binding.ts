@@ -215,6 +215,10 @@ export interface FromBinding {
     executor: Pointer<Internal.Executor>,
   ): Handle<Error>;
 
+  SkipRuntime_Runtime__fork(name: string): Handle<Error>;
+  SkipRuntime_Runtime__updateFork(): Handle<Error>;
+  SkipRuntime_Runtime__mergeFork(): Handle<Error>;
+
   // Reducer
 
   SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(

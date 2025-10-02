@@ -335,12 +335,12 @@ class CollectionWriter<K extends Json, V extends Json> {
   constructor(
     public readonly collection: string,
     private readonly refs: ToBinding,
-    private readonly fork: Nullable<string>,
+    private readonly forkName: Nullable<string>,
   ) {}
 
   async update(values: Entry<K, V>[], isInit: boolean): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      this.refs.setFork(this.fork);
+      this.refs.setFork(this.forkName);
       if (!this.refs.needGC()) {
         reject(new SkipError("CollectionWriter.update cannot be performed."));
       }
@@ -361,7 +361,7 @@ class CollectionWriter<K extends Json, V extends Json> {
   }
 
   error(error: unknown): void {
-    this.refs.setFork(this.fork);
+    this.refs.setFork(this.forkName);
     if (!this.refs.needGC()) {
       throw new SkipError("CollectionWriter.update cannot be performed.");
     }
@@ -375,7 +375,7 @@ class CollectionWriter<K extends Json, V extends Json> {
   }
 
   initialized(error?: unknown): void {
-    this.refs.setFork(this.fork);
+    this.refs.setFork(this.forkName);
     if (!this.refs.needGC()) {
       throw new SkipError("CollectionWriter.update cannot be performed.");
     }
@@ -466,7 +466,7 @@ export type SubscriptionID = Opaque<bigint, "subscription">;
 export class ServiceInstance {
   constructor(
     private readonly refs: ToBinding,
-    private readonly fork: Nullable<string>,
+    private readonly forkName: Nullable<string>,
   ) {}
 
   /**
@@ -481,7 +481,7 @@ export class ServiceInstance {
     params: Json,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.refs.setFork(this.fork);
+      this.refs.setFork(this.forkName);
       const errorHdl = this.refs.runWithGC(() => {
         const exHdl = this.refs.handles.register({
           resolve,
@@ -511,7 +511,7 @@ export class ServiceInstance {
     const uuid = crypto.randomUUID();
     await this.instantiateResource(uuid, resource, params);
     try {
-      this.refs.setFork(this.fork);
+      this.refs.setFork(this.forkName);
       const result = this.refs.runWithGC(() => {
         return this.refs
           .json()
@@ -549,7 +549,7 @@ export class ServiceInstance {
     const uuid = crypto.randomUUID();
     await this.instantiateResource(uuid, resource, params);
     try {
-      this.refs.setFork(this.fork);
+      this.refs.setFork(this.forkName);
       const skjson = this.refs.json();
       const result = this.refs.runWithGC(() => {
         return skjson.importJSON(
@@ -577,7 +577,7 @@ export class ServiceInstance {
    * @param resourceInstanceId - The resource identifier
    */
   closeResourceInstance(resourceInstanceId: string): void {
-    this.refs.setFork(this.fork);
+    this.refs.setFork(this.forkName);
     const errorHdl = this.refs.runWithGC(() => {
       return this.refs.binding.SkipRuntime_Runtime__closeResource(
         resourceInstanceId,
@@ -605,7 +605,7 @@ export class ServiceInstance {
     },
     watermark?: string,
   ): SubscriptionID {
-    this.refs.setFork(this.fork);
+    this.refs.setFork(this.forkName);
     const session = this.refs.runWithGC(() => {
       const sknotifier = this.refs.binding.SkipRuntime_createNotifier(
         this.refs.handles.register(notifier),
@@ -635,7 +635,7 @@ export class ServiceInstance {
    * @param id - The subscription identifier returned by a call to `subscribe`
    */
   unsubscribe(id: SubscriptionID): void {
-    this.refs.setFork(this.fork);
+    this.refs.setFork(this.forkName);
     const errorHdl = this.refs.runWithGC(() => {
       return this.refs.binding.SkipRuntime_Runtime__unsubscribe(id);
     });
@@ -654,7 +654,7 @@ export class ServiceInstance {
     entries: Entry<K, V>[],
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.refs.setFork(this.fork);
+      this.refs.setFork(this.forkName);
       const errorHdl = this.refs.runWithGC(() => {
         const exHdl = this.refs.handles.register({
           resolve,
@@ -676,7 +676,7 @@ export class ServiceInstance {
    * @returns The promise of externals services shutdowns
    */
   close(): Promise<unknown> {
-    this.refs.setFork(this.fork);
+    this.refs.setFork(this.forkName);
     const result = this.refs.runWithGC(() => {
       return this.refs
         .json()
@@ -690,6 +690,45 @@ export class ServiceInstance {
       const errorHdl = result as Handle<Error>;
       return Promise.reject(this.refs.handles.deleteHandle(errorHdl));
     }
+  }
+
+  /**
+   * Fork the service with current specified name.
+   * @param name - the name of the fork.
+   * @returns The forked ServiceInstance
+   */
+  fork(name: string): ServiceInstance {
+    if (this.forkName) throw new Error("Unable to fork a fork.");
+    this.refs.setFork(this.forkName);
+    const errorHdl = this.refs.runWithGC(() =>
+      this.refs.binding.SkipRuntime_Runtime__fork(name),
+    );
+    if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
+    return new ServiceInstance(this.refs, name);
+  }
+
+  /**
+   * Update the fork with the current main values.
+   */
+  updateFork(): void {
+    if (!this.forkName) throw new Error("Unable to update fork on main.");
+    this.refs.setFork(this.forkName);
+    const errorHdl = this.refs.runWithGC(() =>
+      this.refs.binding.SkipRuntime_Runtime__updateFork(),
+    );
+    if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
+  }
+
+  /**
+   * Update the fork with the current main values.
+   */
+  margeFork(): void {
+    if (!this.forkName) throw new Error("Unable to merge fork on main.");
+    this.refs.setFork(this.forkName);
+    const errorHdl = this.refs.runWithGC(() =>
+      this.refs.binding.SkipRuntime_Runtime__mergeFork(),
+    );
+    if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
 }
 

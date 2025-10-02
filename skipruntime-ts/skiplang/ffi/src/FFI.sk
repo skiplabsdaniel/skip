@@ -680,6 +680,54 @@ fun updateOfRuntime(
   };
 }
 
+@export("SkipRuntime_Runtime__fork")
+fun forkOfRuntime(name: String): Float {
+  try {
+    SKStore.forkNoGc(name, getFork());
+    0.0
+  } catch {
+  | err -> getErrorHdl(err)
+  }
+}
+
+@export("SkipRuntime_Runtime__updateFork")
+fun updateForkOfRuntime(): Float {
+  try {
+    getFork().each(fork -> SKStore.updateForkNoGc(fork));
+    0.0
+  } catch {
+  | err -> getErrorHdl(err)
+  }
+}
+
+@export("SkipRuntime_Runtime__mergeFork")
+fun mergeForkOfRuntime(): Float {
+  try {
+    // TODO fork setting
+    getFork().each(fork ->
+      SKStore.mergeForkNoGc(
+        fork,
+        SKStore.ForkSettings(
+          (_, sub, tick) ~> {
+            sub.cmd match {
+            | nWatch @ SKStore.NWatch _ ->
+              !nWatch.from = tick;
+              !sub.cmd = nWatch
+            | _ -> void
+            };
+            Some(sub)
+          },
+          (_, _) ~> None(),
+          (_, _) ~> None(),
+        ),
+      )
+    );
+    0.0
+  } catch {
+  | err -> getErrorHdl(err)
+  }
+}
+
 /************ Context ****************/
 
 @export("SkipRuntime_Context__createLazyCollection")
