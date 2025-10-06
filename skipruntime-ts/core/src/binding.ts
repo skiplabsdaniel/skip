@@ -218,6 +218,7 @@ export interface FromBinding {
   SkipRuntime_Runtime__fork(name: string): Handle<Error>;
   SkipRuntime_Runtime__updateFork(): Handle<Error>;
   SkipRuntime_Runtime__mergeFork(): Handle<Error>;
+  SkipRuntime_Runtime__forkExists(name: string): boolean;
 
   // Reducer
 

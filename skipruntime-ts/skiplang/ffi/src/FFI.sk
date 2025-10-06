@@ -728,6 +728,11 @@ fun mergeForkOfRuntime(): Float {
   }
 }
 
+@export("SkipRuntime_Runtime__forkExists")
+fun forkExistsOfRuntime(name: String): UInt32 {
+  UInt32::truncate(if (SKStore.forkExists(name)) 1 else 0);
+}
+
 /************ Context ****************/
 
 @export("SkipRuntime_Context__createLazyCollection")

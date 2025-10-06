@@ -228,6 +228,7 @@ export interface FromWasm {
   SkipRuntime_Runtime__fork(name: ptr<Internal.String>): Handle<Error>;
   SkipRuntime_Runtime__updateFork(): Handle<Error>;
   SkipRuntime_Runtime__mergeFork(): Handle<Error>;
+  SkipRuntime_Runtime__forkExists(name: ptr<Internal.String>): number;
 
   // Reducer
 
@@ -730,6 +731,14 @@ export class WasmFromBinding implements FromBinding {
   SkipRuntime_Runtime__fork(name: string): Handle<Error> {
     return this.fromWasm.SkipRuntime_Runtime__fork(
       this.utils.exportString(name),
+    );
+  }
+
+  SkipRuntime_Runtime__forkExists(name: string): boolean {
+    return (
+      this.fromWasm.SkipRuntime_Runtime__forkExists(
+        this.utils.exportString(name),
+      ) != 0
     );
   }
 

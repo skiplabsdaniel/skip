@@ -335,12 +335,12 @@ class CollectionWriter<K extends Json, V extends Json> {
   constructor(
     public readonly collection: string,
     private readonly refs: ToBinding,
-    private readonly forkName: Nullable<string>,
+    private forkName: Nullable<string>,
   ) {}
 
   async update(values: Entry<K, V>[], isInit: boolean): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      this.refs.setFork(this.forkName);
+      this.refs.setFork(this.getForkName());
       if (!this.refs.needGC()) {
         reject(new SkipError("CollectionWriter.update cannot be performed."));
       }
@@ -361,7 +361,7 @@ class CollectionWriter<K extends Json, V extends Json> {
   }
 
   error(error: unknown): void {
-    this.refs.setFork(this.forkName);
+    this.refs.setFork(this.getForkName());
     if (!this.refs.needGC()) {
       throw new SkipError("CollectionWriter.update cannot be performed.");
     }
@@ -375,7 +375,7 @@ class CollectionWriter<K extends Json, V extends Json> {
   }
 
   initialized(error?: unknown): void {
-    this.refs.setFork(this.forkName);
+    this.refs.setFork(this.getForkName());
     if (!this.refs.needGC()) {
       throw new SkipError("CollectionWriter.update cannot be performed.");
     }
@@ -396,6 +396,19 @@ class CollectionWriter<K extends Json, V extends Json> {
     return JSON.parse(
       JSON.stringify(error, Object.getOwnPropertyNames(error)),
     ) as Json;
+  }
+
+  private getForkName(): Nullable<string> {
+    const forkName = this.forkName;
+    if (!forkName) return null;
+    if (
+      !this.refs.runWithGC(() =>
+        this.refs.binding.SkipRuntime_Runtime__forkExists(forkName),
+      )
+    ) {
+      this.forkName = null;
+    }
+    return this.forkName;
   }
 }
 
