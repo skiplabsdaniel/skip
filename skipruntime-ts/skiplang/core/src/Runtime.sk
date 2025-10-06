@@ -1060,29 +1060,24 @@ class CollectionWriter(dirName: SKStore.DirName) {
     isInit: Bool,
     executor: Executor,
   ): Result<void, .Exception> {
-    performOnTransaction(this.dirName, (root, context) ~>
-      this.update_(root, context, values, isInit, executor)
-    )
+    runWithResult(context ~> this.update_(context, values, isInit, executor))
   }
 
   fun error(error: SKJSON.CJSON): Result<void, .Exception> {
-    performOnTransaction(this.dirName, (_root, context) ~> {
+    runWithResult(context ~> {
       _ = this.updateStatus(context, status ~> status.err(error));
       updateContext(context);
     })
   }
 
   fun initialized(error: SKJSON.CJSON): Result<void, .Exception> {
-    performOnTransaction(
-      this.dirName,
-      (_root, context) ~> {
-        optResource = this.updateStatus(context, status ~> status.init(error));
-        context.update();
-        checkInitialization(context, optResource);
-        checkGarbage(context);
-      },
-      true,
-    )
+    runWithResult(context ~> {
+      optResource = this.updateStatus(context, status ~> status.init(error));
+      context.update();
+      checkInitialization(context, optResource);
+      checkGarbage(context);
+      commit(context);
+    })
   }
 
   fun status(context: mutable SKStore.Context, status: Status): void {
@@ -1129,7 +1124,6 @@ class CollectionWriter(dirName: SKStore.DirName) {
   }
 
   private fun update_(
-    root: mutable SKStore.Context,
     context: mutable SKStore.Context,
     values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
     isInit: Bool,
@@ -1140,7 +1134,7 @@ class CollectionWriter(dirName: SKStore.DirName) {
     | _ -> void
     };
     _ = this.updateStatus(context, status ~> status.ok());
-    writeInCollection(root, context, this.dirName, values, executor, isInit)
+    writeInCollection(context, this.dirName, values, executor, isInit)
   }
 }
 
@@ -1348,17 +1342,15 @@ fun put(
 }
 
 private fun writeInCollection(
-  root: mutable SKStore.Context,
-  main: mutable SKStore.Context,
+  context: mutable SKStore.Context,
   dirName: SKStore.DirName,
   values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
   executor: Executor,
   isInit: Bool = false,
 ): void {
   chdl = SKStore.EHandle(JSONID::keyType, JSONFile::type, dirName);
-  transaction = checkTransaction(main);
   keys = if (isInit) {
-    transaction.context.maybeGetEagerDir(dirName) match {
+    context.maybeGetEagerDir(dirName) match {
     | Some(dir) -> dir.keys().map(JSONID::keyType)
     | _ -> SortedSet<JSONID>[]
     }
@@ -1372,16 +1364,11 @@ private fun writeInCollection(
     toAdd.push((key, fvalues));
     !keys = keys.remove(key);
   });
-  fadded = toAdd.toArray();
-  fremoved = keys;
-  commit = (ctx) ~> {
-    fadded.each(added -> chdl.writeArray(ctx, added.i0, added.i1));
-    fremoved.each(key -> chdl.writeArray(ctx, key, Array[]));
-  };
-  commit(transaction.context);
+  toAdd.each(added -> chdl.writeArray(context, added.i0, added.i1));
+  keys.each(key -> chdl.writeArray(context, key, Array[]));
   // Do not check garbage collection to prevent closing resources
-  transaction.context.update();
-  finalizeTransaction(root, main, transaction, commit, executor);
+  context.update();
+  finalizeTransaction(context, executor);
 }
 
 fun update(
@@ -1391,7 +1378,6 @@ fun update(
   executor: Executor,
 ): void {
   writeInCollection(
-    context,
     context,
     SKStore.DirName::create(`/${collection}/`),
     values,
