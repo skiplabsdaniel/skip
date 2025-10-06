@@ -1394,7 +1394,7 @@ native fun unfreezeCond(cond: Condition): mutable Condition;
 /* Runtime primitives. */
 /*****************************************************************************/
 
-class Fork(context: Context, tick: Tick)
+class Fork(context: Context, from: Tick, update: Tick)
 
 class Contexts(main: Context, forks: SortedMap<String, Fork> = SortedMap[]) {
   //
@@ -2089,11 +2089,9 @@ fun forkNoGc(name: String, settings: ForkSettings = ForkSettings()): void {
   forked.filterSubscriptions(contexts.main, settings.subscriptionsFilter);
   forked.filterPersistents(contexts.main, settings.persistentsFilter);
   forked.filterGlobals(contexts.main, settings.globalsFilter);
+  tick = contexts.main.getTick();
   new_contexts = contexts with {
-    forks => contexts.forks.set(
-      name,
-      Fork(forked.clone(), contexts.main.getTick()),
-    ),
+    forks => contexts.forks.set(name, Fork(forked.clone(), tick, tick)),
   };
   gUnsafeFree(contexts);
   sync = UInt32::truncate(if (settings.isSync) 1 else 0);
@@ -2110,7 +2108,8 @@ fun updateForkNoGc(name: String, isSync: Bool = false): void {
     invariant_violation(`Fork with name '${name}' doesn't exist.`)
   };
   fork = contexts.forks[name];
-  if (fork.tick == contexts.main.getTick()) {
+  tick = contexts.main.getTick();
+  if (fork.update == tick) {
     return void
   };
   if (fork.context.identifier != contexts.main.identifier) {
@@ -2122,7 +2121,7 @@ fun updateForkNoGc(name: String, isSync: Bool = false): void {
   };
   try {
     forked = fork.context.mclone();
-    dirs = contexts.main.getDirsChangesAfter(fork.tick);
+    dirs = contexts.main.getDirsChangesAfter(fork.update);
     dirs.each(dirName -> {
       contexts.main.unsafeMaybeGetEagerDir(dirName).each(dir ->
         if (dir.input && dir.creator.isNone()) {
@@ -2159,10 +2158,7 @@ fun updateForkNoGc(name: String, isSync: Bool = false): void {
       Some(name),
     );
     new_contexts = contexts with {
-      forks => contexts.forks.set(
-        name,
-        Fork(forked.clone(), contexts.main.getTick()),
-      ),
+      forks => contexts.forks.set(name, Fork(forked.clone(), fork.from, tick)),
     };
     gUnsafeFree(contexts);
     sync = UInt32::truncate(if (isSync) 1 else 0);
@@ -2196,7 +2192,7 @@ fun mergeForkNoGc(
       `Fork with name '${name}' origin is not the main context.`,
     )
   };
-  if (!force && fork.tick != contexts.main.getTick()) {
+  if (!force && fork.update != contexts.main.getTick()) {
     gUnsafeFree(contexts);
     gGlobalUnlock();
     invariant_violation(`The fork with name '${name}' is not up to date.`)
@@ -2214,6 +2210,7 @@ fun mergeForkNoGc(
   sync = UInt32::truncate(if (settings.isSync) 1 else 0);
   gContextsReplaceNoLock(new_contexts, sync);
   gGlobalUnlock();
+  contexts.main.notifyAll(fork.from);
 }
 
 fun removeForkNoGc(name: String, isSync: Bool = false): void {
