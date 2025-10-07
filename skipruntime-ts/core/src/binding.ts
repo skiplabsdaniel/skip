@@ -216,8 +216,11 @@ export interface FromBinding {
   ): Handle<Error>;
 
   SkipRuntime_Runtime__fork(name: string): Handle<Error>;
-  SkipRuntime_Runtime__updateFork(): Handle<Error>;
-  SkipRuntime_Runtime__mergeFork(): Handle<Error>;
+  SkipRuntime_Runtime__mergeForkFor(
+    input: string,
+    values: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
+  ): Handle<Error>;
+  SkipRuntime_Runtime__abortFork(): Handle<Error>;
   SkipRuntime_Runtime__forkExists(name: string): boolean;
 
   // Reducer

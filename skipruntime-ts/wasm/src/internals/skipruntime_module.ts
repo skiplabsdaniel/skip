@@ -226,8 +226,11 @@ export interface FromWasm {
   ): Handle<Error>;
 
   SkipRuntime_Runtime__fork(name: ptr<Internal.String>): Handle<Error>;
-  SkipRuntime_Runtime__updateFork(): Handle<Error>;
-  SkipRuntime_Runtime__mergeFork(): Handle<Error>;
+  SkipRuntime_Runtime__mergeForkFor(
+    input: ptr<Internal.String>,
+    values: ptr<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
+  ): Handle<Error>;
+  SkipRuntime_Runtime__abortFork(): Handle<Error>;
   SkipRuntime_Runtime__forkExists(name: ptr<Internal.String>): number;
 
   // Reducer
@@ -742,12 +745,18 @@ export class WasmFromBinding implements FromBinding {
     );
   }
 
-  SkipRuntime_Runtime__updateFork(): Handle<Error> {
-    return this.fromWasm.SkipRuntime_Runtime__updateFork();
+  SkipRuntime_Runtime__mergeForkFor(
+    input: string,
+    values: Pointer<Internal.CJArray<Internal.CJArray<Internal.CJSON>>>,
+  ): Handle<Error> {
+    return this.fromWasm.SkipRuntime_Runtime__mergeForkFor(
+      this.utils.exportString(input),
+      toPtr(values),
+    );
   }
 
-  SkipRuntime_Runtime__mergeFork(): Handle<Error> {
-    return this.fromWasm.SkipRuntime_Runtime__mergeFork();
+  SkipRuntime_Runtime__abortFork(): Handle<Error> {
+    return this.fromWasm.SkipRuntime_Runtime__abortFork();
   }
 
   SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(

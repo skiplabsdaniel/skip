@@ -479,7 +479,7 @@ export type SubscriptionID = Opaque<bigint, "subscription">;
 export class ServiceInstance {
   constructor(
     private readonly refs: ToBinding,
-    private readonly forkName: Nullable<string>,
+    readonly forkName: Nullable<string>,
   ) {}
 
   /**
@@ -661,8 +661,25 @@ export class ServiceInstance {
    * Update an input collection
    * @param collection - the name of the input collection to update
    * @param entries - entries to update in the collection.
+   * @returns The update promise
    */
-  update<K extends Json, V extends Json>(
+  async update<K extends Json, V extends Json>(
+    collection: string,
+    entries: Entry<K, V>[],
+  ): Promise<void> {
+    this.refs.setFork(this.forkName);
+    const uuid = crypto.randomUUID();
+    const fork = this.fork(uuid);
+    try {
+      await fork.update_(collection, entries);
+      fork.mergeForkFor(collection, entries);
+    } catch (ex: unknown) {
+      fork.abortFork();
+      throw ex;
+    }
+  }
+
+  private update_<K extends Json, V extends Json>(
     collection: string,
     entries: Entry<K, V>[],
   ): Promise<void> {
@@ -710,8 +727,8 @@ export class ServiceInstance {
    * @param name - the name of the fork.
    * @returns The forked ServiceInstance
    */
-  fork(name: string): ServiceInstance {
-    if (this.forkName) throw new Error("Unable to fork a fork.");
+  private fork(name: string): ServiceInstance {
+    if (this.forkName) throw new Error(`Unable to fork ${this.forkName}.`);
     this.refs.setFork(this.forkName);
     const errorHdl = this.refs.runWithGC(() =>
       this.refs.binding.SkipRuntime_Runtime__fork(name),
@@ -720,26 +737,26 @@ export class ServiceInstance {
     return new ServiceInstance(this.refs, name);
   }
 
-  /**
-   * Update the fork with the current main values.
-   */
-  updateFork(): void {
-    if (!this.forkName) throw new Error("Unable to update fork on main.");
+  private mergeForkFor<K extends Json, V extends Json>(
+    collection: string,
+    entries: Entry<K, V>[],
+  ): void {
+    if (!this.forkName) throw new Error("Unable to merge fork on main.");
     this.refs.setFork(this.forkName);
     const errorHdl = this.refs.runWithGC(() =>
-      this.refs.binding.SkipRuntime_Runtime__updateFork(),
+      this.refs.binding.SkipRuntime_Runtime__mergeForkFor(
+        collection,
+        this.refs.json().exportJSON(entries),
+      ),
     );
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
 
-  /**
-   * Update the fork with the current main values.
-   */
-  margeFork(): void {
-    if (!this.forkName) throw new Error("Unable to merge fork on main.");
+  private abortFork(): void {
+    if (!this.forkName) throw new Error("Unable to abord fork on main.");
     this.refs.setFork(this.forkName);
     const errorHdl = this.refs.runWithGC(() =>
-      this.refs.binding.SkipRuntime_Runtime__mergeFork(),
+      this.refs.binding.SkipRuntime_Runtime__abortFork(),
     );
     if (errorHdl) throw this.refs.handles.deleteHandle(errorHdl);
   }
@@ -1123,8 +1140,8 @@ export class ToBinding {
   }
 
   initService(service: SkipService): Promise<ServiceInstance> {
+    this.setFork(null);
     return new Promise((resolve, reject) => {
-      const fork = this.fork;
       const errorHdl = this.runWithGC(() => {
         const skExternalServices =
           this.binding.SkipRuntime_ExternalServiceMap__create();
@@ -1162,7 +1179,7 @@ export class ToBinding {
         );
         const exHdl = this.handles.register({
           resolve: () => {
-            resolve(new ServiceInstance(this, fork));
+            resolve(new ServiceInstance(this, null));
           },
           reject: (ex: Error) => reject(ex),
         });

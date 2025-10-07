@@ -1385,6 +1385,20 @@ fun update(
   )
 }
 
+fun write(
+  context: mutable SKStore.Context,
+  input: String,
+  values: Array<(SKJSON.CJSON, Array<SKJSON.CJSON>)>,
+): void {
+  dirName = SKStore.DirName::create(`/${input}/`);
+  chdl = SKStore.EHandle(JSONID::keyType, JSONFile::type, dirName);
+  values.each(e -> {
+    key = JSONID(e.i0);
+    fvalues = e.i1.map(v -> JSONFile(v));
+    chdl.writeArray(context, key, fvalues)
+  })
+}
+
 fun delete(
   context: mutable SKStore.Context,
   collection: String,

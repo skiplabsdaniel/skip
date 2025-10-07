@@ -690,38 +690,88 @@ fun forkOfRuntime(name: String): Float {
   }
 }
 
-@export("SkipRuntime_Runtime__updateFork")
-fun updateForkOfRuntime(): Float {
+@export("SkipRuntime_Runtime__mergeForkFor")
+fun mergeForkForOfRuntime(input: String, values: SKJSON.CJArray): Float {
   try {
-    getFork().each(fork -> SKStore.updateForkNoGc(fork));
+    getFork().each(f -> merge(f, input, values));
     0.0
   } catch {
   | err -> getErrorHdl(err)
   }
 }
 
-@export("SkipRuntime_Runtime__mergeFork")
-fun mergeForkOfRuntime(): Float {
+const kUpdates: String = "skipruntime.updates";
+type UpdateFun = (mutable SKStore.Context) ~> void;
+
+class Updates(value: Queue<UpdateFun> = Queue[]) extends SKStore.File {
+  fun push(x: UpdateFun): this {
+    !this.value = this.value.push(x);
+    this
+  }
+
+  fun pop(): ?(this, UpdateFun) {
+    this.value.pop().map(v -> {
+      (Updates(v.i0), v.i1)
+    })
+  }
+}
+
+fun merge(name: String, input: String, values: SKJSON.CJArray): void {
+  SKStore.gGlobalLock();
+  contexts = SKStore.gContextsGetNoLock();
+  if (!contexts.has(Some(name))) {
+    SKStore.gUnsafeFree(contexts);
+    SKStore.gGlobalUnlock();
+    invariant_violation(`Fork with name '${name}' doesn't exist.`)
+  };
+  fork = contexts.forks[name];
+  context = contexts.get(fork.fork);
+  start = context.getTick();
+  updates = fork.context
+    .getPersistent(kUpdates)
+    .map(Updates::type)
+    .default(Updates());
+  allupdates = updates.push(ctx ~>
+    write(
+      ctx,
+      input,
+      values match {
+      | SKJSON.CJArray(vs) ->
+        vs.map(v -> {
+          e = SKJSON.expectArray(v);
+          (e[0], SKJSON.expectArray(e[1]))
+        })
+      },
+    )
+  );
+  if (start == fork.from) {
+    new_context = fork.context.mclone();
+    new_context.filterSubscriptions(context, (_, sub, _) ~> Some(sub));
+    new_context.filterPersistents(context, (_, v) ~> Some(v));
+    new_context.filterGlobals(context, (_, v) ~> Some(v));
+    if (fork.fork.isSome()) {
+      new_context.setPersistent(kUpdates, allupdates)
+    } else {
+      new_context.removePersistent(kUpdates)
+    };
+    new_contexts = contexts.set(fork.fork, new_context.clone()) with {
+      forks => contexts.forks.remove(name),
+    };
+    SKStore.gUnsafeFree(contexts);
+    SKStore.gContextsReplaceNoLock(new_contexts, UInt32::truncate(0));
+    SKStore.gGlobalUnlock();
+    if (fork.fork.isNone()) {
+      new_contexts.main.notifyAll(start);
+    }
+  } else {
+    invariant_violation("TODO")
+  }
+}
+
+@export("SkipRuntime_Runtime__abortFork")
+fun abortForkOfRuntime(): Float {
   try {
-    // TODO fork setting
-    getFork().each(fork ->
-      SKStore.mergeForkNoGc(
-        fork,
-        SKStore.ForkSettings(
-          (_, sub, tick) ~> {
-            sub.cmd match {
-            | nWatch @ SKStore.NWatch _ ->
-              !nWatch.from = tick;
-              !sub.cmd = nWatch
-            | _ -> void
-            };
-            Some(sub)
-          },
-          (_, _) ~> None(),
-          (_, _) ~> None(),
-        ),
-      )
-    );
+    getFork().each(fork -> SKStore.removeForkNoGc(fork));
     0.0
   } catch {
   | err -> getErrorHdl(err)
