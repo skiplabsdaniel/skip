@@ -61,7 +61,7 @@ fun testFork(): void {
     SKStore.IntFile::type,
     groupedDirName,
   );
-  SKStore.fork("test");
+  SKStore.fork("test", None());
   SKStore.runWithGc(
     initCtx,
     context ~> {
