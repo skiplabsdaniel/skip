@@ -580,7 +580,8 @@ class MockExternalCheck implements Mapper<number, number, number, number[]> {
 
   mapEntry(key: number, values: Values<number>): Iterable<[number, number[]]> {
     const result = this.external.getUnique(key, { ifNone: NaN });
-    if (Number.isNaN(result)) return [[key, values.toArray()]];
+    const vs = values.toArray();
+    if (Number.isNaN(result)) return [[key, vs]];
     return [[key, [...values, result]]];
   }
 }
@@ -1719,9 +1720,7 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
     } catch (e: unknown) {
       expect(e).toBeA(Error);
       expect((e as Error).message).toMatchRegex(
-        new RegExp(
-          /^(?:SkipRuntime\.ServiceInstanceInitFailed: )?Service instance cannot be initialized:/,
-        ),
+        new RegExp(/^(?:Error: )?Something goes wrong.$/),
       );
     } finally {
       if (service) await service.close();
@@ -1740,9 +1739,7 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
     } catch (e: unknown) {
       expect(e).toBeA(Error);
       expect((e as Error).message).toMatchRegex(
-        new RegExp(
-          /^(?:SkipRuntime\.ResourceInstanceInitFailed: )?Resource instance cannot be initialized:/,
-        ),
+        new RegExp(/^(?:Error: )?Something goes wrong.$/),
       );
     }
   });

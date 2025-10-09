@@ -1416,6 +1416,11 @@ class Contexts(main: Context, forks: SortedMap<String, Fork> = SortedMap[]) {
     this
   }
 
+  fun remove(name: String): Contexts {
+    !this.forks = this.forks.remove(name);
+    this
+  }
+
   fun has(optName: ?String): Bool {
     optName match {
     | Some(name) -> this.forks.containsKey(name)
@@ -2101,7 +2106,7 @@ fun forkNoGc(
   forked.filterGlobals(context, settings.globalsFilter);
   tick = context.getTick();
   new_contexts = contexts with {
-    forks => contexts.forks.set(name, Fork(forked.clone(), tick, tick)),
+    forks => contexts.forks.set(name, Fork(forked.clone(), tick, tick, from)),
   };
   gUnsafeFree(contexts);
   sync = UInt32::truncate(if (settings.isSync) 1 else 0);
