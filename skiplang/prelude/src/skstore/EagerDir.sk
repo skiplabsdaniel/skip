@@ -668,7 +668,7 @@ mutable class FixedDataMapIterator<T> private {
 
 base class EagerDir protected {
   input: Bool,
-  protected created: Tick,
+  created: Tick,
   protected fixedData: FixedDataMap<Key, File>,
   protected totalSize: Int,
   creator: ?ArrowKey,
@@ -2017,18 +2017,10 @@ base class EagerDir protected {
   }
 
   fun notifySubWatch(start: Tick, tick: Tick, nWatch: NWatch): void {
-    (init, changedKeys) = if (this.created >= start || start <= nWatch.from) {
-      (true, SortedSet[])
+    (init, keys) = if (this.created >= start || start <= nWatch.from) {
+      (true, this.keys())
     } else {
       this.getChangesAfter(start)
-    };
-    keys = if (init) {
-      keys = SortedSet[];
-      // Key can appears multiple times
-      this.unsafeIterKeys((key) -> !keys = keys.set(key));
-      keys
-    } else {
-      changedKeys
     };
     if (init || !keys.isEmpty()) {
       result = mutable Vector[];
