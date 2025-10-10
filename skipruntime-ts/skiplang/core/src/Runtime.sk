@@ -170,6 +170,12 @@ class ResourceInfo(
   }
 }
 
+class ExternalServiceDef(
+  name: String,
+  resource: String,
+  params: SKJSON.CJSON,
+) uses Orderable
+
 fun initCtx(): SKStore.Context {
   SKStore.Context::create{}
 }
@@ -451,9 +457,6 @@ class CloseExternalService(
   definition: ExternalServiceDef,
 ) extends SKStore.Postponable {
   fun perform(context: mutable SKStore.Context): void {
-    if (isClosed(context, this.definition)) {
-      return void;
-    };
     // Clear status
     context.maybeGetEagerDir(this.dirName) match {
     | Some(dir) ->
@@ -472,7 +475,6 @@ class CloseExternalService(
     pushContext(context);
     this.supplier.unsubscribe(this.instance);
     popContext();
-    addClosed(context, this.definition);
   }
 }
 
