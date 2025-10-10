@@ -654,25 +654,6 @@ fun mergeForkForOfRuntime(): Float {
   }
 }
 
-type UpdateFun = (mutable SKStore.Context) ~> void;
-
-class Updates(value: Queue<UpdateFun> = Queue[]) extends SKStore.File {
-  fun push(x: UpdateFun): this {
-    !this.value = this.value.push(x);
-    this
-  }
-
-  fun pop(): ?(this, UpdateFun) {
-    this.value.pop().map(v -> {
-      (Updates(v.i0), v.i1)
-    })
-  }
-
-  fun each(x: UpdateFun -> void): void {
-    this.value.each(x)
-  }
-}
-
 fun merge(name: String): void {
   SKStore.gGlobalLock();
   contexts = SKStore.gContextsGetNoLock();
