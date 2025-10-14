@@ -94,7 +94,7 @@ fun removeElementAsOne<V: SKStore.File>(_value: V, _toRemove: Int): V {
 }
 
 fun subDirName(
-  context: mutable SKStore.Context,
+  context: readonly SKStore.Context,
   name: String,
 ): SKStore.DirName {
   path = context.currentArrow() match {

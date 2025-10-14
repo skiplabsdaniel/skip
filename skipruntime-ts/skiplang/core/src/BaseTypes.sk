@@ -14,11 +14,38 @@ base class Reducer<V1: frozen, V2: frozen>(initial: V2) {
  * @param values - the values mapped to by `key` in the input collection
  * @returns an iterable of key/value pairs to output for the given input(s)
  */
-base class Mapper {
+base class Mapper extends SKStore.Mapper<SKStore.Key, SKStore.File> {
   fun mapEntry(
     key: SKJSON.CJSON,
     values: mutable SKStore.NonEmptyIterator<SKJSON.CJSON>,
   ): mutable Iterator<(SKJSON.CJSON, SKJSON.CJSON)>;
+
+  fun map(
+    context: mutable SKStore.Context,
+    writer: mutable SKStore.Writer,
+    key: SKStore.Key,
+    values: mutable Iterator<SKStore.File>,
+  ): void {
+    SKStore.FileIterator::create(
+      values.map(x -> JSONFile::type(x).json),
+    ) match {
+    | SKStore.EmptyFileIterator _ -> void
+    | iter @ SKStore.NonEmptyIterator _ ->
+      pushContext(context);
+      try {
+        for (entry in this.mapEntry(JSONID::keyType(key).json, iter)) {
+          writer.append(JSONID(entry.i0), JSONFile(entry.i1))
+        };
+        popContext();
+      } catch {
+      | ex ->
+        popContext();
+        throw ex
+      }
+    }
+  }
+
+  fun getName(): String;
 }
 
 base class LazyCompute {
