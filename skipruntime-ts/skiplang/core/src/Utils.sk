@@ -96,27 +96,22 @@ fun removeElementAsOne<V: SKStore.File>(_value: V, _toRemove: Int): V {
 fun subDirName(
   context: readonly SKStore.Context,
   name: String,
+  parent: ?SKStore.DirName,
 ): SKStore.DirName {
+  p = parent.map(v -> `${xxHash(v)}/`).default("");
   path = context.currentArrow() match {
-  | Some(arrow) ->
-    b64 = base64(arrow.getKeyString());
-    `${arrow.childName}${b64}/${name}/`
-  | None() -> `/sk/${name}/`
+  | Some(arrow) -> `/${xxHash(arrow)}/${p}${name}/`
+  | None() -> `/sk/${p}${name}/`
   };
   SKStore.DirName::create(path)
 }
 
-fun base64<T: Show>(toEncode: T): String {
-  encoded = `b64_${Base64.encodeString(toEncode.toString(), true)}`;
-  encoded.searchRight(ch ~> ch != '=') match {
-  | Some(i) ->
-    _ = i.next();
-    encoded.getIter().substring(i)
-  | None() -> ""
-  }
+fun xxHash<T: Show>(toEncode: T): String {
+  `xx_${XXHash64.xxHash64String(toEncode.toString())}`
 }
+
 fun toResourceId(resource: String, params: SKJSON.CJSON): String {
-  `${resource}_${base64(params.prettyPrint())}`
+  `${resource}_${xxHash(params.prettyPrint())}`
 }
 
 fun toSuppliedResourceId(

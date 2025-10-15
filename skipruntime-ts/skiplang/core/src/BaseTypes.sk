@@ -48,8 +48,30 @@ base class Mapper extends SKStore.Mapper<SKStore.Key, SKStore.File> {
   fun getName(): String;
 }
 
-base class LazyCompute {
-  fun compute(self: LazyCollection, key: SKJSON.CJSON): Array<SKJSON.CJSON>;
+base class LazyCompute extends SKStore.LazyCompute<SKStore.Key, SKStore.File> {
+  fun computeFor(self: LazyCollection, key: SKJSON.CJSON): Array<SKJSON.CJSON>;
+
+  fun compute(
+    context: mutable SKStore.Context,
+    self: SKStore.DirName,
+    key: SKStore.Key,
+  ): ?Array<SKStore.File> {
+    pushContext(context);
+    try {
+      res = this.computeFor(
+        LazyCollection(self),
+        JSONID::keyType(key).json,
+      ).map(json -> JSONFile(json));
+      popContext();
+      Some(res)
+    } catch {
+    | ex ->
+      popContext();
+      throw ex
+    }
+  }
+
+  fun getName(): String;
 }
 
 value class Waitable(value: Float)

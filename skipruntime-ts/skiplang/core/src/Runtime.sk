@@ -324,30 +324,9 @@ class CloseExternalService(
 fun createLazyCollection(compute: LazyCompute): LazyCollection {
   getContext() match {
   | Some(context) ->
-    collectionId = `collection_${SKStore.genSym(0)}`;
-    dirName = subDirName(context, collectionId);
-    lhdl = SKStore.LHandle::create(
-      JSONID::keyType,
-      JSONFile::type,
-      context,
-      dirName,
-      (ctx, self, key) ~> {
-        pushContext(ctx);
-        try {
-          res = compute.compute(LazyCollection(self), key.json).map(json ->
-            JSONFile(json)
-          );
-          popContext();
-          res
-        } catch {
-        | ex ->
-          popContext();
-          throw ex
-        }
-      },
-    );
-    LazyCollection(lhdl)
-
+    dirName = subDirName(context, compute.getName(), None());
+    _ = SKStore.TLazyDir::createFor(context, dirName, compute);
+    LazyCollection(dirName)
   | _ -> invariant_violation("Store context must be specified.")
   }
 }
@@ -392,7 +371,7 @@ fun useExternalCollection(
     ).service.remoteCollections;
     externalSupplier = remoteCollections.get(supplier);
     collectionId = toSuppliedResourceId(supplier, resource, params);
-    dirName = subDirName(context, collectionId);
+    dirName = subDirName(context, collectionId, None());
     paramsDir = dirName.sub("params");
     dataDir = dirName.sub("data");
     hdl = context.mkdir(
@@ -497,7 +476,7 @@ class Collection(dirName: SKStore.DirName) {
   fun map(mapper: Mapper): Collection {
     getContext() match {
     | Some(context) ->
-      dirName = subDirName(context, mapper.getName());
+      dirName = subDirName(context, mapper.getName(), Some(this.dirName));
       SKStore.TEagerDir::applyFor(context, this.dirName, dirName, mapper);
       Collection(dirName)
     | _ -> invariant_violation("Store context must be specified.")
@@ -523,7 +502,7 @@ class Collection(dirName: SKStore.DirName) {
       );
       dirName = mapperOpt match {
       | Some(mapper) ->
-        dirName = subDirName(context, mapper.getName());
+        dirName = subDirName(context, mapper.getName(), Some(this.dirName));
         SKStore.TEagerDir::applyFor(
           context,
           this.dirName,
@@ -533,7 +512,7 @@ class Collection(dirName: SKStore.DirName) {
         );
         dirName
       | _ ->
-        dirName = subDirName(context, "identity");
+        dirName = subDirName(context, "identity", Some(this.dirName));
         SKStore.TEagerDir::applyFor(
           context,
           this.dirName,
@@ -570,7 +549,7 @@ class Collection(dirName: SKStore.DirName) {
       );
       dirName = mapperOpt match {
       | Some(mapper) ->
-        dirName = subDirName(context, mapper.getName());
+        dirName = subDirName(context, mapper.getName(), Some(this.dirName));
         SKStore.TEagerDir::applyFor(
           context,
           this.dirName,
@@ -580,7 +559,7 @@ class Collection(dirName: SKStore.DirName) {
         );
         dirName
       | _ ->
-        dirName = subDirName(context, "identity");
+        dirName = subDirName(context, reducer, Some(this.dirName));
         SKStore.TEagerDir::applyFor(
           context,
           this.dirName,
@@ -602,7 +581,13 @@ class Collection(dirName: SKStore.DirName) {
   fun sliced(ranges: Array<(SKJSON.CJSON, SKJSON.CJSON)>): Collection {
     getContext() match {
     | Some(context) ->
-      dirName = subDirName(context, "identity");
+      dirName = subDirName(
+        context,
+        `sliced/${xxHash(
+          ranges.map(e -> (e.i0.prettyPrint(), e.i1.prettyPrint())),
+        )}`,
+        Some(this.dirName),
+      );
       SKStore.TEagerDir::applyFor(
         context,
         this.dirName,
@@ -624,7 +609,7 @@ class Collection(dirName: SKStore.DirName) {
   fun take(limit: Int): Collection {
     getContext() match {
     | Some(context) ->
-      dirName = subDirName(context, `take_${limit}`);
+      dirName = subDirName(context, `take_${limit}`, Some(this.dirName));
       SKStore.EagerFilter::create(
         JSONID::keyType,
         JSONFile::type,
@@ -651,8 +636,8 @@ class Collection(dirName: SKStore.DirName) {
   fun merge(others: Array<Collection>): Collection {
     getContext() match {
     | Some(context) ->
-      collectionId = `merge_${others.map(c -> c.dirName.toString()).hash()}`;
-      dirName = subDirName(context, collectionId);
+      collectionId = `merge_${xxHash(others.map(c -> c.dirName.toString()))}`;
+      dirName = subDirName(context, collectionId, Some(this.dirName));
       parents = SKStore.FixedSingle::create(
         Vector[this].concat(others)
           .map(c ->
@@ -664,17 +649,6 @@ class Collection(dirName: SKStore.DirName) {
           .clone(),
       );
       SKStore.TEagerDir::applyManyFor(context, parents, dirName);
-      /*hdl = SKStore.EHandle::multiMap(
-        JSONID::keyType,
-        JSONFile::type,
-        context,
-        Array[this].concat(others).map(c ->
-          c match {
-          | ci @ Collection _ -> (ci.hdl, (identityMap, None()))
-          }
-        ),
-        dirName,
-      );*/
       Collection(dirName)
     | _ -> invariant_violation("Store context must be specified.")
     }
@@ -723,19 +697,14 @@ class Collection(dirName: SKStore.DirName) {
   }
 }
 
-class LazyCollection(private hdl: SKStore.LHandle<JSONID, JSONFile>) {
+class LazyCollection(private dirName: SKStore.DirName) {
   //
   static fun forName(name: String): LazyCollection {
-    hdl = SKStore.LHandle(
-      JSONID::keyType,
-      JSONFile::type,
-      SKStore.DirName::create(name),
-    );
-    LazyCollection(hdl)
+    LazyCollection(SKStore.DirName::create(name))
   }
 
   fun getId(): String {
-    this.hdl.dirName.toString();
+    this.dirName.toString();
   }
 
   /**
@@ -745,7 +714,10 @@ class LazyCollection(private hdl: SKStore.LHandle<JSONID, JSONFile>) {
   fun getArray(key: SKJSON.CJSON): Array<SKJSON.CJSON> {
     getContext() match {
     | Some(context) ->
-      this.hdl.getArray(context, JSONID(key)).map(file -> file.json)
+      dir = context.unsafeGetDir(this.dirName).typed();
+      dir.getArray(context, JSONID(key)).map(JSONFile::type).map(file ->
+        file.json
+      )
     | _ -> invariant_violation("Store context must be specified.")
     }
   }
@@ -755,10 +727,18 @@ class LazyCollection(private hdl: SKStore.LHandle<JSONID, JSONFile>) {
    * @throws {Error} when either zero or multiple such values exist
    */
   fun getUnique(key: SKJSON.CJSON): SKJSON.CJSON {
-    getContext() match {
-    | Some(context) -> this.hdl.get(context, JSONID(key)).json
-    | _ -> invariant_violation("Store context must be specified.")
-    }
+    values = this.getArray(key);
+    if (values.size() >= 2) {
+      invariant_violation(
+        `Error: Duplicate keys '${key.prettyPrint()}' in '${this.dirName}'`,
+      );
+    };
+    if (values.size() == 0) {
+      invariant_violation(
+        `Error: No value for keys '${key.prettyPrint()}' in '${this.dirName}'`,
+      );
+    };
+    values[0]
   }
 }
 
