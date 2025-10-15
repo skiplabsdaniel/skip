@@ -40,24 +40,6 @@ class ServiceInputs(
   inputs: Map<String, Collection>,
 ) extends SKStore.File
 
-class Handle(value: SKStore.EHandle<JSONID, JSONFile>) extends SKStore.File
-
-class ConvReducer(
-  private reducer: Reducer<SKJSON.CJSON, SKJSON.CJSON>,
-) extends Reducer<JSONFile, JSONFile> {
-  fun getType(): SKStore.File ~> JSONFile {
-    JSONFile::type
-  }
-
-  fun add(acc: JSONFile, value: JSONFile): JSONFile {
-    JSONFile(this.reducer.add(acc.json, value.json));
-  }
-
-  fun remove(acc: JSONFile, value: JSONFile): ?JSONFile {
-    this.reducer.remove(acc.json, value.json).map(x -> JSONFile(x))
-  }
-}
-
 class ResourceCollection(value: Collection) extends SKStore.File
 
 class ResourceDef(
@@ -496,32 +478,29 @@ class Collection(dirName: SKStore.DirName) {
   ): Collection {
     getContext() match {
     | Some(context) ->
-      reducerObj = SKStore.IReducerBase(
-        accReducer(ConvReducer(reducer, JSONFile(reducer.initial))),
-        JSONFile::type,
-      );
-      dirName = mapperOpt match {
+      (dirName, mapper) = mapperOpt match {
       | Some(mapper) ->
-        dirName = subDirName(context, mapper.getName(), Some(this.dirName));
-        SKStore.TEagerDir::applyFor(
-          context,
-          this.dirName,
-          dirName,
+        (
+          subDirName(
+            context,
+            `${mapper.getName()}_${reducer.getName()}`,
+            Some(this.dirName),
+          ),
           mapper,
-          Some(reducerObj),
-        );
-        dirName
+        )
       | _ ->
-        dirName = subDirName(context, "identity", Some(this.dirName));
-        SKStore.TEagerDir::applyFor(
-          context,
-          this.dirName,
-          dirName,
+        (
+          subDirName(context, reducer.getName(), Some(this.dirName)),
           SKStore.IdentityMapper(),
-          Some(reducerObj),
-        );
-        dirName
+        )
       };
+      SKStore.TEagerDir::applyFor(
+        context,
+        this.dirName,
+        dirName,
+        mapper,
+        Some(reducer),
+      );
       Collection(dirName)
     | _ -> invariant_violation("Store context must be specified.")
     }
@@ -547,28 +526,22 @@ class Collection(dirName: SKStore.DirName) {
         },
         JSONFile::type,
       );
-      dirName = mapperOpt match {
+      (dirName, mapper) = mapperOpt match {
       | Some(mapper) ->
-        dirName = subDirName(context, mapper.getName(), Some(this.dirName));
-        SKStore.TEagerDir::applyFor(
-          context,
-          this.dirName,
-          dirName,
-          mapper,
-          Some(reducerObj),
-        );
-        dirName
+        (subDirName(context, mapper.getName(), Some(this.dirName)), mapper)
       | _ ->
-        dirName = subDirName(context, reducer, Some(this.dirName));
-        SKStore.TEagerDir::applyFor(
-          context,
-          this.dirName,
-          dirName,
+        (
+          subDirName(context, reducer, Some(this.dirName)),
           SKStore.IdentityMapper(),
-          Some(reducerObj),
-        );
-        dirName
+        )
       };
+      SKStore.TEagerDir::applyFor(
+        context,
+        this.dirName,
+        dirName,
+        mapper,
+        Some(reducerObj),
+      );
       Collection(dirName)
     | _ -> invariant_violation("Store context must be specified.")
     }

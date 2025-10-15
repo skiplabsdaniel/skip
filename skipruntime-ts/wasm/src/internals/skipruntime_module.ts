@@ -221,7 +221,6 @@ export interface FromWasm {
 
   SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(
     ref: Handle<HandlerInfo<Reducer<K1, V1>>>,
-    defaultValue: ptr<Internal.CJSON>,
   ): ptr<Internal.Reducer>;
 
   // initService
@@ -367,6 +366,10 @@ interface ToWasm {
 
   // Reducer
 
+  SkipRuntime_Reducer__init(
+    reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
+  ): ptr<Internal.CJSON>;
+
   SkipRuntime_Reducer__add(
     reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
     acc: ptr<Internal.CJSON>,
@@ -378,6 +381,15 @@ interface ToWasm {
     acc: ptr<Internal.CJSON>,
     value: ptr<Internal.CJSON>,
   ): Nullable<ptr<Internal.CJSON>>;
+
+  SkipRuntime_Reducer__isEquals(
+    reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
+    other: Handle<HandlerInfo<Reducer<Json, Json>>>,
+  ): number;
+
+  SkipRuntime_Reducer__getInfo(
+    reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
+  ): ptr<Internal.CJObject>;
 
   SkipRuntime_deleteReducer(
     reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
@@ -719,9 +731,8 @@ export class WasmFromBinding implements FromBinding {
 
   SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(
     ref: Handle<HandlerInfo<Reducer<K1, V1>>>,
-    defaultValue: Pointer<Internal.CJSON>,
   ): Pointer<Internal.Reducer> {
-    return this.fromWasm.SkipRuntime_createReducer(ref, toPtr(defaultValue));
+    return this.fromWasm.SkipRuntime_createReducer(ref);
   }
 
   SkipRuntime_initService(
@@ -959,6 +970,10 @@ class LinksImpl implements Links {
 
   // Reducer
 
+  initOfReducer(skreducer: Handle<HandlerInfo<Reducer<Json, Json>>>) {
+    return toPtr(this.tobinding.SkipRuntime_Reducer__init(skreducer));
+  }
+
   addOfReducer(
     skreducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
     skacc: ptr<Internal.CJSON>,
@@ -977,6 +992,19 @@ class LinksImpl implements Links {
     return toNullablePtr(
       this.tobinding.SkipRuntime_Reducer__remove(skreducer, skacc, skvalue),
     );
+  }
+
+  isEqualsOfReducer(
+    reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
+    other: Handle<HandlerInfo<Reducer<Json, Json>>>,
+  ): number {
+    return this.tobinding.SkipRuntime_Reducer__isEquals(reducer, other);
+  }
+
+  getInfoOfReducer(
+    reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
+  ): ptr<Internal.CJSON> {
+    return toPtr(this.tobinding.SkipRuntime_Reducer__getInfo(reducer));
   }
 
   deleteReducer(reducer: Handle<HandlerInfo<Reducer<Json, Json>>>) {
@@ -1107,8 +1135,11 @@ class Manager implements ToWasmManager {
 
     // Reducer
 
+    toWasm.SkipRuntime_Reducer__init = links.initOfReducer.bind(links);
     toWasm.SkipRuntime_Reducer__add = links.addOfReducer.bind(links);
     toWasm.SkipRuntime_Reducer__remove = links.removeOfReducer.bind(links);
+    toWasm.SkipRuntime_Reducer__isEquals = links.isEqualsOfReducer.bind(links);
+    toWasm.SkipRuntime_Reducer__getInfo = links.getInfoOfReducer.bind(links);
     toWasm.SkipRuntime_deleteReducer = links.deleteReducer.bind(links);
 
     return links;

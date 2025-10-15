@@ -504,6 +504,10 @@ class ExternNotifier(eptr: SKStore.ExternalPointer) extends Notifier {
 
 /************  Reducer ****************/
 
+@cpp_extern("SkipRuntime_Reducer__init")
+@debug
+native fun initOfReducer(reducer: UInt32): SKJSON.CJSON;
+
 @cpp_extern("SkipRuntime_Reducer__add")
 @debug
 native fun addOfReducer(
@@ -520,20 +524,40 @@ native fun removeOfReducer(
   value: SKJSON.CJSON,
 ): ?SKJSON.CJSON;
 
+@cpp_extern("SkipRuntime_Reducer__getInfo")
+@debug
+native fun getInfoOfReducer(mapper: UInt32): SKJSON.CJObject;
+
+@cpp_extern("SkipRuntime_Reducer__isEquals")
+@debug
+native fun isEqualsOfReducer(reducer: UInt32, other: UInt32): UInt32;
+
 @cpp_extern("SkipRuntime_deleteReducer")
 @debug
 native fun deleteReducer(reducer: UInt32): void;
 
 @export("SkipRuntime_createReducer")
-fun createReducer(reducer: UInt32, initial: SKJSON.CJSON): JSONReducer {
-  JSONReducer(SKStore.ExternalPointer::create(reducer, deleteReducer), initial)
+fun createReducer(reducer: UInt32): JSONReducer {
+  JSONReducer(SKStore.ExternalPointer::create(reducer, deleteReducer))
 }
 
 class JSONReducer(
   eptr: SKStore.ExternalPointer,
 ) extends Reducer<SKJSON.CJSON, SKJSON.CJSON> {
+  //
+  fun getInit(): SKJSON.CJSON {
+    initOfReducer(this.eptr.value)
+  }
+
   fun getType(): SKStore.File ~> SKJSON.CJSON {
     f ~> JSONFile::type(f).json
+  }
+
+  fun getAccType(): (
+    SKStore.File ~> SKJSON.CJSON,
+    SKJSON.CJSON ~> SKStore.File,
+  ) {
+    (f ~> JSONFile::type(f).json, v ~> JSONFile(v))
   }
 
   fun add(acc: SKJSON.CJSON, value: SKJSON.CJSON): SKJSON.CJSON {
@@ -542,6 +566,19 @@ class JSONReducer(
 
   fun remove(acc: SKJSON.CJSON, value: SKJSON.CJSON): ?SKJSON.CJSON {
     removeOfReducer(this.eptr.value, acc, value)
+  }
+
+  fun ==(other: SKStore.IReducer<SKStore.File>): Bool {
+    other match {
+    | JSONReducer(eptr) -> isEqualsOfReducer(this.eptr.value, eptr.value) != 0
+    | _ -> false
+    }
+  }
+
+  fun getName(): String {
+    `xx_${XXHash64.xxHash64String(
+      getInfoOfReducer(this.eptr.value).prettyPrint(),
+    )}`
   }
 }
 

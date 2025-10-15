@@ -1,9 +1,44 @@
 module SkipRuntime;
 
-base class Reducer<V1: frozen, V2: frozen>(initial: V2) {
-  fun getType(): SKStore.File ~> V2;
+base class Reducer<V1: frozen, V2: frozen> extends
+  SKStore.IReducer<SKStore.File>,
+{
+  fun getInit(): V2;
+  fun getType(): SKStore.File ~> V1;
+  fun getAccType(): (SKStore.File ~> V2, V2 ~> SKStore.File);
   fun add(acc: V2, value: V1): V2;
   fun remove(acc: V2, value: V1): ?V2;
+  fun getName(): String;
+
+  fun init(iter: mutable Iterator<SKStore.File>): Array<SKStore.File> {
+    (_, accToFile) = this.getAccType();
+    vFromFile = this.getType();
+    acc = this.getInit();
+    for (x in iter) {
+      !acc = this.add(acc, vFromFile(x))
+    };
+    Array[accToFile(acc)]
+  }
+
+  fun update(
+    state: Array<SKStore.File>,
+    old: Array<SKStore.File>,
+    new: Array<SKStore.File>,
+  ): ?Array<SKStore.File> {
+    (accFromFile, accToFile) = this.getAccType();
+    vFromFile = this.getType();
+    acc = accFromFile(state[0]);
+    for (x in old) {
+      this.remove(acc, vFromFile(x)) match {
+      | Some(v) -> !acc = v
+      | _ -> return None()
+      }
+    };
+    for (x in new) {
+      !acc = this.add(acc, vFromFile(x))
+    };
+    Some(Array[accToFile(acc)])
+  }
 }
 
 /**

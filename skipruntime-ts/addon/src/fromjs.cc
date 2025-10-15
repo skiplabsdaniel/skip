@@ -345,6 +345,17 @@ void SkipRuntime_deleteNotifier(uint32_t notifierId) {
                      argv);
 }
 
+CJSON SkipRuntime_Reducer__init(uint32_t reducerId) {
+  Isolate* isolate = Isolate::GetCurrent();
+  HandleScope scope(isolate);
+  Local<Object> externFunctions = kExternFunctions.Get(isolate);
+  Local<Value> argv[1] = {
+      Number::New(isolate, reducerId),
+  };
+  return CallJSFunction(isolate, externFunctions, "SkipRuntime_Reducer__init",
+                        1, argv);
+}
+
 CJSON SkipRuntime_Reducer__add(uint32_t reducerId, CJSON acc, CJSON value) {
   Isolate* isolate = Isolate::GetCurrent();
   HandleScope scope(isolate);
@@ -369,6 +380,29 @@ CJSON SkipRuntime_Reducer__remove(uint32_t reducerId, CJSON acc, CJSON value) {
   };
   return CallJSNullableFunction(isolate, externFunctions,
                                 "SkipRuntime_Reducer__remove", 3, argv);
+}
+
+uint32_t SkipRuntime_Reducer__isEquals(uint32_t reducerId, uint32_t otherId) {
+  Isolate* isolate = Isolate::GetCurrent();
+  HandleScope scope(isolate);
+  Local<Object> externFunctions = kExternFunctions.Get(isolate);
+  Local<Value> argv[2] = {
+      Number::New(isolate, reducerId),
+      Number::New(isolate, otherId),
+  };
+  return (uint32_t)CallJSNumberFunction(
+      isolate, externFunctions, "SkipRuntime_Reducer__isEquals", 2, argv);
+}
+
+CJObject SkipRuntime_Reducer__getInfo(uint32_t reducerId) {
+  Isolate* isolate = Isolate::GetCurrent();
+  HandleScope scope(isolate);
+  Local<Object> externFunctions = kExternFunctions.Get(isolate);
+  Local<Value> argv[1] = {
+      Number::New(isolate, reducerId),
+  };
+  return CallJSFunction(isolate, externFunctions,
+                        "SkipRuntime_Reducer__getInfo", 1, argv);
 }
 
 void SkipRuntime_deleteReducer(uint32_t reducerId) {

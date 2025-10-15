@@ -39,44 +39,6 @@ class JSONID(json: SKJSON.CJSON) extends SKStore.Key {
 
 class JSONFile(json: SKJSON.CJSON) extends SKStore.File
 
-fun accReducer<V1: SKStore.File, V2: SKStore.File>(
-  reducer: Reducer<V1, V2>,
-): SKStore.EReducer<V1, V2> {
-  SKStore.EReducer{
-    type => reducer.getType(),
-    canReset => true,
-    init => iter ~> {
-      acc = reducer.initial;
-      for (x in iter) {
-        !acc = reducer.add(acc, x)
-      };
-      Array[acc]
-    },
-    update => (state, old, new) ~> {
-      acc = state[0];
-      for (x in old) {
-        reducer.remove(acc, x) match {
-        | Some(v) -> !acc = v
-        | _ -> return None()
-        }
-      };
-      for (x in new) {
-        !acc = reducer.add(acc, x)
-      };
-      Some(Array[acc])
-    },
-  }
-}
-
-fun identityMap<K: SKStore.Key, V: SKStore.File>(
-  _context: mutable SKStore.Context,
-  writer: mutable SKStore.TWriter<K, V>,
-  key: K,
-  it: mutable SKStore.NonEmptyIterator<V>,
-): void {
-  writer.setArray(key, Array::createFromIterator(it.values())); // TODO: use it.toArray()
-}
-
 fun noFilter<K: SKStore.Key, V: SKStore.File>(
   _context: readonly SKStore.Context,
   _key: K,

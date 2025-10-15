@@ -58,7 +58,7 @@ export * from "./errors.js";
 
 export type JSONMapper = Mapper<Json, Json, Json, Json>;
 export type JSONLazyCompute = LazyCompute<Json, Json>;
-export type JSONOperator = JSONMapper | JSONLazyCompute;
+export type JSONOperator = JSONMapper | JSONLazyCompute | Reducer<Json, Json>;
 
 export type HandlerInfo<P> = {
   object: P;
@@ -281,7 +281,6 @@ class EagerCollectionImpl<K extends Json, V extends Json>
       } else {
         const skreducer = this.refs.binding.SkipRuntime_createReducer(
           this.refs.handles.register(reducerObj),
-          this.refs.json().exportJSON(reducerObj.object.initial),
         );
         return this.derive<K2, Accum>(
           this.refs.binding.SkipRuntime_Collection__mapReduce(
@@ -312,7 +311,6 @@ class EagerCollectionImpl<K extends Json, V extends Json>
     } else {
       const skreducer = this.refs.binding.SkipRuntime_createReducer(
         this.refs.handles.register(reducerObj),
-        this.refs.json().exportJSON(reducerObj.object.initial),
       );
       return this.derive<K, Accum>(
         this.refs.binding.SkipRuntime_Collection__reduce(
@@ -1035,6 +1033,14 @@ export class ToBinding {
 
   // Reducer
 
+  SkipRuntime_Reducer__init(
+    skreducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
+  ): Pointer<Internal.CJSON> {
+    const skjson = this.getJsonConverter();
+    const reducer = this.handles.get(skreducer);
+    return skjson.exportJSON(reducer.object.initial);
+  }
+
   SkipRuntime_Reducer__add(
     skreducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
     skacc: Nullable<Pointer<Internal.CJSON>>,
@@ -1063,6 +1069,19 @@ export class ToBinding {
         skjson.importJSON(skvalue) as Json & DepSafe,
       ),
     );
+  }
+
+  SkipRuntime_Reducer__isEquals(
+    reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
+    other: Handle<HandlerInfo<Reducer<Json, Json>>>,
+  ): number {
+    return this.isEquals(reducer, other);
+  }
+
+  SkipRuntime_Reducer__getInfo(
+    reducer: Handle<HandlerInfo<Reducer<Json, Json>>>,
+  ): Pointer<Internal.CJObject> {
+    return this.getInfo(reducer);
   }
 
   SkipRuntime_deleteReducer(
