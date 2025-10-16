@@ -44,6 +44,7 @@ import {
   SkipNonUniqueValueError,
   SkipResourceInstanceInUseError,
   SkipUnknownCollectionError,
+  SkipIncompatibleServiceError,
 } from "./errors.js";
 import { type Notifier, type Handle, type FromBinding } from "./binding.js";
 
@@ -78,6 +79,13 @@ function instantiateUserObject<Params extends DepSafe[], Result extends object>(
     name: obj.constructor.name,
     params: checkedParams,
   };
+}
+
+export interface LoadPolicy {
+  isServiceLoadable(
+    loaded: ServiceDefinition,
+    toLoad: ServiceDefinition,
+  ): boolean;
 }
 
 export class ServiceDefinition {
@@ -547,6 +555,7 @@ export class ServiceInstance {
   constructor(
     private readonly refs: ToBinding,
     readonly forkName: Nullable<string>,
+    private definition: ServiceDefinition,
   ) {}
 
   /**
@@ -775,6 +784,39 @@ export class ServiceInstance {
     }
   }
 
+  async reload(
+    definition: ServiceDefinition,
+    policy: LoadPolicy,
+  ): Promise<void> {
+    if (policy.isServiceLoadable(this.definition, definition)) {
+      throw new SkipIncompatibleServiceError(
+        "The new service is incompatible with previous one, hard reload is necessary",
+      );
+    }
+    this.refs.setFork(this.forkName);
+    const uuid = crypto.randomUUID();
+    const fork = this.fork(uuid);
+    try {
+      await fork._reload(definition, policy);
+      fork.merge();
+    } catch (ex: unknown) {
+      fork.abortFork();
+      throw ex;
+    }
+  }
+
+  private _reload(
+    definition: ServiceDefinition,
+    _policy: LoadPolicy,
+  ): Promise<void> {
+    return this.refs.runAsync(() => {
+      const skservicehHdl = this.refs.handles.register(definition);
+      const skservice =
+        this.refs.binding.SkipRuntime_createService(skservicehHdl);
+      return this.refs.binding.SkipRuntime_Runtime__reload(skservice);
+    });
+  }
+
   /**
    * Fork the service with current specified name.
    * @param name - the name of the fork.
@@ -784,7 +826,7 @@ export class ServiceInstance {
     if (this.forkName) throw new Error(`Unable to fork ${this.forkName}.`);
     this.refs.setFork(this.forkName);
     this.refs.fork(name);
-    return new ServiceInstance(this.refs, name);
+    return new ServiceInstance(this.refs, name, this.definition);
   }
 
   private merge(): void {
@@ -1221,10 +1263,11 @@ export class ToBinding {
     this.fork(uuid);
     try {
       this.setFork(uuid);
-      await this.initService_(service);
+      const definition = new ServiceDefinition(service);
+      await this.initService_(definition);
       this.setFork(uuid);
       this.merge();
-      return new ServiceInstance(this, null);
+      return new ServiceInstance(this, null, definition);
     } catch (ex: unknown) {
       this.setFork(uuid);
       this.abortFork();
@@ -1232,9 +1275,8 @@ export class ToBinding {
     }
   }
 
-  private initService_(service: SkipService): Promise<void> {
+  private initService_(definition: ServiceDefinition): Promise<void> {
     return this.runAsync(() => {
-      const definition = new ServiceDefinition(service);
       const skservicehHdl = this.handles.register(definition);
       const skservice = this.binding.SkipRuntime_createService(skservicehHdl);
       return this.binding.SkipRuntime_initService(skservice);

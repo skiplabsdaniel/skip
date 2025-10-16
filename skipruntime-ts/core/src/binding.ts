@@ -176,6 +176,10 @@ export interface FromBinding {
   SkipRuntime_Runtime__abortFork(): Handle<Error>;
   SkipRuntime_Runtime__forkExists(name: string): boolean;
 
+  SkipRuntime_Runtime__reload(
+    service: Pointer<Internal.Service>,
+  ): Pointer<Internal.CJSON>;
+
   // Reducer
 
   SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(

@@ -53,3 +53,10 @@ export class SkipNonUniqueValueError extends SkipError {}
  * @hideconstructor
  */
 export class SkipResourceInstanceInUseError extends SkipError {}
+
+/**
+ * Exception indicating a reloaded service is not compatible with the loaded one.
+ *
+ * @hideconstructor
+ */
+export class SkipIncompatibleServiceError extends SkipError {}

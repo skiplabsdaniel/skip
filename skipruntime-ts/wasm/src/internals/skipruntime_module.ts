@@ -189,6 +189,9 @@ export interface FromWasm {
   SkipRuntime_Runtime__merge(): Handle<Error>;
   SkipRuntime_Runtime__abortFork(): Handle<Error>;
   SkipRuntime_Runtime__forkExists(name: ptr<Internal.String>): number;
+  SkipRuntime_Runtime__reload(
+    service: ptr<Internal.Service>,
+  ): ptr<Internal.CJArray<Internal.CJFloat>>;
 
   // Reducer
 
@@ -656,6 +659,12 @@ export class WasmFromBinding implements FromBinding {
     return this.fromWasm.SkipRuntime_Runtime__abortFork();
   }
 
+  SkipRuntime_Runtime__reload(
+    service: Pointer<Internal.Service>,
+  ): Pointer<Internal.CJArray<Internal.CJFloat>> {
+    return this.fromWasm.SkipRuntime_Runtime__reload(toPtr(service));
+  }
+
   SkipRuntime_createReducer<K1 extends Json, V1 extends Json>(
     ref: Handle<HandlerInfo<Reducer<K1, V1>>>,
   ): Pointer<Internal.Reducer> {
@@ -664,7 +673,7 @@ export class WasmFromBinding implements FromBinding {
 
   SkipRuntime_initService(
     service: Pointer<Internal.Service>,
-  ): ptr<Internal.CJSON> {
+  ): Pointer<Internal.CJSON> {
     return this.fromWasm.SkipRuntime_initService(toPtr(service));
   }
 

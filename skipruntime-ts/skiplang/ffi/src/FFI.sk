@@ -669,6 +669,15 @@ fun forkExistsOfRuntime(name: String): UInt32 {
   UInt32::truncate(if (SKStore.forkExists(name)) 1 else 0);
 }
 
+@export("SkipRuntime_Runtime__reload")
+fun reloadOfRuntime(service: Service): SKJSON.CJSON {
+  reload(service) match {
+  | Success(handles) ->
+    SKJSON.CJArray(handles.map(h -> SKJSON.CJFloat(h.value)))
+  | Failure(err) -> SKJSON.CJFloat(getErrorHdl(err))
+  };
+}
+
 /************ Context ****************/
 
 @export("SkipRuntime_Context__createLazyCollection")

@@ -228,6 +228,27 @@ fun initService(service: Service): Result<Array<Waitable>, .Exception> {
   })
 }
 
+fun reload(service: Service): Result<Array<Waitable>, .Exception> {
+  runWithResult(context ~> {
+    sessionHdl = SKStore.EHandle(
+      SKStore.UnitID::keyType,
+      ServiceDefinition::type,
+      kSessionDir,
+    );
+    sessionHdl.maybeGet(context, SKStore.UnitID::singleton) match {
+    | Some(current) ->
+      sessionHdl.writeArray(
+        context,
+        SKStore.UnitID::singleton,
+        Array[ServiceDefinition(current.runId, service)],
+      );
+      updateContext(context);
+      getSubscriptions(context)
+    | None() -> invariant_violation("No service loaded")
+    }
+  })
+}
+
 fun closeService_(
   context: mutable SKStore.Context,
   update: Bool = true,
