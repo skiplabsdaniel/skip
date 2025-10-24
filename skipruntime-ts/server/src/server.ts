@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import type { SkipService } from "@skipruntime/core";
+import type { SkipService, TypeDef } from "@skipruntime/core";
 import { controlService, streamingService } from "./rest.js";
 import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
@@ -95,8 +95,8 @@ export type SkipServer = {
  * @param options.no_cors - Disable CORS for the streaming endpoint.
  * @returns Object to manage the running server.
  */
-export async function runService(
-  service: SkipService,
+export async function runService<I extends TypeDef, RI extends TypeDef>(
+  service: SkipService<I, RI>,
   options: {
     streaming_port: number;
     control_port: number;

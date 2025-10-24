@@ -9,7 +9,7 @@ import { init as runtimeInit } from "../skipwasm-std/sk_runtime.js";
 import { init as posixInit } from "../skipwasm-std/sk_posix.js";
 import { init as skjsonInit } from "../skipwasm-json/skjson.js";
 import { init as skruntimeInit } from "./internals/skipruntime_module.js";
-import type { SkipService, ServiceInstance } from "@skipruntime/core";
+import type { SkipService, ServiceInstance, TypeDef } from "@skipruntime/core";
 
 const modules: ModuleInit[] = [
   runtimeInit,
@@ -35,10 +35,10 @@ async function wasmUrl(): Promise<URL | string> {
   return new URL("./libskipruntime.wasm", import.meta.url);
 }
 
-export async function initServiceFor(
+export async function initServiceFor<I extends TypeDef, RI extends TypeDef>(
   createEnvironment: EnvCreator,
-  service: SkipService,
-): Promise<ServiceInstance> {
+  service: SkipService<I, RI>,
+): Promise<ServiceInstance<I, RI>> {
   const data = await run(wasmUrl, modules, [], createEnvironment);
   const factory = data.environment.shared.get(
     "ServiceInstanceFactory",

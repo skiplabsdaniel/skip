@@ -3,6 +3,7 @@ import {
   type InitialData,
   type Json,
   type Mapper,
+  type NamedCollections,
   type Resource,
   type Values,
 } from "@skipruntime/core";
@@ -18,16 +19,20 @@ type User = { name: string; active?: boolean; friends: UserID[] };
 type Group = { name: string; members: UserID[] };
 
 // Type alias for inputs to our service
-type ServiceInputs = {
-  users: EagerCollection<UserID, User>;
-  groups: EagerCollection<GroupID, Group>;
+type SIT = {
+  users: [UserID, User];
+  groups: [GroupID, Group];
 };
 
+type ServiceInputs = NamedCollections<SIT>;
+
 // Type alias for inputs to the active friends resource
-type ResourceInputs = {
-  users: EagerCollection<UserID, User>;
-  activeMembers: EagerCollection<GroupID, UserID>;
+type RIT = {
+  users: [UserID, User];
+  activeMembers: [GroupID, UserID];
 };
+
+type ResourceInputs = NamedCollections<RIT>;
 
 // Mapper function to compute the active users of each group
 class ActiveMembers implements Mapper<GroupID, Group, GroupID, UserID> {
@@ -74,7 +79,7 @@ class FilterFriends implements Mapper<GroupID, UserID, GroupID, UserID> {
   }
 }
 
-class ActiveFriends implements Resource<ResourceInputs> {
+class ActiveFriends implements Resource<RIT> {
   private readonly uid: UserID;
 
   constructor(params: Json) {
@@ -90,7 +95,7 @@ class ActiveFriends implements Resource<ResourceInputs> {
 }
 
 // Load initial data from a source-of-truth database (mocked for simplicity)
-const initialData: InitialData<ServiceInputs> = {
+const initialData: InitialData<SIT> = {
   users: [
     [0, [{ name: "Bob", active: true, friends: [1, 2] }]],
     [1, [{ name: "Alice", active: true, friends: [0, 2] }]],

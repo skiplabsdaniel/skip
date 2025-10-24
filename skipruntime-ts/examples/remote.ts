@@ -2,7 +2,6 @@ import type {
   Context,
   EagerCollection,
   Mapper,
-  NamedCollections,
   Resource,
   Values,
 } from "@skipruntime/core";
@@ -33,9 +32,9 @@ class Mult implements Mapper<string, [number, number], string, number> {
   }
 }
 
-class MultResource implements Resource {
+class MultResource implements Resource<never> {
   instantiate(
-    _collections: NamedCollections,
+    _collections: never,
     context: Context,
   ): EagerCollection<string, number> {
     const sub = context
@@ -63,7 +62,7 @@ const service = {
     }),
   },
 
-  createGraph(inputCollections: NamedCollections) {
+  createGraph(inputCollections: never) {
     return inputCollections;
   },
 };

@@ -4,6 +4,7 @@ import type {
   LazyCollection,
   LazyCompute,
   Mapper,
+  NamedCollections,
   Resource,
   Values,
 } from "@skipruntime/core";
@@ -75,10 +76,12 @@ class CallCompute
   }
 }
 
-type Inputs = { cells: EagerCollection<string, number | string> };
-type Outputs = { output: EagerCollection<string, number | string> };
+type IT = { cells: [string, number | string] };
+type Inputs = NamedCollections<IT>;
+type OT = { output: [string, number | string] };
+type Outputs = NamedCollections<OT>;
 
-class ComputedCells implements Resource<Outputs> {
+class ComputedCells implements Resource<OT> {
   instantiate(collections: Outputs): EagerCollection<string, number | string> {
     return collections.output;
   }

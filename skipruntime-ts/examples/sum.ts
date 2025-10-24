@@ -1,6 +1,7 @@
 import type {
   EagerCollection,
   Mapper,
+  NamedCollections,
   Resource,
   Values,
 } from "@skipruntime/core";
@@ -39,18 +40,20 @@ class Minus implements Mapper<string, [number, number], string, number> {
   }
 }
 
-type Collections = {
-  input1: EagerCollection<string, number>;
-  input2: EagerCollection<string, number>;
+type CT = {
+  input1: [string, number];
+  input2: [string, number];
 };
 
-class Add implements Resource<Collections> {
+type Collections = NamedCollections<CT>;
+
+class Add implements Resource<CT> {
   instantiate(cs: Collections): EagerCollection<string, number> {
     return cs.input1.merge(cs.input2).map(Plus);
   }
 }
 
-class Sub implements Resource<Collections> {
+class Sub implements Resource<CT> {
   instantiate(cs: Collections): EagerCollection<string, number> {
     return cs.input1
       .map(AddIndex, 0)

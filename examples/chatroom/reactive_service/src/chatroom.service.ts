@@ -3,6 +3,7 @@ import type {
   EagerCollection,
   Json,
   Mapper,
+  NamedCollections,
   Resource,
   SkipService,
   Values,
@@ -25,10 +26,12 @@ type Like = {
 
 type LikedMessage = Message & { likedBy: string[] };
 
-type ResourceInputs = {
-  messages: EagerCollection<number, Message>;
-  likersByMessage: EagerCollection<number, string>;
+type RI = {
+  messages: [number, Message];
+  likersByMessage: [number, string];
 };
+
+type ResourceInputs = NamedCollections<RI>;
 
 const kafka = new KafkaExternalService(
   {
@@ -51,6 +54,7 @@ class JoinUniqueLikers
   implements Mapper<number, Message, number, LikedMessage>
 {
   constructor(private likersByMessage: EagerCollection<number, string>) {}
+
   mapEntry(
     id: number,
     messages: Values<Message>,
@@ -61,7 +65,7 @@ class JoinUniqueLikers
   }
 }
 
-class MessagesResource implements Resource<ResourceInputs> {
+class MessagesResource implements Resource<RI> {
   private limit: number;
 
   constructor(param: Json) {
@@ -78,11 +82,10 @@ class MessagesResource implements Resource<ResourceInputs> {
   }
 }
 
-export const service: SkipService<{}, ResourceInputs> = {
-  initialData: {},
+export const service: SkipService<never, RI> = {
   resources: { messages: MessagesResource },
   externalServices: { kafka },
-  createGraph(_: {}, context: Context): ResourceInputs {
+  createGraph(_: never, context: Context): ResourceInputs {
     const messages = context.useExternalResource<number, Message>({
       service: "kafka",
       identifier: "skip-chatroom-messages",

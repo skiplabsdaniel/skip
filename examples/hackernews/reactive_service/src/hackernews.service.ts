@@ -19,6 +19,8 @@ import type {
   Session,
   Upvote,
   User,
+  PRI,
+  SRI,
 } from "./types.js";
 
 // Default user for posts where the author is not found
@@ -26,11 +28,11 @@ const unknownUser: User = { name: "unknown author", email: "unknown email" };
 
 // Initialize PostgreSQL connection
 const postgres = new PostgresExternalService({
-  host: process.env["PG_HOST"] || "db",
+  host: process.env["PG_HOST"] ?? "db",
   port: Number(process.env["PG_PORT"]) || 5432,
-  database: process.env["PG_DATABASE"] || "postgres",
-  user: process.env["PG_USER"] || "postgres",
-  password: process.env["PG_PASSWORD"] || "change_me",
+  database: process.env["PG_DATABASE"] ?? "postgres",
+  user: process.env["PG_USER"] ?? "postgres",
+  password: process.env["PG_PASSWORD"] ?? "change_me",
 });
 
 /**
@@ -109,7 +111,7 @@ class CleanupMapper {
  * Resource handler for posts
  * Manages post retrieval with pagination and session context
  */
-class PostsResource implements Resource<PostsResourceInputs> {
+class PostsResource implements Resource<PRI> {
   private limit: number;
   private session_id: string;
 
@@ -120,7 +122,7 @@ class PostsResource implements Resource<PostsResourceInputs> {
     else this.limit = params.limit;
     if (params.session_id === undefined)
       throw new Error("Missing required session_id.");
-    else this.session_id = params.session_id as string;
+    else this.session_id = params.session_id;
   }
 
   instantiate(
@@ -158,14 +160,14 @@ class FilterSessionMapper {
  * Resource handler for sessions
  * Manages user session data
  */
-class SessionsResource implements Resource<SessionsResourceInputs> {
+class SessionsResource implements Resource<SRI> {
   private session_id: string;
 
   constructor(jsonParams: Json) {
     const params = jsonParams as PostsResourceParams;
     if (params.session_id === undefined)
       throw new Error("Missing required session_id.");
-    else this.session_id = params.session_id as string;
+    else this.session_id = params.session_id;
   }
 
   instantiate(
@@ -179,8 +181,9 @@ class SessionsResource implements Resource<SessionsResourceInputs> {
  * Main service definition
  * Configures resources, external services, and data flow
  */
-export const service: SkipService<PostsServiceInputs, PostsResourceInputs> = {
+export const service: SkipService<PRI, PRI> = {
   initialData: {
+    postsWithUpvotes: [],
     sessions: [],
   },
   resources: { posts: PostsResource, sessions: SessionsResource },

@@ -1,5 +1,5 @@
 import type { Exception as IException } from "@skipruntime/core/internal.js";
-import { ServiceInstance, ToBinding } from "@skipruntime/core";
+import { ServiceInstance, ToBinding, type TypeDef } from "@skipruntime/core";
 import type { FromBinding as SkipRuntimeFromBinding } from "@skipruntime/core/binding.js";
 import {
   buildJsonConverter,
@@ -31,11 +31,13 @@ const tobinding = new ToBinding(
   skip_runtime.getErrorObject,
 );
 
-export function initService(service: SkipService): Promise<ServiceInstance> {
+export function initService<I extends TypeDef, RI extends TypeDef>(
+  service: SkipService<I, RI>,
+): Promise<ServiceInstance<I, RI>> {
   skip_runtime.initSkipRuntimeToBinding(tobinding);
   try {
     return Promise.resolve(tobinding.initService(service));
   } catch (e: unknown) {
-    return Promise.reject<ServiceInstance>(e as Error);
+    return Promise.reject(e as Error);
   }
 }

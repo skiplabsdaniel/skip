@@ -2,6 +2,7 @@ import type {
   Context,
   EagerCollection,
   Json,
+  NamedCollections,
   Resource,
   SkipService,
 } from "@skipruntime/core";
@@ -26,9 +27,10 @@ type Result = {
   results: Departure[];
 };
 
-type ResourceInputs = { config: EagerCollection<string, (string | number)[]> };
+type RIT = { config: [string, (string | number)[]] };
+type ResourceInputs = NamedCollections<RIT>;
 
-class DeparturesResource implements Resource<ResourceInputs> {
+class DeparturesResource implements Resource<RIT> {
   instantiate(
     cs: ResourceInputs,
     context: Context,
@@ -51,7 +53,7 @@ class DeparturesResource implements Resource<ResourceInputs> {
   }
 }
 
-const service: SkipService<ResourceInputs, ResourceInputs> = {
+const service: SkipService<RIT, RIT> = {
   initialData: { config: [] },
   resources: {
     departures: DeparturesResource,

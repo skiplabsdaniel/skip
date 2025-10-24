@@ -37,6 +37,7 @@ import {
   type SkipService,
   type Watermark,
   type ExternalService,
+  type TypeDef,
 } from "./api.js";
 
 import {
@@ -96,13 +97,16 @@ export interface ChangeManager {
   needLazyComputeReload(name: string): boolean;
 }
 
-export class ServiceDefinition {
+export class ServiceDefinition<
+  Inputs extends TypeDef,
+  ResourceInputs extends TypeDef,
+> {
   constructor(
-    private service: SkipService,
+    private service: SkipService<Inputs, ResourceInputs>,
     private readonly externals: Map<string, ExternalService> = new Map(),
   ) {}
 
-  buildResource(name: string, parameters: Json): Resource {
+  buildResource(name: string, parameters: Json): Resource<ResourceInputs> {
     const builder = this.service.resources[name];
     if (!builder) throw new Error(`Resource '${name}' not exist.`);
     return new builder(parameters);
@@ -126,9 +130,9 @@ export class ServiceDefinition {
   }
 
   createGraph(
-    inputCollections: NamedCollections,
+    inputCollections: NamedCollections<Inputs>,
     context: Context,
-  ): NamedCollections {
+  ): NamedCollections<ResourceInputs> {
     return this.service.createGraph(inputCollections, context);
   }
 
@@ -183,7 +187,9 @@ export class ServiceDefinition {
     await Promise.all(promises);
   }
 
-  derive(service: SkipService): ServiceDefinition {
+  derive(
+    service: SkipService<Inputs, ResourceInputs>,
+  ): ServiceDefinition<Inputs, ResourceInputs> {
     return new ServiceDefinition(service, new Map(this.externals));
   }
 }
@@ -559,9 +565,15 @@ class ContextImpl implements Context {
 }
 
 export class ServiceInstanceFactory {
-  constructor(private init: (service: SkipService) => ServiceInstance) {}
+  constructor(
+    private init: <I extends TypeDef, RI extends TypeDef>(
+      service: SkipService<I, RI>,
+    ) => ServiceInstance<I, RI>,
+  ) {}
 
-  initService(service: SkipService): ServiceInstance {
+  initService<I extends TypeDef, RI extends TypeDef>(
+    service: SkipService<I, RI>,
+  ): ServiceInstance<I, RI> {
     return this.init(service);
   }
 }
@@ -572,11 +584,11 @@ export type SubscriptionID = Opaque<string, "subscription">;
  * A `ServiceInstance` is a running instance of a `SkipService`, providing access to its resources
  * and operations to manage subscriptions and the service itself.
  */
-export class ServiceInstance {
+export class ServiceInstance<I extends TypeDef, RI extends TypeDef> {
   constructor(
     private readonly refs: ToBinding,
     readonly forkName: Nullable<string>,
-    private definition: ServiceDefinition,
+    private definition: ServiceDefinition<I, RI>,
   ) {}
 
   /**
@@ -805,7 +817,10 @@ export class ServiceInstance {
     }
   }
 
-  async reload(service: SkipService, changes: ChangeManager): Promise<void> {
+  async reload(
+    service: SkipService<I, RI>,
+    changes: ChangeManager,
+  ): Promise<void> {
     if (this.forkName) {
       throw new SkipError("Reload cannot be called in transaction.");
     }
@@ -828,7 +843,7 @@ export class ServiceInstance {
   }
 
   private async _reload(
-    definition: ServiceDefinition,
+    definition: ServiceDefinition<I, RI>,
     changes: ChangeManager,
   ): Promise<string[]> {
     this.refs.setFork(this.forkName);
@@ -858,7 +873,7 @@ export class ServiceInstance {
    * @param name - the name of the fork.
    * @returns The forked ServiceInstance
    */
-  private fork(name: string): ServiceInstance {
+  private fork(name: string): ServiceInstance<I, RI> {
     if (this.forkName) throw new Error(`Unable to fork ${this.forkName}.`);
     this.refs.setFork(this.forkName);
     this.refs.fork(name);
@@ -1097,68 +1112,87 @@ export class ToBinding {
 
   // Resource
 
-  SkipRuntime_Resource__instantiate(
-    skresource: Handle<Resource>,
+  SkipRuntime_Resource__instantiate<RI extends TypeDef>(
+    skresource: Handle<Resource<RI>>,
     skcollections: Pointer<Internal.CJObject>,
   ): string {
     const skjson = this.getJsonConverter();
     const resource = this.handles.get(skresource);
-    const collections: NamedCollections = {};
+    const collections: { [name: string]: EagerCollection<Json, Json> } = {};
     const keysIds = skjson.importJSON(skcollections) as {
       [key: string]: string;
     };
     for (const [key, name] of Object.entries(keysIds)) {
       collections[key] = new EagerCollectionImpl<Json, Json>(name, this);
     }
-    const collection = resource.instantiate(collections, new ContextImpl(this));
+    const collection = resource.instantiate(
+      collections as NamedCollections<RI>,
+      new ContextImpl(this),
+    );
     return EagerCollectionImpl.getName(collection);
   }
 
-  SkipRuntime_deleteResource(resource: Handle<Resource>): void {
+  SkipRuntime_deleteResource<RI extends TypeDef>(
+    resource: Handle<Resource<RI>>,
+  ): void {
     this.handles.deleteHandle(resource);
   }
 
   // ServiceDefinition
 
-  SkipRuntime_ServiceDefinition__createGraph(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__createGraph<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     skcollections: Pointer<Internal.CJObject>,
   ): Pointer<Internal.CJObject> {
     const skjson = this.getJsonConverter();
     const service = this.handles.get(skservice);
-    const collections: NamedCollections = {};
+    const collections: { [name: string]: EagerCollection<Json, Json> } = {};
     const keysIds = skjson.importJSON(skcollections) as {
       [key: string]: string;
     };
     for (const [key, name] of Object.entries(keysIds)) {
       collections[key] = new EagerCollectionImpl<Json, Json>(name, this);
     }
-    const result = service.createGraph(collections, new ContextImpl(this));
+    const result = service.createGraph(
+      collections as NamedCollections<I>,
+      new ContextImpl(this),
+    );
     const collectionsNames: { [name: string]: string } = {};
     for (const [name, collection] of Object.entries(result)) {
-      collectionsNames[name] = EagerCollectionImpl.getName(collection);
+      collectionsNames[name] = EagerCollectionImpl.getName(
+        collection as EagerCollectionImpl<Json, Json>,
+      );
     }
     return skjson.exportJSON(collectionsNames);
   }
 
-  SkipRuntime_ServiceDefinition__inputs(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__inputs<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
   ): Pointer<Internal.CJArray<Internal.CJSON>> {
     const skjson = this.getJsonConverter();
     const service = this.handles.get(skservice);
     return skjson.exportJSON(service.inputs());
   }
 
-  SkipRuntime_ServiceDefinition__resources(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__resources<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
   ): Pointer<Internal.CJArray<Internal.CJSON>> {
     const skjson = this.getJsonConverter();
     const service = this.handles.get(skservice);
     return skjson.exportJSON(service.resources());
   }
 
-  SkipRuntime_ServiceDefinition__initialData(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__initialData<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     name: string,
   ): Pointer<Internal.CJArray<Internal.CJSON>> {
     const skjson = this.getJsonConverter();
@@ -1166,8 +1200,11 @@ export class ToBinding {
     return skjson.exportJSON(service.initialData(name));
   }
 
-  SkipRuntime_ServiceDefinition__buildResource(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__buildResource<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     name: string,
     skparams: Pointer<Internal.CJObject>,
   ): Pointer<Internal.Resource> {
@@ -1182,8 +1219,11 @@ export class ToBinding {
     );
   }
 
-  SkipRuntime_ServiceDefinition__subscribe(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__subscribe<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     external: string,
     writerId: string,
     instance: string,
@@ -1199,8 +1239,11 @@ export class ToBinding {
     );
   }
 
-  SkipRuntime_ServiceDefinition__unsubscribe(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__unsubscribe<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     external: string,
     instance: string,
   ): void {
@@ -1208,14 +1251,17 @@ export class ToBinding {
     service.unsubscribe(external, instance);
   }
 
-  SkipRuntime_ServiceDefinition__shutdown(
-    skservice: Handle<ServiceDefinition>,
-  ): Handle<Promise<unknown>> {
+  SkipRuntime_ServiceDefinition__shutdown<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(skservice: Handle<ServiceDefinition<I, RI>>): Handle<Promise<unknown>> {
     const service = this.handles.get(skservice);
     return this.handles.register(service.shutdown());
   }
 
-  SkipRuntime_deleteService(service: Handle<ServiceDefinition>): void {
+  SkipRuntime_deleteService<I extends TypeDef, RI extends TypeDef>(
+    service: Handle<ServiceDefinition<I, RI>>,
+  ): void {
     this.handles.deleteHandle(service);
   }
 
@@ -1348,7 +1394,9 @@ export class ToBinding {
     this.handles.deleteHandle(reducer);
   }
 
-  async initService(service: SkipService): Promise<ServiceInstance> {
+  async initService<I extends TypeDef, RI extends TypeDef>(
+    service: SkipService<I, RI>,
+  ): Promise<ServiceInstance<I, RI>> {
     this.setFork(null);
     const uuid = crypto.randomUUID();
     this.fork(uuid);
@@ -1366,7 +1414,9 @@ export class ToBinding {
     }
   }
 
-  private initService_(definition: ServiceDefinition): Promise<void> {
+  private initService_<I extends TypeDef, RI extends TypeDef>(
+    definition: ServiceDefinition<I, RI>,
+  ): Promise<void> {
     return this.runAsync(() => {
       const skservicehHdl = this.handles.register(definition);
       const skservice = this.binding.SkipRuntime_createService(skservicehHdl);

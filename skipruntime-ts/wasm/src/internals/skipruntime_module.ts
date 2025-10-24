@@ -20,6 +20,7 @@ import type {
   HandlerInfo,
   ServiceDefinition,
   ChangeManager,
+  TypeDef,
 } from "@skipruntime/core";
 import {
   ServiceInstance,
@@ -80,12 +81,14 @@ export interface FromWasm {
 
   // Resource
 
-  SkipRuntime_createResource(ref: Handle<Resource>): ptr<Internal.Resource>;
+  SkipRuntime_createResource<RI extends TypeDef>(
+    ref: Handle<Resource<RI>>,
+  ): ptr<Internal.Resource>;
 
   // Service
 
-  SkipRuntime_createService(
-    ref: Handle<ServiceDefinition>,
+  SkipRuntime_createService<I extends TypeDef, RI extends TypeDef>(
+    ref: Handle<ServiceDefinition<I, RI>>,
   ): ptr<Internal.Service>;
 
   // Collection
@@ -280,41 +283,58 @@ interface ToWasm {
 
   // Resource
 
-  SkipRuntime_Resource__instantiate(
-    resource: Handle<Resource>,
+  SkipRuntime_Resource__instantiate<RI extends TypeDef>(
+    resource: Handle<Resource<RI>>,
     collections: ptr<Internal.CJObject>,
   ): ptr<Internal.String>;
 
-  SkipRuntime_deleteResource(resource: Handle<Resource>): void;
+  SkipRuntime_deleteResource<RI extends TypeDef>(
+    resource: Handle<Resource<RI>>,
+  ): void;
 
   // ServiceDefinition
 
-  SkipRuntime_ServiceDefinition__createGraph(
-    resource: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__createGraph<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    resource: Handle<ServiceDefinition<I, RI>>,
     collections: ptr<Internal.CJObject>,
   ): ptr<Internal.CJObject>;
 
-  SkipRuntime_ServiceDefinition__inputs(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__inputs<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
   ): ptr<Internal.CJArray<Internal.CJSON>>;
 
-  SkipRuntime_ServiceDefinition__resources(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__resources<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
   ): ptr<Internal.CJArray<Internal.CJSON>>;
 
-  SkipRuntime_ServiceDefinition__initialData(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__initialData<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     name: ptr<Internal.String>,
   ): ptr<Internal.CJArray<Internal.CJSON>>;
 
-  SkipRuntime_ServiceDefinition__buildResource(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__buildResource<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     name: ptr<Internal.String>,
     skparams: ptr<Internal.CJObject>,
   ): ptr<Internal.Resource>;
 
-  SkipRuntime_ServiceDefinition__subscribe(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__subscribe<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     external: ptr<Internal.String>,
     writerId: ptr<Internal.String>,
     instance: ptr<Internal.String>,
@@ -322,18 +342,26 @@ interface ToWasm {
     skparams: ptr<Internal.CJObject>,
   ): Handle<Promise<void>>;
 
-  SkipRuntime_ServiceDefinition__unsubscribe(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__unsubscribe<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     external: ptr<Internal.String>,
     instance: ptr<Internal.String>,
   ): void;
 
-  SkipRuntime_ServiceDefinition__shutdown(
-    skservice: Handle<ServiceDefinition>,
+  SkipRuntime_ServiceDefinition__shutdown<
+    I extends TypeDef,
+    RI extends TypeDef,
+  >(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     external: ptr<Internal.String>,
   ): Handle<Promise<unknown>>;
 
-  SkipRuntime_deleteService(service: Handle<ServiceDefinition>): void;
+  SkipRuntime_deleteService<I extends TypeDef, RI extends TypeDef>(
+    service: Handle<ServiceDefinition<I, RI>>,
+  ): void;
 
   // ChangeManager
 
@@ -455,14 +483,14 @@ export class WasmFromBinding implements FromBinding {
     );
   }
 
-  SkipRuntime_createResource(
-    ref: Handle<Resource>,
+  SkipRuntime_createResource<RI extends TypeDef>(
+    ref: Handle<Resource<RI>>,
   ): Pointer<Internal.Resource> {
     return this.fromWasm.SkipRuntime_createResource(ref);
   }
 
-  SkipRuntime_createService(
-    ref: Handle<ServiceDefinition>,
+  SkipRuntime_createService<I extends TypeDef, RI extends TypeDef>(
+    ref: Handle<ServiceDefinition<I, RI>>,
   ): Pointer<Internal.Service> {
     return this.fromWasm.SkipRuntime_createService(ref);
   }
@@ -866,8 +894,8 @@ class LinksImpl implements Links {
 
   // Resource
 
-  instantiateOfResource(
-    skresource: Handle<Resource>,
+  instantiateOfResource<RI extends TypeDef>(
+    skresource: Handle<Resource<RI>>,
     skcollections: ptr<Internal.CJObject>,
   ): ptr<Internal.String> {
     return this.utils.exportString(
@@ -878,14 +906,14 @@ class LinksImpl implements Links {
     );
   }
 
-  deleteResource(resource: Handle<Resource>) {
+  deleteResource<RI extends TypeDef>(resource: Handle<Resource<RI>>) {
     this.tobinding.SkipRuntime_deleteResource(resource);
   }
 
   // ServiceDefinition
 
-  createGraphOfServiceDefinition(
-    skservice: Handle<ServiceDefinition>,
+  createGraphOfServiceDefinition<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     skcollections: ptr<Internal.CJObject>,
   ) {
     return toPtr(
@@ -896,24 +924,24 @@ class LinksImpl implements Links {
     );
   }
 
-  inputsOfServiceDefinition(
-    skservice: Handle<ServiceDefinition>,
+  inputsOfServiceDefinition<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
   ): ptr<Internal.CJArray<Internal.CJSON>> {
     return toPtr(
       this.tobinding.SkipRuntime_ServiceDefinition__inputs(skservice),
     );
   }
 
-  resourcesOfServiceDefinition(
-    skservice: Handle<ServiceDefinition>,
+  resourcesOfServiceDefinition<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
   ): ptr<Internal.CJArray<Internal.CJSON>> {
     return toPtr(
       this.tobinding.SkipRuntime_ServiceDefinition__resources(skservice),
     );
   }
 
-  initialDataOfServiceDefinition(
-    skservice: Handle<ServiceDefinition>,
+  initialDataOfServiceDefinition<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     name: ptr<Internal.String>,
   ): ptr<Internal.CJArray<Internal.CJSON>> {
     return toPtr(
@@ -924,8 +952,8 @@ class LinksImpl implements Links {
     );
   }
 
-  buildResourceOfServiceDefinition(
-    skservice: Handle<ServiceDefinition>,
+  buildResourceOfServiceDefinition<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     name: ptr<Internal.String>,
     skparams: ptr<Internal.CJObject>,
   ): ptr<Internal.Resource> {
@@ -938,8 +966,8 @@ class LinksImpl implements Links {
     );
   }
 
-  subscribeOfServiceDefinition(
-    skservice: Handle<ServiceDefinition>,
+  subscribeOfServiceDefinition<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     external: ptr<Internal.String>,
     writerId: ptr<Internal.String>,
     instance: ptr<Internal.String>,
@@ -956,8 +984,8 @@ class LinksImpl implements Links {
     );
   }
 
-  unsubscribeOfServiceDefinition(
-    skservice: Handle<ServiceDefinition>,
+  unsubscribeOfServiceDefinition<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
     external: ptr<Internal.String>,
     instance: ptr<Internal.String>,
   ): void {
@@ -968,13 +996,15 @@ class LinksImpl implements Links {
     );
   }
 
-  shutdownOfServiceDefinition(
-    skservice: Handle<ServiceDefinition>,
+  shutdownOfServiceDefinition<I extends TypeDef, RI extends TypeDef>(
+    skservice: Handle<ServiceDefinition<I, RI>>,
   ): Handle<Promise<unknown>> {
     return this.tobinding.SkipRuntime_ServiceDefinition__shutdown(skservice);
   }
 
-  deleteService(service: Handle<ServiceDefinition>) {
+  deleteService<I extends TypeDef, RI extends TypeDef>(
+    service: Handle<ServiceDefinition<I, RI>>,
+  ) {
     this.tobinding.SkipRuntime_deleteService(service);
   }
 
@@ -1091,10 +1121,14 @@ class LinksImpl implements Links {
 
 export class ServiceInstanceFactory implements Shared {
   constructor(
-    private readonly init: (service: SkipService) => Promise<ServiceInstance>,
+    private readonly init: <I extends TypeDef, RI extends TypeDef>(
+      service: SkipService<I, RI>,
+    ) => Promise<ServiceInstance<I, RI>>,
   ) {}
 
-  initService(service: SkipService): Promise<ServiceInstance> {
+  initService<I extends TypeDef, RI extends TypeDef>(
+    service: SkipService<I, RI>,
+  ): Promise<ServiceInstance<I, RI>> {
     return this.init(service);
   }
 

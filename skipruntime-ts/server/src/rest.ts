@@ -5,9 +5,11 @@ import {
   SkipResourceInstanceInUseError,
   SkipRESTError,
 } from "@skipruntime/core";
-import type { CollectionUpdate, Entry, Json } from "@skipruntime/core";
+import type { CollectionUpdate, Entry, Json, TypeDef } from "@skipruntime/core";
 
-export function controlService(service: ServiceInstance): express.Express {
+export function controlService<I extends TypeDef, RI extends TypeDef>(
+  service: ServiceInstance<I, RI>,
+): express.Express {
   const app = express();
   app.use(express.json({ strict: false }));
 
@@ -104,7 +106,9 @@ export function controlService(service: ServiceInstance): express.Express {
   return app;
 }
 
-export function streamingService(service: ServiceInstance): express.Express {
+export function streamingService<I extends TypeDef, RI extends TypeDef>(
+  service: ServiceInstance<I, RI>,
+): express.Express {
   const app = express();
 
   app.get("/v1/streams/:uuid", (req, res) => {

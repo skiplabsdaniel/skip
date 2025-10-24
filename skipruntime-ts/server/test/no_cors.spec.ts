@@ -1,5 +1,10 @@
 import { runService, type SkipServer } from "../src/server.js";
-import type { Context, EagerCollection, Resource } from "@skipruntime/core";
+import type {
+  Context,
+  EagerCollection,
+  NamedCollections,
+  Resource,
+} from "@skipruntime/core";
 import { expect } from "chai";
 
 type Post = {
@@ -10,11 +15,13 @@ type Post = {
   date: number;
 };
 
-type PostsResourceInputs = {
-  posts: EagerCollection<number, Post>;
+type PIT = {
+  posts: [number, Post];
 };
 
-class PostsResource implements Resource<PostsResourceInputs> {
+type PostsResourceInputs = NamedCollections<PIT>;
+
+class PostsResource implements Resource<PIT> {
   instantiate(collections: PostsResourceInputs): EagerCollection<number, Post> {
     return collections.posts;
   }

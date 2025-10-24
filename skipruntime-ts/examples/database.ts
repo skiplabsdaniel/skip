@@ -3,6 +3,7 @@ import type {
   SkipService,
   Resource,
   Entry,
+  NamedCollections,
 } from "@skipruntime/core";
 
 import { runService } from "@skipruntime/server";
@@ -48,10 +49,13 @@ function initDB(): Database.Database {
 
 type User = { name: string; country: string };
 
-type UsersCollection = {
-  users: EagerCollection<string, User>;
+type UCT = {
+  users: [string, User];
 };
-class UsersResource implements Resource<UsersCollection> {
+
+type UsersCollection = NamedCollections<UCT>;
+
+class UsersResource implements Resource<UCT> {
   instantiate(cs: UsersCollection): UsersCollection["users"] {
     return cs.users;
   }
@@ -63,7 +67,7 @@ class UsersResource implements Resource<UsersCollection> {
 
 function serviceWithInitialData(
   users: Entry<string, User>[],
-): SkipService<UsersCollection, UsersCollection> {
+): SkipService<UCT, UCT> {
   return {
     initialData: { users },
     resources: { users: UsersResource },

@@ -1,26 +1,18 @@
 import type { Pointer, Nullable, Json } from "../skiplang-json/index.js";
 import type * as Internal from "./internal.js";
 
-import {
-  type CollectionUpdate,
-  type ExternalService,
-  type LazyCompute,
-  type Mapper,
-  type Reducer,
-  type Resource,
+import type {
+  CollectionUpdate,
+  ExternalService,
+  LazyCompute,
+  Mapper,
+  Reducer,
+  Resource,
+  TypeDef,
 } from "./api.js";
 import type { HandlerInfo, ServiceDefinition } from "./index.js";
 
 export type Handle<T> = Internal.Opaque<number, { handle_for: T }>;
-
-export class ResourceBuilder {
-  constructor(private readonly builder: new (params: Json) => Resource) {}
-
-  build(parameters: Json): Resource {
-    const builder = this.builder;
-    return new builder(parameters);
-  }
-}
 
 export type Notifier<K extends Json, V extends Json> = {
   subscribed: () => void;
@@ -70,12 +62,14 @@ export interface FromBinding {
 
   // Resource
 
-  SkipRuntime_createResource(ref: Handle<Resource>): Pointer<Internal.Resource>;
+  SkipRuntime_createResource<RI extends TypeDef>(
+    ref: Handle<Resource<RI>>,
+  ): Pointer<Internal.Resource>;
 
   // Service
 
-  SkipRuntime_createService(
-    ref: Handle<ServiceDefinition>,
+  SkipRuntime_createService<I extends TypeDef, RI extends TypeDef>(
+    ref: Handle<ServiceDefinition<I, RI>>,
   ): Pointer<Internal.Service>;
 
   // Collection

@@ -1,4 +1,4 @@
-import type { EagerCollection } from "@skipruntime/core";
+import type { EagerCollection, NamedCollections } from "@skipruntime/core";
 
 type Post = {
   author_id: number;
@@ -34,16 +34,20 @@ type PostsServiceInputs = {
   sessions: EagerCollection<string, Session>;
 };
 
-type PostsResourceInputs = {
-  postsWithUpvotes: EagerCollection<[number, number], PostWithUpvoteIds>;
-  sessions: EagerCollection<string, Session>;
+type PRI = {
+  postsWithUpvotes: [[number, number], PostWithUpvoteIds];
+  sessions: [string, Session];
 };
+
+type PostsResourceInputs = NamedCollections<PRI>;
 
 type PostsResourceParams = { limit?: number; session_id?: string };
 
-type SessionsResourceInputs = {
-  sessions: EagerCollection<string, Session>;
+type SRI = {
+  sessions: [string, Session];
 };
+
+type SessionsResourceInputs = NamedCollections<SRI>;
 
 export type {
   Post,
@@ -56,4 +60,6 @@ export type {
   PostsResourceParams,
   Session,
   PostsServiceInputs,
+  SRI,
+  PRI,
 };

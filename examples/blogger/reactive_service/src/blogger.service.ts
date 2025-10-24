@@ -5,6 +5,7 @@ import type {
   Values,
   Resource,
   SkipService,
+  NamedCollections,
 } from "@skipruntime/core";
 
 import { PostgresExternalService } from "@skip-adapter/postgres";
@@ -80,13 +81,15 @@ class PostsMapper {
   }
 }
 
-type PostsResourceInputs = {
-  posts: EagerCollection<number, PostWithAuthor>;
+type PRI = {
+  posts: [number, PostWithAuthor];
 };
+
+type PostsResourceInputs = NamedCollections<PRI>;
 
 type PostsResourceParams = { limit?: number };
 
-class PostsResource implements Resource<PostsResourceInputs> {
+class PostsResource implements Resource<PRI> {
   private limit: number;
 
   constructor(jsonParams: Json) {
@@ -102,16 +105,10 @@ class PostsResource implements Resource<PostsResourceInputs> {
   }
 }
 
-type PostsServiceInputs = Record<string, never>;
-
-export const service: SkipService<PostsServiceInputs, PostsResourceInputs> = {
-  initialData: {},
+export const service: SkipService<never, PRI> = {
   resources: { posts: PostsResource },
   externalServices: { postgres },
-  createGraph(
-    _inputs: PostsServiceInputs,
-    context: Context,
-  ): PostsResourceInputs {
+  createGraph(_inputs: never, context: Context): PostsResourceInputs {
     const serialIDKey = { key: { col: "id", type: "SERIAL" } };
     const posts = context.useExternalResource<number, Post>({
       service: "postgres",

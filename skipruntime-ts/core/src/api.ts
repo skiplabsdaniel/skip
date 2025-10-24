@@ -458,7 +458,11 @@ export interface ExternalService {
 /**
  * Association of names to collections.
  */
-export type NamedCollections = { [name: string]: EagerCollection<Json, Json> };
+export type TypeDef = { [name: string]: [Json, Json] };
+
+export type NamedCollections<T extends TypeDef> = {
+  [K in keyof T]: EagerCollection<T[K][0], T[K][1]>;
+};
 
 /**
  * Resource provided by a `SkipService`.
@@ -467,9 +471,7 @@ export type NamedCollections = { [name: string]: EagerCollection<Json, Json> };
  *
  * @typeParam Collections - Collections provided to the resource computation by the service's `createGraph`.
  */
-export interface Resource<
-  Collections extends NamedCollections = NamedCollections,
-> {
+export interface Resource<T extends TypeDef> {
   /**
    * Build the reactive compute graph of the reactive resource.
    *
@@ -478,7 +480,7 @@ export interface Resource<
    * @returns An eager collection containing the outputs of this resource for the given parameters, produced from the shared reactive compute graph output collections of the service's `createGraph`.
    */
   instantiate(
-    collections: Collections,
+    collections: NamedCollections<T>,
     context: Context,
   ): EagerCollection<Json, Json>;
 }
@@ -490,8 +492,11 @@ export interface Resource<
  *
  * @typeParam Inputs - Collections provided to the service's `createGraph`.
  */
-export type InitialData<Inputs extends NamedCollections> = {
-  [Name in keyof Inputs]: Inputs[Name] extends EagerCollection<infer K, infer V>
+export type InitialData<T extends { [name: string]: [Json, Json] }> = {
+  [Name in keyof NamedCollections<T>]: NamedCollections<T>[Name] extends EagerCollection<
+    infer K,
+    infer V
+  >
     ? Entry<K, V>[]
     : Entry<Json, Json>[];
 };
@@ -542,8 +547,8 @@ export type InitialData<Inputs extends NamedCollections> = {
  * @typeParam ResourceInputs - Collections provided to the resource computation by the service's `createGraph`.
  */
 export interface SkipService<
-  Inputs extends NamedCollections = NamedCollections,
-  ResourceInputs extends NamedCollections = NamedCollections,
+  Inputs extends { [name: string]: [Json, Json] },
+  ResourceInputs extends { [name: string]: [Json, Json] },
 > {
   /**
    * Initial data for this service's input collections.
@@ -567,5 +572,8 @@ export interface SkipService<
    * @param context - Skip Runtime internal state.
    * @returns Reactive collections accessible to the resources.
    */
-  createGraph(inputCollections: Inputs, context: Context): ResourceInputs;
+  createGraph(
+    inputCollections: NamedCollections<Inputs>,
+    context: Context,
+  ): NamedCollections<ResourceInputs>;
 }
