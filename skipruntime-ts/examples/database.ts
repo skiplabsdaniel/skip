@@ -1,5 +1,4 @@
 import type {
-  EagerCollection,
   SkipService,
   Resource,
   Entry,
