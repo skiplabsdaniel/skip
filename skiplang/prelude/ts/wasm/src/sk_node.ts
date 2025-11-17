@@ -64,7 +64,7 @@ class Env implements Environment {
     this.fileSystem = new MemFS();
     this.system = new MemSys();
     this.timestamp = () => perf_hooks.performance.now();
-    this.decodeUTF8 = (v) => decoder.decode(v);
+    this.decodeUTF8 = (v: ArrayBuffer | Uint8Array) => decoder.decode(v);
     this.encodeUTF8 = (v) => encoder.encode(v);
     this.environment = environment ?? [];
     this.base64Decode = (base64) => Buffer.from(base64, "base64");

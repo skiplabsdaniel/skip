@@ -52,7 +52,7 @@ export async function connectAndAuth(env: DBEnvironment) {
     .crypto()
     .subtle.importKey(
       "raw",
-      env.encodeUTF8("test"),
+      env.encodeUTF8("test") as any as ArrayBuffer,
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"],
