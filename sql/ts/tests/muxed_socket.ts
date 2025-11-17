@@ -288,7 +288,7 @@ export const ms_tests: () => Test[] = () => {
           .crypto()
           .subtle.importKey(
             "raw",
-            env.encodeUTF8("very_secure"),
+            env.encodeUTF8("very_secure") as any as ArrayBuffer,
             { name: "HMAC", hash: "SHA-256" },
             false,
             ["sign"],
@@ -322,7 +322,7 @@ export const ms_tests: () => Test[] = () => {
       fun: async (env: DBEnvironment, mu: Mu) => {
         const key = await env.crypto().subtle.importKey(
           "raw",
-          env.encodeUTF8("this-is-not-correct"), // <--
+          env.encodeUTF8("this-is-not-correct") as any as ArrayBuffer, // <--
           { name: "HMAC", hash: "SHA-256" },
           false,
           ["sign"],

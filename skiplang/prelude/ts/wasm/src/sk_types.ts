@@ -251,7 +251,7 @@ export class Utils {
     this.mainFn = mainFn;
   }
   log = (str: string, kind?: Stream, newLine: boolean = false) => {
-    kind = kind ? kind : Stream.OUT;
+    kind = kind ?? Stream.OUT;
     str += newLine ? "\n" : "";
     if (kind == Stream.DEBUG) {
       // Flush buffered this.stddebug output at newlines
@@ -733,6 +733,10 @@ export function humanSize(bytes: int) {
   return `${bytes.toFixed(1)} ${units[u]}`;
 }
 
+interface InstanceSupplier {
+  instance: WebAssembly.Instance;
+}
+
 export function loadWasm(
   buffer: ArrayBuffer | Uint8Array,
   managers: ToWasmManager[],
@@ -742,9 +746,9 @@ export function loadWasm(
   const wasm = {};
   const links = managers.map((manager) => manager.prepare(wasm));
   return WebAssembly.instantiate(buffer, { env: wasm }).then((result) => {
-    const instance = result.instance;
+    const instance = (result as any as InstanceSupplier).instance;
     const exports = instance.exports;
-    const utils = new Utils(instance.exports, environment, main);
+    const utils = new Utils(exports, environment, main);
     utils.init();
     links.forEach((link) => {
       if (link) {

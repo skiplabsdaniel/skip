@@ -29,9 +29,9 @@
     "@types/node": "^22.10.0",
     "@skiplabs/eslint-config": "^0.0.1",
     "@skiplabs/tsconfig": "^0.0.1",
-    "eslint": "9.15.0",
+    "eslint": "9.39.1",
     "prettier": "^3.4.1",
-    "typescript": "^5.7.2"
+    "typescript": "^5.9.3"
   },
   "scripts": {
     "build": "npm run build --workspaces --if-present",

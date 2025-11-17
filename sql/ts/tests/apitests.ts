@@ -87,7 +87,7 @@ export async function setup(
     const keyData = testUserCreds.privateKey;
     const key = await crypto.subtle.importKey(
       "raw",
-      keyData,
+      keyData as any as ArrayBuffer,
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"],
@@ -105,7 +105,7 @@ export async function setup(
     const keyData2 = testUserCreds2.privateKey;
     const key2 = await crypto.subtle.importKey(
       "raw",
-      keyData2,
+      keyData2 as any as ArrayBuffer,
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"],

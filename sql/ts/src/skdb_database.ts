@@ -60,7 +60,7 @@ class SKDBMechanismImpl implements SKDBMechanism {
         if (change == "") {
           return;
         }
-        fn(utf8Encode(change));
+        fn(utf8Encode(change) as any as ArrayBuffer);
       });
     };
     this.getReplicationUid = (deviceUuid: string) => {
@@ -101,7 +101,7 @@ class SKDBMechanismImpl implements SKDBMechanism {
       if (d.trim() == "") {
         return null;
       }
-      return utf8Encode(d);
+      return utf8Encode(d) as any as ArrayBuffer;
     };
     this.toggleView = (table: string) => {
       return client.runLocal(["toggle-view", table], "");
@@ -160,9 +160,7 @@ export class SKDBSyncImpl implements SKDBSync {
     privateKey: CryptoKey,
     endpoint?: string,
   ): Promise<void> {
-    if (!endpoint) {
-      endpoint = "wss://api.skiplabs.io";
-    }
+    endpoint ??= "wss://api.skiplabs.io";
 
     const creds = {
       accessKey: accessKey,
