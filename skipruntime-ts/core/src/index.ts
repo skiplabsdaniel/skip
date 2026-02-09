@@ -12,11 +12,7 @@ import type {
   JsonConverter,
   JsonObject,
 } from "../skiplang-json/index.js";
-import {
-  deepFreeze,
-  SkManaged,
-  checkOrCloneParam,
-} from "../skiplang-json/index.js";
+import { deepFreeze, checkOrCloneParam } from "../skiplang-json/index.js";
 
 import { sknative } from "../skiplang-std/index.js";
 
@@ -43,6 +39,8 @@ import {
   type Logger,
   type Store,
   checkStore,
+  type SharedCollections,
+  AbstractLazyCollection,
 } from "./api.js";
 
 import {
@@ -69,6 +67,7 @@ export type HandlerInfo<P> = {
 
 function clone<T>(value: T): T {
   if (value instanceof AbstractEagerCollection) return value;
+  if (value instanceof AbstractLazyCollection) return value;
   return checkOrCloneParam(value);
 }
 
@@ -113,7 +112,7 @@ export interface ChangeManager {
 export class ServiceDefinition<
   InputDefs extends NamedInputDefinitions,
   Inputs extends NamedEagerCollections,
-  ResourceInputs extends NamedEagerCollections,
+  ResourceInputs extends SharedCollections,
 > {
   constructor(
     private service: SkipService<InputDefs, Inputs, ResourceInputs>,
@@ -262,7 +261,7 @@ export class Stack {
 }
 
 class LazyCollectionImpl<K extends Json, V extends Json>
-  extends SkManaged
+  extends AbstractLazyCollection
   implements LazyCollection<K, V>
 {
   constructor(
@@ -296,6 +295,12 @@ class LazyCollectionImpl<K extends Json, V extends Json>
         if (_default?.ifMany !== undefined) return deepFreeze(_default.ifMany);
         throw new SkipNonUniqueValueError();
     }
+  }
+
+  static getName<K extends Json, V extends Json>(
+    coll: AbstractLazyCollection,
+  ): string {
+    return (coll as LazyCollectionImpl<K, V>).lazyCollection;
   }
 }
 
@@ -1248,7 +1253,9 @@ export class ToBinding {
   ): Pointer<Internal.CJObject> {
     const skjson = this.getJsonConverter();
     const service = this.handles.get(skservice);
-    const collections: { [name: string]: AbstractEagerCollection } = {};
+    const collections: {
+      [name: string]: AbstractEagerCollection | AbstractLazyCollection;
+    } = {};
     const keysIds = skjson.importJSON(skcollections) as {
       [key: string]: string;
     };
@@ -1261,7 +1268,12 @@ export class ToBinding {
     );
     const collectionsNames: { [name: string]: string } = {};
     for (const [name, collection] of Object.entries(result)) {
-      collectionsNames[name] = EagerCollectionImpl.getName(collection);
+      if (collection instanceof EagerCollectionImpl)
+        collectionsNames[name] = EagerCollectionImpl.getName(collection);
+      else
+        collectionsNames[name] = LazyCollectionImpl.getName(
+          collection as unknown as AbstractLazyCollection,
+        );
     }
     return skjson.exportJSON(collectionsNames);
   }

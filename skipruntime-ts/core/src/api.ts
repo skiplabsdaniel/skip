@@ -113,7 +113,7 @@ export interface Values<T> extends Iterable<T & DepSafe> {
  * @typeParam V - Type of values.
  */
 export interface LazyCollection<K extends Json, V extends Json>
-  extends Managed {
+  extends AbstractLazyCollection {
   /**
    * Get (and potentially compute) all values associated to `key`.
    * @param key - The key to query.
@@ -137,6 +137,15 @@ export interface LazyCollection<K extends Json, V extends Json>
 }
 
 export abstract class AbstractEagerCollection implements Managed {
+  [sk_managed]!: true;
+  protected readonly __sk_collectionBrand: undefined;
+
+  constructor() {
+    this.__sk_collectionBrand = undefined;
+  }
+}
+
+export abstract class AbstractLazyCollection implements Managed {
   [sk_managed]!: true;
   protected readonly __sk_collectionBrand: undefined;
 
@@ -338,12 +347,12 @@ export interface LazyCompute<K extends Json, V extends Json> {
 }
 
 export interface Logger {
-  debug: (...args: unknown[]) => void;
-  error: (...args: unknown[]) => void;
-  warn: (...args: unknown[]) => void;
-  info: (...args: unknown[]) => void;
-  fatal: (...args: unknown[]) => void;
-  trace: (...args: unknown[]) => void;
+  debug(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  info(...args: unknown[]): void;
+  fatal(...args: unknown[]): void;
+  trace(...args: unknown[]): void;
 }
 
 /**
@@ -521,6 +530,10 @@ export type NamedEagerCollections = {
   readonly [name: string]: AbstractEagerCollection;
 };
 
+export type SharedCollections = {
+  [name: string]: AbstractEagerCollection | AbstractLazyCollection;
+};
+
 /**
  * Resource provided by a `SkipService`.
  *
@@ -528,7 +541,7 @@ export type NamedEagerCollections = {
  *
  * @typeParam Collections - Collections provided to the resource computation by the service's `createGraph`.
  */
-export interface Resource<Collections extends NamedEagerCollections> {
+export interface Resource<Collections extends SharedCollections> {
   /**
    * Build the reactive compute graph of the reactive resource.
    *
@@ -543,11 +556,11 @@ export interface Resource<Collections extends NamedEagerCollections> {
 }
 
 export type ResourceClass<
-  Collections extends NamedEagerCollections,
+  Collections extends SharedCollections,
   Params extends Json,
 > = new (params: Params) => Resource<Collections>;
 
-export type NamedResources<ResourceInputs extends NamedEagerCollections> = {
+export type NamedResources<ResourceInputs extends SharedCollections> = {
   readonly [name: string]: ResourceClass<ResourceInputs, Json>;
 };
 
@@ -599,7 +612,7 @@ export type NamedResources<ResourceInputs extends NamedEagerCollections> = {
 export interface SkipService<
   InputDefs extends NamedInputDefinitions,
   Inputs extends NamedEagerCollections,
-  ResourceInputs extends NamedEagerCollections,
+  ResourceInputs extends SharedCollections,
 > {
   /**
    * Initial data for this service's input collections.
