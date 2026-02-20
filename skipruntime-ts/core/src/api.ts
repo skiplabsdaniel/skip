@@ -364,6 +364,7 @@ export interface Context {
   }): EagerCollection<K, V>;
 
   jsonExtract(value: JsonObject, pattern: string): Json[];
+  activeResources(): EagerCollection<{ name: string; params: Json }, int>;
 }
 
 /**
