@@ -1364,6 +1364,28 @@ function mapWithStoreService(): SkipService<
     },
   };
 }
+//// testActiveResource
+
+class ActiveResourcesResource implements Resource<Input_SN> {
+  instantiate(
+    _collections: Input_SN,
+    context: Context,
+  ): EagerCollection<{ name: string; params: Json }, number> {
+    return context.activeResources();
+  }
+}
+
+const activeResourcesService: SkipService<Input_SN_Def, Input_SN, Input_SN> = {
+  inputs: { input: new InputDefinition([]) },
+  resources: {
+    resources: ActiveResourcesResource,
+    map1: Map1Resource,
+  },
+
+  createGraph(inputs: Input_SN) {
+    return inputs;
+  },
+};
 
 export function initTests(
   category: string,
@@ -2431,5 +2453,22 @@ INSERT INTO skip_test (id, x) VALUES (1, 1), (2, 2), (3, 3);`);
       );
     }
     await service.close();
+  });
+  it("testActiveResources", async () => {
+    const service = await initService(activeResourcesService);
+    try {
+      const instanceId = "unsafe.fixed.resource.ident.1";
+      await service.instantiateResource(instanceId, "map1", {});
+      expect(await service.getAll("resources")).toEqual([
+        [{ name: "map1", params: {} }, [1]],
+        [{ name: "resources", params: {} }, [1]],
+      ]);
+      service.closeResourceInstance(instanceId);
+      expect(await service.getAll("resources")).toEqual([
+        [{ name: "resources", params: {} }, [1]],
+      ]);
+    } finally {
+      await service.close();
+    }
   });
 }

@@ -611,6 +611,13 @@ class ContextImpl implements Context {
   trace(...args: unknown[]) {
     this.refs.logger?.trace(...args);
   }
+
+  activeResources(): EagerCollection<{ name: string; params: Json }, number> {
+    return new EagerCollectionImpl<{ name: string; params: Json }, number>(
+      "/sk/resources/active/",
+      this.refs,
+    );
+  }
 }
 
 export class ServiceInstanceFactory {

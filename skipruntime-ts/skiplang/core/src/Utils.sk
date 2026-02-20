@@ -30,6 +30,10 @@ const kResourceInstance2SubIdDir: SKStore.DirName = SKStore.DirName::create(
   "/sk_prv/resources/instance2subid/",
 );
 
+const kActiveResourcesDir: SKStore.DirName = SKStore.DirName::create(
+  "/sk/resources/active/",
+);
+
 const kSubscriptionsKey: String = "externals.subscriptions";
 
 class SubscriptionsFile(value: Array<Waitable>) extends SKStore.File

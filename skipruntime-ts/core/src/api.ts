@@ -387,6 +387,7 @@ export interface Context extends Logger {
   }): EagerCollection<K, V>;
 
   jsonExtract(value: JsonObject, pattern: string): Json[];
+  activeResources(): EagerCollection<{ name: string; params: Json }, int>;
 }
 
 /**
