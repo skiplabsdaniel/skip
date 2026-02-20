@@ -575,6 +575,13 @@ class ContextImpl implements Context {
       ),
     ) as Json[];
   }
+
+  activeResources(): EagerCollection<{ name: string; params: Json }, number> {
+    return new EagerCollectionImpl<{ name: string; params: Json }, number>(
+      "/sk/resources/active/",
+      this.refs,
+    );
+  }
 }
 
 export class ServiceInstanceFactory {

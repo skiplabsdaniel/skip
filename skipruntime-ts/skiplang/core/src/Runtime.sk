@@ -88,7 +88,7 @@ fun buildResourcesGraph(
     ResourceDef::type,
     dirname,
   );
-  _ = context.mkdir(
+  garbageHdl = context.mkdir(
     SKStore.SID::keyType,
     SKStore.IntFile::type,
     kResourceGarbageDir,
@@ -147,7 +147,36 @@ fun buildResourcesGraph(
         throw ex
       }
     },
-  )
+  );
+  _ = resourcesHdl
+    .map(
+      ResourceDef::keyType,
+      SKStore.StringFile::type,
+      context,
+      dirname.sub("active"),
+      (ctx, writer, key, it) ~> {
+        if (garbageHdl.maybeGet(ctx, key).isNone()) {
+          writer.set(it.first, SKStore.StringFile(key.value));
+        }
+      },
+    )
+    .map(
+      JSONID::keyType,
+      JSONFile::type,
+      context,
+      kActiveResourcesDir,
+      (_c, writer, key, _it) ~> {
+        // map to ignore array changes
+        // to prevent recompute on each add/remove session
+        cjkey = SKJSON.CJObject(
+          SKJSON.CJFields::create(
+            Array[("name", SKJSON.CJString(key.name)), ("params", key.params)],
+            x -> x,
+          ),
+        );
+        writer.set(JSONID(cjkey), JSONFile(SKJSON.CJFloat(1.0)))
+      },
+    );
 }
 
 fun initService(service: Service): Result<Array<Waitable>, .Exception> {
