@@ -40,6 +40,7 @@ import {
   type NamedEagerCollections,
   InputDefinition,
   AbstractEagerCollection,
+  type Logger,
 } from "./api.js";
 
 import {
@@ -578,6 +579,30 @@ class ContextImpl implements Context {
       ),
     ) as Json[];
   }
+
+  debug(...args: unknown[]) {
+    this.refs.logger?.debug(...args);
+  }
+
+  error(...args: unknown[]) {
+    this.refs.logger?.error(...args);
+  }
+
+  warn(...args: unknown[]) {
+    this.refs.logger?.warn(...args);
+  }
+
+  info(...args: unknown[]) {
+    this.refs.logger?.info(...args);
+  }
+
+  fatal(...args: unknown[]) {
+    this.refs.logger?.fatal(...args);
+  }
+
+  trace(...args: unknown[]) {
+    this.refs.logger?.trace(...args);
+  }
 }
 
 export class ServiceInstanceFactory {
@@ -1015,6 +1040,7 @@ export class ToBinding {
   private initializing: boolean;
   readonly handles: Handles;
   changes: Nullable<Handle<ChangeManager>>;
+  public logger?: Logger;
 
   constructor(
     public binding: FromBinding,
@@ -1450,7 +1476,9 @@ export class ToBinding {
     ResourceInputs extends NamedEagerCollections,
   >(
     service: SkipService<InputDefs, Inputs, ResourceInputs>,
+    logger?: Logger,
   ): Promise<ServiceInstance> {
+    this.logger = logger;
     this.setFork(null);
     const uuid = crypto.randomUUID();
     this.fork(uuid);

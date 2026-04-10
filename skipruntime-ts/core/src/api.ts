@@ -337,10 +337,19 @@ export interface LazyCompute<K extends Json, V extends Json> {
   compute(self: LazyCollection<K, V>, key: K, context: Context): Iterable<V>;
 }
 
+export interface Logger {
+  debug: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  info: (...args: unknown[]) => void;
+  fatal: (...args: unknown[]) => void;
+  trace: (...args: unknown[]) => void;
+}
+
 /**
  * Skip Runtime internal state.
  */
-export interface Context {
+export interface Context extends Logger {
   /**
    * Create a lazy reactive collection.
    *

@@ -22,6 +22,7 @@ import type {
   ChangeManager,
   NamedInputDefinitions,
   NamedEagerCollections,
+  Logger,
 } from "@skipruntime/core";
 import {
   ServiceInstance,
@@ -1187,6 +1188,7 @@ export class ServiceInstanceFactory implements Shared {
       ResourceInputs extends NamedEagerCollections,
     >(
       service: SkipService<InputDefs, Inputs, ResourceInputs>,
+      logger?: Logger,
     ) => Promise<ServiceInstance>,
   ) {}
 

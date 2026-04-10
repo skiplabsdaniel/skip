@@ -20,6 +20,7 @@ type AddOn = {
 const skip_runtime: AddOn = require("../build/Release/skip_runtime.node");
 
 import type {
+  Logger,
   NamedEagerCollections,
   NamedInputDefinitions,
   SkipService,
@@ -41,10 +42,11 @@ export function initService<
   ResourceInputs extends NamedEagerCollections,
 >(
   service: SkipService<InputDefs, Inputs, ResourceInputs>,
+  logger?: Logger,
 ): Promise<ServiceInstance> {
   skip_runtime.initSkipRuntimeToBinding(tobinding);
   try {
-    return Promise.resolve(tobinding.initService(service));
+    return Promise.resolve(tobinding.initService(service, logger));
   } catch (e: unknown) {
     return Promise.reject<ServiceInstance>(e as Error);
   }
