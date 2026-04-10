@@ -1,8 +1,9 @@
-import type {
-  EagerCollection,
-  SkipService,
-  Resource,
-  Entry,
+import {
+  type EagerCollection,
+  type SkipService,
+  type Resource,
+  type Entry,
+  InputDefinition,
 } from "@skipruntime/core";
 
 import { runService } from "@skipruntime/server";
@@ -48,6 +49,10 @@ function initDB(): Database.Database {
 
 type User = { name: string; country: string };
 
+type UsersInputs = {
+  readonly users: InputDefinition<string, User>;
+};
+
 type UsersCollection = {
   users: EagerCollection<string, User>;
 };
@@ -63,9 +68,9 @@ class UsersResource implements Resource<UsersCollection> {
 
 function serviceWithInitialData(
   users: Entry<string, User>[],
-): SkipService<UsersCollection, UsersCollection> {
+): SkipService<UsersInputs, UsersCollection, UsersCollection> {
   return {
-    initialData: { users },
+    inputs: { users: new InputDefinition(users) },
     resources: { users: UsersResource },
     createGraph: (inputCollections) => inputCollections,
   };
