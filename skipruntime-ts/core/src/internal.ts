@@ -44,3 +44,6 @@ export type Reducer = T<typeof reducer>;
 
 declare const notifier: unique symbol;
 export type Notifier = T<typeof notifier>;
+
+declare const mergestate: unique symbol;
+export type MergeState = T<typeof mergestate>;

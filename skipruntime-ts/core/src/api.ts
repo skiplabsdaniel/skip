@@ -498,6 +498,20 @@ export class InputDefinition<
   }
 }
 
+export interface Store<K extends Json, V extends Json>
+  extends AbstractInputDefinition {
+  load(): Promise<Entry<K, V>[]>;
+  save(data: Entry<K, V>[]): Promise<void>;
+}
+
+export function checkStore<K extends Json, V extends Json>(
+  def: AbstractInputDefinition,
+): Store<K, V> | undefined {
+  if (!("load" in def) || typeof def.load !== "function") return undefined;
+  if (!("save" in def) || typeof def.save !== "function") return undefined;
+  return def as Store<K, V>;
+}
+
 export type NamedInputDefinitions = {
   readonly [name: string]: AbstractInputDefinition;
 };
