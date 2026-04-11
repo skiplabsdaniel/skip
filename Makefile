@@ -13,6 +13,7 @@ SKARGO_PROFILE?=release
 SKDB_WASM=sql/target/wasm32-unknown-unknown/$(SKARGO_PROFILE)/skdb.wasm
 SKDB_BIN=sql/target/host/$(SKARGO_PROFILE)/skdb
 SDKMAN_DIR?=$(HOME)/.sdkman
+PACKS_DIR=$(shell pwd)/build/packs
 
 .PHONY: skdb
 skdb: npm build/skdb build/init.sql
@@ -297,3 +298,38 @@ publish-metapackage:
 
 .PHONY: publish-all
 publish-all: clean publish-core publish-helpers publish-wasm publish-native publish-server publish-postgres-adapter publish-kafka-adapter publish-metapackage
+
+
+.PHONY: pack-core
+pack-core:
+	mkdir -p $(PACKS_DIR)
+	cd skipruntime-ts/core && npm run build
+	cd skipruntime-ts/core && npm pack --pack-destination $(PACKS_DIR)
+
+
+.PHONY: pack-helpers
+pack-helpers:
+	mkdir -p $(PACKS_DIR)
+	cd skipruntime-ts/helpers && npm run build
+	cd skipruntime-ts/helpers && npm pack --pack-destination $(PACKS_DIR)
+
+.PHONY: pack-addon
+pack-addon:
+	mkdir -p $(PACKS_DIR)
+	cd skipruntime-ts/addon && npm run build
+	cd skipruntime-ts/addon && npm pack --pack-destination $(PACKS_DIR)
+
+.PHONY: pack-wasm
+pack-wasm:
+	mkdir -p $(PACKS_DIR)
+	cd skipruntime-ts/wasm && npm run build
+	cd skipruntime-ts/wasm && npm pack --pack-destination $(PACKS_DIR)
+
+.PHONY: pack-server
+pack-server:
+	mkdir -p $(PACKS_DIR)
+	cd skipruntime-ts/server && npm run build
+	cd skipruntime-ts/server && npm pack --pack-destination $(PACKS_DIR)
+
+.PHONY: pack-skipruntime
+pack-skipruntime: pack-core pack-helpers pack-wasm pack-addon pack-server
