@@ -1,0 +1,9 @@
+dist/tsconfig.tsbuildinfo
+
+/src
+/build
+/test
+
+eslint.config.js
+tsconfig.json
+.mocharc.json

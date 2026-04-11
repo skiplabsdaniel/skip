@@ -1,0 +1,8 @@
+dist/tsconfig.tsbuildinfo
+
+/src
+/build
+
+eslint.config.js
+tsconfig.json
+calculate_version.sh
