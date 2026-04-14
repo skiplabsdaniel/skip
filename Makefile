@@ -300,11 +300,16 @@ publish-metapackage:
 publish-all: clean publish-core publish-helpers publish-wasm publish-native publish-server publish-postgres-adapter publish-kafka-adapter publish-metapackage
 
 
+define check_tarball
+	tar -tzf $(1) > /dev/null && echo "tarball $(1) OK"
+endef
+
 .PHONY: pack-core
 pack-core:
 	mkdir -p $(PACKS_DIR)
 	cd skipruntime-ts/core && npm run build
 	cd skipruntime-ts/core && npm pack --pack-destination $(PACKS_DIR)
+	$(call check_tarball,$(PACKS_DIR)/skipruntime-core-*.tgz)
 
 
 .PHONY: pack-helpers
@@ -312,24 +317,28 @@ pack-helpers:
 	mkdir -p $(PACKS_DIR)
 	cd skipruntime-ts/helpers && npm run build
 	cd skipruntime-ts/helpers && npm pack --pack-destination $(PACKS_DIR)
+	$(call check_tarball,$(PACKS_DIR)/skipruntime-helpers-*.tgz)
 
 .PHONY: pack-addon
 pack-addon:
 	mkdir -p $(PACKS_DIR)
 	cd skipruntime-ts/addon && npm run build
 	cd skipruntime-ts/addon && npm pack --pack-destination $(PACKS_DIR)
+	$(call check_tarball,$(PACKS_DIR)/skipruntime-native-*.tgz)
 
 .PHONY: pack-wasm
 pack-wasm:
 	mkdir -p $(PACKS_DIR)
 	cd skipruntime-ts/wasm && npm run build
 	cd skipruntime-ts/wasm && npm pack --pack-destination $(PACKS_DIR)
+	$(call check_tarball,$(PACKS_DIR)/skipruntime-wasm-*.tgz)
 
 .PHONY: pack-server
 pack-server:
 	mkdir -p $(PACKS_DIR)
 	cd skipruntime-ts/server && npm run build
 	cd skipruntime-ts/server && npm pack --pack-destination $(PACKS_DIR)
+	$(call check_tarball,$(PACKS_DIR)/skipruntime-server-*.tgz)
 
 .PHONY: pack-skipruntime
 pack-skipruntime: pack-core pack-helpers pack-wasm pack-addon pack-server
