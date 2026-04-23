@@ -658,7 +658,7 @@ export class ServiceInstance {
     private definition: ServiceDefinition<
       NamedInputDefinitions,
       NamedEagerCollections,
-      NamedEagerCollections
+      SharedCollections
     >,
   ) {}
 
@@ -941,7 +941,7 @@ export class ServiceInstance {
   private async _reload<
     InputDefs extends NamedInputDefinitions,
     Inputs extends NamedEagerCollections,
-    ResourceInputs extends NamedEagerCollections,
+    ResourceInputs extends SharedCollections,
   >(
     definition: ServiceDefinition<InputDefs, Inputs, ResourceInputs>,
     changes: ChangeManager,
@@ -1522,7 +1522,7 @@ export class ToBinding {
   async initService<
     InputDefs extends NamedInputDefinitions,
     Inputs extends NamedEagerCollections,
-    ResourceInputs extends NamedEagerCollections,
+    ResourceInputs extends SharedCollections,
   >(
     service: SkipService<InputDefs, Inputs, ResourceInputs>,
     logger?: Logger,

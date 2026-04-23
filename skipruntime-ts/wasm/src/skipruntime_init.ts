@@ -14,6 +14,7 @@ import type {
   ServiceInstance,
   NamedInputDefinitions,
   NamedEagerCollections,
+  SharedCollections,
 } from "@skipruntime/core";
 
 const modules: ModuleInit[] = [
@@ -43,7 +44,7 @@ async function wasmUrl(): Promise<URL | string> {
 export async function initServiceFor<
   InputDefs extends NamedInputDefinitions,
   Inputs extends NamedEagerCollections,
-  ResourceInputs extends NamedEagerCollections,
+  ResourceInputs extends SharedCollections,
 >(
   createEnvironment: EnvCreator,
   service: SkipService<InputDefs, Inputs, ResourceInputs>,

@@ -14,6 +14,7 @@ import type {
   NamedEagerCollections,
   NamedInputDefinitions,
   ServiceDefinition,
+  SharedCollections,
 } from "./index.js";
 
 export type Handle<T> = Internal.Opaque<number, { handle_for: T }>;
@@ -75,7 +76,7 @@ export interface FromBinding {
   SkipRuntime_createService<
     InputDefs extends NamedInputDefinitions,
     Inputs extends NamedEagerCollections,
-    ResourceInputs extends NamedEagerCollections,
+    ResourceInputs extends SharedCollections,
   >(
     ref: Handle<ServiceDefinition<InputDefs, Inputs, ResourceInputs>>,
   ): Pointer<Internal.Service>;

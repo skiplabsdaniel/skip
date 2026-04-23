@@ -24,6 +24,7 @@ import type {
   Logger,
   NamedEagerCollections,
   NamedInputDefinitions,
+  SharedCollections,
   SkipService,
 } from "@skipruntime/core";
 
@@ -41,7 +42,7 @@ const tobinding = new ToBinding(
 export function initService<
   InputDefs extends NamedInputDefinitions,
   Inputs extends NamedEagerCollections,
-  ResourceInputs extends NamedEagerCollections,
+  ResourceInputs extends SharedCollections,
 >(
   service: SkipService<InputDefs, Inputs, ResourceInputs>,
   logger?: Logger,

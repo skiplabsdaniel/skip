@@ -23,6 +23,7 @@ import type {
   NamedInputDefinitions,
   NamedEagerCollections,
   Logger,
+  SharedCollections,
 } from "@skipruntime/core";
 import {
   ServiceInstance,
@@ -92,7 +93,7 @@ export interface FromWasm {
   SkipRuntime_createService<
     InputDefs extends NamedInputDefinitions,
     Inputs extends NamedEagerCollections,
-    ResourceInputs extends NamedEagerCollections,
+    ResourceInputs extends SharedCollections,
   >(
     ref: Handle<ServiceDefinition<InputDefs, Inputs, ResourceInputs>>,
   ): ptr<Internal.Service>;
@@ -520,7 +521,7 @@ export class WasmFromBinding implements FromBinding {
   SkipRuntime_createService<
     InputDefs extends NamedInputDefinitions,
     Inputs extends NamedEagerCollections,
-    ResourceInputs extends NamedEagerCollections,
+    ResourceInputs extends SharedCollections,
   >(
     ref: Handle<ServiceDefinition<InputDefs, Inputs, ResourceInputs>>,
   ): Pointer<Internal.Service> {
@@ -1211,7 +1212,7 @@ export class ServiceInstanceFactory implements Shared {
     private readonly init: <
       InputDefs extends NamedInputDefinitions,
       Inputs extends NamedEagerCollections,
-      ResourceInputs extends NamedEagerCollections,
+      ResourceInputs extends SharedCollections,
     >(
       service: SkipService<InputDefs, Inputs, ResourceInputs>,
       logger?: Logger,
@@ -1221,7 +1222,7 @@ export class ServiceInstanceFactory implements Shared {
   initService<
     InputDefs extends NamedInputDefinitions,
     Inputs extends NamedEagerCollections,
-    ResourceInputs extends NamedEagerCollections,
+    ResourceInputs extends SharedCollections,
   >(
     service: SkipService<InputDefs, Inputs, ResourceInputs>,
   ): Promise<ServiceInstance> {
