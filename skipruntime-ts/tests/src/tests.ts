@@ -1428,6 +1428,28 @@ export function initTests(
     }
   });
 
+  it("testUpdateAll1", async () => {
+    const service = await initService(map2Service);
+    try {
+      const resource = "map2";
+      await service.updateAll({
+        input1: [["1", [10]]],
+        input2: [["1", [20]]],
+      });
+      expect(await service.getArray(resource, "1")).toEqual([30]);
+      await service.updateAll({
+        input1: [["2", [3]]],
+        input2: [["2", [7]]],
+      });
+      expect(await service.getAll(resource)).toEqual([
+        ["1", [30]],
+        ["2", [10]],
+      ]);
+    } finally {
+      await service.close();
+    }
+  });
+
   it("testMap3", async () => {
     const service = await initService(map3Service);
     try {
@@ -1437,6 +1459,28 @@ export function initTests(
       expect(await service.getArray(resource, "1")).toEqual([36]);
       await service.update("input1", [["2", [3]]]);
       await service.update("input2", [["2", [7]]]);
+      expect(await service.getAll(resource)).toEqual([
+        ["1", [36]],
+        ["2", [10]],
+      ]);
+    } finally {
+      await service.close();
+    }
+  });
+
+  it("testUpdateAll2", async () => {
+    const service = await initService(map3Service);
+    try {
+      const resource = "map3";
+      await service.updateAll({
+        input1: [["1", [1, 2, 3]]],
+        input2: [["1", [10]]],
+      });
+      expect(await service.getArray(resource, "1")).toEqual([36]);
+      await service.updateAll({
+        input1: [["2", [3]]],
+        input2: [["2", [7]]],
+      });
       expect(await service.getAll(resource)).toEqual([
         ["1", [36]],
         ["2", [10]],

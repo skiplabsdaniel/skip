@@ -41,6 +41,8 @@ import {
   checkStore,
   type SharedCollections,
   AbstractLazyCollection,
+  type StoreGroupConfig,
+  type StoreGroup,
 } from "./api.js";
 
 import {
@@ -211,6 +213,12 @@ export class ServiceDefinition<
     service: SkipService<InputDefs, Inputs, ResourceInputs>,
   ): ServiceDefinition<InputDefs, Inputs, ResourceInputs> {
     return new ServiceDefinition(service, new Map(this.externals));
+  }
+
+  createStoreGroup(config: StoreGroupConfig): StoreGroup {
+    if (!this.service.createStoreGroup)
+      throw new Error(`No StoreGroup builder defined.`);
+    return this.service.createStoreGroup(config);
   }
 }
 
@@ -886,6 +894,86 @@ export class ServiceInstance {
       );
       await Promise.all(promises);
       return entriesWithHandles.entries;
+    } else {
+      const errorHdl = result as Handle<Error>;
+      throw this.refs.handles.deleteHandle(errorHdl);
+    }
+  }
+
+  /**
+   * Update multiple inputs collection
+   * @param collections - The collections to update with the values
+   */
+  async updateAll(collections: {
+    [name: string]: Entry<Json, Json>[];
+  }): Promise<void> {
+    this.refs.setFork(this.forkName);
+    const uuid = crypto.randomUUID();
+    const fork = this.fork(uuid);
+    try {
+      const normalized = await fork.updateAll_(collections);
+      if (!this.forkName) {
+        const stores: Record<string, Store<Json, Json>> = Object.fromEntries(
+          Object.keys(normalized)
+            .map((collection) => {
+              const store = this.definition.getStore(collection);
+              if (store) return [collection, store];
+              return null;
+            })
+            .filter((s) => s !== null),
+        );
+        const keys = Object.keys(stores);
+        if (keys.length > 0) {
+          const group = this.definition.createStoreGroup({
+            stores,
+          });
+          await this.refs.unsafeAsyncRunWithGC(async () => {
+            const state = this.refs.binding.SkipRuntime_Runtime__startMerge(
+              this.refs.json().exportJSON([]),
+            );
+            try {
+              await group.writeAtomic(normalized);
+              this.refs.binding.SkipRuntime_Runtime__endMerge(state);
+            } catch (ex: unknown) {
+              this.refs.binding.SkipRuntime_Runtime__abortMerge(state);
+              throw ex;
+            }
+          });
+        } else fork.merge([]);
+      } else fork.merge([]);
+    } catch (ex: unknown) {
+      fork.abortFork();
+      throw ex;
+    }
+  }
+
+  private async updateAll_(collections: {
+    [name: string]: Entry<Json, Json>[];
+  }): Promise<{
+    [name: string]: Entry<Json, Json>[];
+  }> {
+    this.refs.setFork(this.forkName);
+    const result = this.refs.runWithGC(() => {
+      const json = this.refs.json();
+      return json.importJSON(
+        this.refs.binding.SkipRuntime_Runtime__updateAll(
+          this.refs.json().exportJSON(collections),
+        ),
+        true,
+      );
+    });
+    if (typeof result === "object") {
+      const entriesWithHandles = result as {
+        collections: {
+          [name: string]: Entry<Json, Json>[];
+        };
+        handles: Handle<Promise<void>>[];
+      };
+      const promises = entriesWithHandles.handles.map((h) =>
+        this.refs.handles.deleteHandle(h),
+      );
+      await Promise.all(promises);
+      return entriesWithHandles.collections;
     } else {
       const errorHdl = result as Handle<Error>;
       throw this.refs.handles.deleteHandle(errorHdl);

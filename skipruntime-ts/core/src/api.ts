@@ -514,6 +514,21 @@ export interface Store<K extends Json, V extends Json>
   save(data: Entry<K, V>[]): Promise<void>;
 }
 
+export interface StoreGroupConfig {
+  stores: Record<string, Store<Json, Json>>;
+}
+
+export interface StoreGroup {
+  writeAtomic(writes: Record<string, Entry<any, any>[]>): Promise<void>;
+}
+
+export interface RetryPolicy {
+  maxAttempts: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  backoffMultiplier: number;
+}
+
 export function checkStore<K extends Json, V extends Json>(
   def: AbstractInputDefinition,
 ): Store<K, V> | undefined {
@@ -635,4 +650,6 @@ export interface SkipService<
    * @returns Reactive collections accessible to the resources.
    */
   createGraph(inputCollections: Inputs, context: Context): ResourceInputs;
+
+  createStoreGroup?: (config: StoreGroupConfig) => StoreGroup;
 }
