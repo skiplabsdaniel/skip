@@ -14,7 +14,7 @@
   "license": "MIT",
   "description": "Reactive blogger service using Skip runtime",
   "dependencies": {
-    "@skipruntime/core": "0.0.20",
+    "@skipruntime/core": "0.0.21",
     "@skipruntime/wasm": "0.0.21",
     "@skipruntime/server": "0.0.21",
     "@skipruntime/helpers": "0.0.21",

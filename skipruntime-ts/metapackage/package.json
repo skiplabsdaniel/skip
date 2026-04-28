@@ -1,8 +1,8 @@
 {
   "name": "@skiplabs/skip",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "dependencies": {
-    "@skipruntime/core": "0.0.20",
+    "@skipruntime/core": "0.0.21",
     "@skipruntime/server": "0.0.21",
     "@skipruntime/helpers": "0.0.21",
     "@skipruntime/wasm": "0.0.21"

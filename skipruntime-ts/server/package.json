@@ -19,7 +19,7 @@
     "tsx": "^4.19.3"
   },
   "dependencies": {
-    "@skipruntime/core": "0.0.20",
+    "@skipruntime/core": "0.0.21",
     "express": "^4.21.1"
   },
   "optionalDependencies": {
