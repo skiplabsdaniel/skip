@@ -380,8 +380,8 @@ static char* parse_args(int argc, char** argv, int* is_init) {
 }
 
 // Parse a byte count, optionally suffixed with K/M/G (case-insensitive,
-// multipliers 1024, 1024^2, 1024^3). On error, writes to stderr citing
-// `source` and exits with code 2.
+// multipliers 1024, 1024^2, 1024^3). On malformed input or size_t overflow,
+// writes to stderr citing `source` and exits with code 2.
 static size_t parse_capacity_value(const char* str, const char* source) {
   if (str[0] < '0' || str[0] > '9') {
     fprintf(stderr,
@@ -392,7 +392,12 @@ static size_t parse_capacity_value(const char* str, const char* source) {
   size_t value = 0;
   int j = 0;
   while (str[j] >= '0' && str[j] <= '9') {
-    value = value * 10 + (size_t)(str[j] - '0');
+    size_t digit = (size_t)(str[j] - '0');
+    if (value > (SIZE_MAX - digit) / 10) {
+      fprintf(stderr, "%s: value out of range\n", source);
+      exit(2);
+    }
+    value = value * 10 + digit;
     j++;
   }
   size_t multiplier = 1;
@@ -417,6 +422,10 @@ static size_t parse_capacity_value(const char* str, const char* source) {
               source);
       exit(2);
     }
+  }
+  if (multiplier > 1 && value > SIZE_MAX / multiplier) {
+    fprintf(stderr, "%s: value out of range\n", source);
+    exit(2);
   }
   return value * multiplier;
 }
