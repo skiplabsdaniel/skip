@@ -436,6 +436,12 @@ size_t parse_capacity(int argc, char** argv) {
       }
     }
   }
+
+  const char* env = getenv("SKIP_CAPACITY");
+  if (env != NULL && env[0] != '\0') {
+    return parse_capacity_value(env, "SKIP_CAPACITY");
+  }
+
   return DEFAULT_CAPACITY;
 }
 
