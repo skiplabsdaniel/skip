@@ -13,6 +13,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@skipruntime/core": "0.0.20"
+    "@skipruntime/core": "0.0.21",
+    "node-addon-api": "^8.7.0"
   }
 }
